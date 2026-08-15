@@ -1,7 +1,7 @@
 import { frameworkCatalog } from "../../frameworks";
 
 type RecentScript = { title:string; hook:string; narration:string };
-type Payload = { product: string; sellingPoints: string; audience: string; country: string; language: string; style: string; framework?: string; duration: string; offer: string; nonce?: number; recent?: RecentScript[] };
+type Payload = { product: string; sellingPoints: string; audience: string; country: string; language: string; style: string; framework?: string; duration: string; offer: string; referenceScript?: string; nonce?: number; recent?: RecentScript[] };
 type Pack = { hooks: string[]; intros: string[]; proofs: string[]; demos: string[]; benefits: string[]; ctas: string[] };
 
 function localized(p: Payload) {
@@ -350,7 +350,8 @@ async function createAiScript(p: Payload, recent: Array<{ title:string; hook:str
     视觉谜题反转:"一个看不懂但强烈的画面首帧→给一个错误猜测→三秒内揭晓产品用途→安装操作→卖点证据→谜题答案回扣→优惠CTA"
   };
   const recentText = recent.length ? recent.slice(0,5).map((item,index) => `${index + 1}. ${item.title}｜${item.hook}`).join("\n") : "暂无历史钩子";
-  const instructions = `你是Magic John风格的TikTok钢化膜实拍编导。你要写的是一条从头到尾属于同一个创意的完整脚本，不是“随机开头＋固定产品介绍”。不得混合两套框架，不得让开头测试与结尾测试脱节。
+  const replicationRules = p.referenceScript?.trim() ? `\n这是“爆款复刻”任务。先在内部拆解参考文案的钩子机制、信息顺序、短句节奏、测试动作、悬念位置和成交方式，再用用户当前产品重新创作。保留的是抽象结构与节奏，不得连续照抄参考文案中的原句，不得保留不属于当前产品的品牌、参数、优惠或测试结论。新脚本必须让人看出是同一种爆款框架，但文案和镜头是新的。` : "";
+  const instructions = `你是Magic John风格的TikTok钢化膜实拍编导。你要写的是一条从头到尾属于同一个创意的完整脚本，不是“随机开头＋固定产品介绍”。不得混合两套框架，不得让开头测试与结尾测试脱节。${replicationRules}
 
 每条脚本输出9到11个镜头，并严格走完这一条主线：
 1. 真实动作钩子：首帧就出现道具、数字、失败结果或强对比，不说空泛广告句。
@@ -387,7 +388,9 @@ async function createAiScript(p: Payload, recent: Array<{ title:string; hook:str
 促销信息：${p.offer}
 
 最近使用过的钩子（只需避开原句，不要受它们的结构影响）：
-${recentText}`;
+${recentText}
+
+${p.referenceScript?.trim() ? `需要复刻其结构的爆款参考文案：\n${p.referenceScript.trim()}` : "本次没有参考文案，请按指定框架原创。"}`;
   const schema = {
     type:"object", additionalProperties:false,
     properties:{
@@ -428,6 +431,7 @@ export async function POST(request: Request) {
   try {
     const p = await request.json() as Payload;
     if (!p.product?.trim() || !p.sellingPoints?.trim()) return Response.json({ error: "请填写产品名称和核心卖点。" }, { status: 400 });
+    if (p.referenceScript !== undefined && p.referenceScript.trim().length < 30) return Response.json({ error: "请粘贴完整的爆款参考文案，至少30个字。" }, { status: 400 });
     const recent = (p.recent ?? []).slice(0, 8);
     const aiScript = await createAiScript(p, recent).catch(() => null);
     const generated = aiScript ?? createScript(p, recent.map(item => item.hook), recent.map(item => item.title), []);

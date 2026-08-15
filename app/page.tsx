@@ -22,12 +22,13 @@ const initialMonitorAccounts: MonitorAccount[] = [
 ];
 
 export default function Home() {
-  const [active, setActive] = useState<"create" | "history" | "monitor">("create");
+  const [active, setActive] = useState<"create" | "replicate" | "history" | "monitor">("create");
   const [loading, setLoading] = useState(false);
   const [aiConnected, setAiConnected] = useState(false);
   const [error, setError] = useState("");
   const [history, setHistory] = useState<Script[]>([]);
   const [result, setResult] = useState<Script | null>(null);
+  const [referenceScript, setReferenceScript] = useState("");
   const [importForm, setImportForm] = useState({ url: "", market: "西班牙", hook: "" });
   const [importedHooks, setImportedHooks] = useState<ImportedHook[]>([]);
   const [monitorAccounts, setMonitorAccounts] = useState<MonitorAccount[]>(initialMonitorAccounts);
@@ -37,7 +38,7 @@ export default function Home() {
   const [accountError, setAccountError] = useState("");
   const [accountForm, setAccountForm] = useState({ url: "", market: "西班牙", product: "钢化膜" });
   const [form, setForm] = useState({ product: "变形金刚钢化膜", sellingPoints: "10秒自动除尘安装；无气泡、不歪；28°防窥；表层电镀疏水疏油层；抗刮耐磨、抗冲击；贴合紧密、不易翘边", audience: "经常自己贴坏钢化膜、在意隐私的手机用户", country: "西班牙", language: "西班牙语", style: "强冲突测评", framework: "智能随机", duration: "45", offer: "库存有限；买一份到手两张膜；现在下单加赠镜头保护膜" });
-  const inputReady = useMemo(() => form.product.trim() && form.sellingPoints.trim(), [form]);
+  const inputReady = useMemo(() => Boolean(form.product.trim() && form.sellingPoints.trim() && (active !== "replicate" || referenceScript.trim().length >= 30)), [form, active, referenceScript]);
 
   async function loadHistory() {
     try { const saved = JSON.parse(localStorage.getItem("viralcraft-history") || "[]"); setHistory(saved); const res = await fetch("/api/scripts", { cache: "no-store" }); const data = await res.json(); if (res.ok) setAiConnected(Boolean(data.aiConnected)); }
@@ -73,7 +74,7 @@ export default function Home() {
     setLoading(true); setError("");
     try {
       const recent = history.filter(item => item.product === form.product && item.language === form.language).slice(0, 8).map(({title,hook,narration}) => ({title,hook,narration}));
-      const res = await fetch("/api/scripts", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ ...form, recent, nonce: Date.now() + Math.random() }) });
+      const res = await fetch("/api/scripts", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ ...form, referenceScript: active === "replicate" ? referenceScript : undefined, recent, nonce: Date.now() + Math.random() }) });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "生成失败");
       const nextHistory = [data.script, ...history].slice(0, 100); setResult(data.script); setHistory(nextHistory); localStorage.setItem("viralcraft-history", JSON.stringify(nextHistory));
@@ -102,14 +103,15 @@ export default function Home() {
   return <main className="app-shell">
     <aside className="sidebar">
       <div className="brand"><span className="brand-mark">苏</span><div><strong>苏苏</strong><small>爆款脚本工作台</small></div></div>
-      <nav><button className={active === "create" ? "nav-active" : ""} onClick={() => setActive("create")}><span>✦</span> 脚本生成</button><button className={active === "monitor" ? "nav-active" : ""} onClick={() => setActive("monitor")}><span>⌁</span> 爆款监控 <em>{monitorAccounts.length}</em></button><button className={active === "history" ? "nav-active" : ""} onClick={() => { setActive("history"); loadHistory(); }}><span>◷</span> 历史脚本 <em>{history.length}</em></button></nav>
+      <nav><button className={active === "create" ? "nav-active" : ""} onClick={() => setActive("create")}><span>✦</span> 脚本生成</button><button className={active === "replicate" ? "nav-active" : ""} onClick={() => setActive("replicate")}><span>◎</span> 爆款复刻</button><button className={active === "monitor" ? "nav-active" : ""} onClick={() => setActive("monitor")}><span>⌁</span> 爆款监控 <em>{monitorAccounts.length}</em></button><button className={active === "history" ? "nav-active" : ""} onClick={() => { setActive("history"); loadHistory(); }}><span>◷</span> 历史脚本 <em>{history.length}</em></button></nav>
       <div className="sidebar-note"><span>团队创作提示</span><p>先固定产品卖点，每次只更换一种钩子风格，复盘数据会更准确。</p></div>
     </aside>
     <section className="workspace">
-      <header><div><p className="eyebrow">TIKTOK COMMERCE STUDIO</p><h1>{active === "create" ? "爆款脚本生成器" : active === "monitor" ? "每日爆款开头监控" : "历史脚本库"}</h1><p>{active === "create" ? "把产品卖点，变成能拍、能剪、能转化的多语言脚本。" : active === "monitor" ? "监控竞品新视频，沉淀前3秒钩子并一键改写。" : "团队生成的脚本会保存在这里，可随时复用与导出。"}</p></div><div className="status"><i /> 团队在线版</div></header>
-      {active === "create" ? <div className="creator-grid">
+      <header><div><p className="eyebrow">TIKTOK COMMERCE STUDIO</p><h1>{active === "create" ? "爆款脚本生成器" : active === "replicate" ? "爆款文案复刻" : active === "monitor" ? "每日爆款开头监控" : "历史脚本库"}</h1><p>{active === "create" ? "把产品卖点，变成能拍、能剪、能转化的多语言脚本。" : active === "replicate" ? "粘贴一条爆款文案，复刻它的结构和节奏，重新创作你的产品脚本。" : active === "monitor" ? "监控竞品新视频，沉淀前3秒钩子并一键改写。" : "团队生成的脚本会保存在这里，可随时复用与导出。"}</p></div><div className="status"><i /> 团队在线版</div></header>
+      {(active === "create" || active === "replicate") ? <div className="creator-grid">
         <section className="panel form-panel">
-          <div className="panel-title"><span>01</span><div><h2>填写产品信息</h2><p>信息越具体，脚本越接近可拍状态</p></div></div>
+          <div className="panel-title"><span>01</span><div><h2>{active === "replicate" ? "粘贴爆款并填写产品" : "填写产品信息"}</h2><p>{active === "replicate" ? "AI只复刻结构与节奏，不照抄原句" : "信息越具体，脚本越接近可拍状态"}</p></div></div>
+          {active === "replicate" && <label>爆款参考文案<textarea value={referenceScript} onChange={e => setReferenceScript(e.target.value)} rows={9} placeholder="把完整爆款口播粘贴到这里。系统会拆解钩子、节奏、安装顺序、卖点展示和促单方式，再重新创作。" /><small>{referenceScript.length}字 · 至少30字</small></label>}
           <label>产品名称<input value={form.product} onChange={e => update("product", e.target.value)} placeholder="例如：自动除尘钢化膜" /></label>
           <label>核心卖点<textarea value={form.sellingPoints} onChange={e => update("sellingPoints", e.target.value)} rows={4} placeholder="用分号隔开，每条尽量具体" /><small>{form.sellingPoints.length}/300</small></label>
           <label>目标用户<input value={form.audience} onChange={e => update("audience", e.target.value)} /></label>
@@ -117,7 +119,7 @@ export default function Home() {
           <div className="two-cols"><label>脚本框架<select value={form.framework} onChange={e => update("framework", e.target.value)}><option>智能随机</option>{frameworkGroups.map(group => <optgroup key={group} label={group}>{frameworkCatalog.filter(item => item.group === group).map(item => <option key={item.name}>{item.name}</option>)}</optgroup>)}</select></label><label>表达风格<select value={form.style} onChange={e => update("style", e.target.value)}>{styles.map(x => <option key={x}>{x}</option>)}</select></label></div>
           <div className={`framework-note ${aiConnected ? "ai-ready" : ""}`}><b>{aiConnected ? "Magic John完整脚本引擎已连接" : form.framework === "智能随机" ? "稳定本地模式：自动切换叙事框架" : `当前固定：${form.framework}`}</b><span>{aiConnected ? "V4 Pro会让开头、安装、卖点演示、复测和促单沿用同一条剧情，同时锁住所有必讲卖点。" : "使用经过整理的TikTok转化结构。"}</span></div>
           <div className="two-cols"><label>视频时长<select value={form.duration} onChange={e => update("duration", e.target.value)}><option value="30">30秒</option><option value="45">45秒</option><option value="60">60秒</option></select></label><label>促销信息<input value={form.offer} onChange={e => update("offer", e.target.value)} /></label></div>
-          {error && <p className="error">{error}</p>}<button className="generate" disabled={!inputReady || loading} onClick={generate}>{loading ? <><b className="spinner" /> {aiConnected ? "DeepSeek正在原创…" : "正在生成脚本…"}</> : <>{result ? "↻ 换一版不同脚本" : aiConnected ? "✦ DeepSeek生成原创脚本" : "✦ 生成爆款脚本"}</>}</button>
+          {error && <p className="error">{error}</p>}<button className="generate" disabled={!inputReady || loading} onClick={generate}>{loading ? <><b className="spinner" /> {active === "replicate" ? "正在拆解并复刻…" : aiConnected ? "DeepSeek正在原创…" : "正在生成脚本…"}</> : <>{active === "replicate" ? result ? "↻ 再复刻一版" : "◎ 开始复刻爆款" : result ? "↻ 换一版不同脚本" : aiConnected ? "✦ DeepSeek生成原创脚本" : "✦ 生成爆款脚本"}</>}</button>
         </section>
         <section className="panel result-panel">{!result ? <div className="empty"><div className="empty-orbit"><span>✦</span></div><h2>你的脚本将在这里生成</h2><p>系统会输出3个钩子、完整口播和逐镜头分镜表，并自动保存到团队历史。</p><div className="empty-tags"><span>3秒钩子</span><span>口播节奏</span><span>拍摄分镜</span><span>转化CTA</span></div></div> : <>
           <div className="result-head"><div><span className="tag">{result.language}</span><span className="tag">{result.style}</span>{result.aiGenerated && <span className="tag ai-tag">V4 Pro完整脚本</span>}<h2>{result.title}</h2></div><button onClick={() => exportExcel(result)}>⇩ 导出Excel</button></div>
