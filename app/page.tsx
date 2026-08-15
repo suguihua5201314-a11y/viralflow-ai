@@ -11,11 +11,15 @@ type ImportedHook = { url: string; market: string; hook: string; createdAt: stri
 type MonitorAccount = { id?: number; handle: string; market: string; product: string; url: string };
 type HookItem = { id: number; title: string; language: string; copy: string };
 type SellingPointItem = { id: number; product: string; points: string };
+type TeamPayload = { hooks?: HookItem[]; points?: SellingPointItem[]; history?: Script[] };
+const teamApi = "https://viral-script-studio.oaken-elm-6682.chatgpt.site/api/team-data";
 const languages = ["中文", "西班牙语", "意大利语", "德语", "英语"];
 const styles = ["强冲突测评", "真实KOC种草", "悬念揭秘", "导演朋友的新玩具", "痛点解决"];
 const frameworkGroups = [...new Set(frameworkCatalog.map(item => item.group))];
 const starterHooks: HookItem[] = seedHooks;
 const starterPoints: SellingPointItem[] = [{ id: 1, product: "变形金刚钢化膜", points: "10秒自动除尘安装；自动对位；无灰尘、无气泡、不贴歪；左右28°防窥；电镀疏水疏油层；不易残留指纹；抗刮耐磨、抗冲击；贴合紧密、不易翘边" }];
+function scoreScript(script: Script) { const risks = checkCompliance(script.narration).length; const hook = script.hook.length >= 8 && script.hook.length <= 90 ? 25 : 17; const structure = Math.min(25, 12 + script.scenes.length * 2); const proof = /测试|对比|实测|test|prueba|probar/i.test(script.narration) ? 22 : 14; const conversion = /链接|下单|购买|库存|click|compra|enlace/i.test(script.narration) ? 20 : 12; return { total: Math.max(0, hook + structure + proof + conversion - risks * 4), hook, structure, proof, conversion, risks }; }
+function saferCopy(text: string) { const rules: [RegExp,string][] = [[/绝对不会|百分之百|100%|永久/gi,"在正常使用条件下不易"],[/全网第一|最强|顶级|唯一/gi,"表现突出"],[/保证|一定能|必然/gi,"有助于"],[/完全防爆|砸不坏|摔不坏/gi,"提升日常抗冲击能力"],[/最后一天|仅剩最后|马上售罄/gi,"库存与活动以页面显示为准"]]; return rules.reduce((copy,[pattern,replacement]) => copy.replace(pattern,replacement), text); }
 const initialMonitorAccounts: MonitorAccount[] = [
   { handle: "@magicjohn.official", market: "全球", product: "钢化膜", url: "https://www.tiktok.com/@magicjohn.official" },
   { handle: "@magicjohn_official.us3", market: "美国", product: "钢化膜", url: "https://www.tiktok.com/@magicjohn_official.us3" },
@@ -34,6 +38,8 @@ export default function Home() {
   const [error, setError] = useState("");
   const [history, setHistory] = useState<Script[]>([]);
   const [result, setResult] = useState<Script | null>(null);
+  const [raceResults, setRaceResults] = useState<Script[]>([]);
+  const [raceLoading, setRaceLoading] = useState(false);
   const [referenceScript, setReferenceScript] = useState("");
   const [libraryType, setLibraryType] = useState<"hooks" | "points">("hooks");
   const [hookLibrary, setHookLibrary] = useState<HookItem[]>(() => { if (typeof window === "undefined") return starterHooks; try { const saved = JSON.parse(localStorage.getItem("susu-hook-library") || "null"); if (!Array.isArray(saved)) return starterHooks; const savedIds = new Set(saved.map((item:HookItem) => item.id)); return [...saved, ...starterHooks.filter(item => !savedIds.has(item.id))]; } catch { return starterHooks; } });
@@ -48,6 +54,11 @@ export default function Home() {
   const [monitorAccounts, setMonitorAccounts] = useState<MonitorAccount[]>(initialMonitorAccounts);
   const [showAddAccount, setShowAddAccount] = useState(false);
   const [showConnection, setShowConnection] = useState(false);
+  const [showTeamLogin, setShowTeamLogin] = useState(false);
+  const [teamPassword, setTeamPassword] = useState("");
+  const [teamConnected, setTeamConnected] = useState(false);
+  const [teamBusy, setTeamBusy] = useState(false);
+  const [teamError, setTeamError] = useState("");
   const [accountSaving, setAccountSaving] = useState(false);
   const [accountError, setAccountError] = useState("");
   const [accountForm, setAccountForm] = useState({ url: "", market: "西班牙", product: "钢化膜" });
@@ -70,8 +81,29 @@ export default function Home() {
       .catch(() => undefined);
   }, []);
 
-  function saveHooks(items: HookItem[]) { setHookLibrary(items); localStorage.setItem("susu-hook-library", JSON.stringify(items)); }
-  function savePoints(items: SellingPointItem[]) { setPointLibrary(items); localStorage.setItem("susu-point-library", JSON.stringify(items)); }
+  async function syncTeam(payload: TeamPayload) {
+    if (!teamConnected || !teamPassword) return;
+    await fetch(teamApi, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ password: teamPassword, action: "save", payload }) });
+  }
+  function currentTeamPayload(overrides: TeamPayload = {}): TeamPayload { return { hooks: hookLibrary, points: pointLibrary, history, ...overrides }; }
+  async function connectTeam() {
+    if (!teamPassword || teamBusy) return;
+    setTeamBusy(true); setTeamError("");
+    try {
+      const res = await fetch(teamApi, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ password: teamPassword, action: "load" }) });
+      const data = await res.json(); if (!res.ok) throw new Error(data.error || "连接失败");
+      const cloud = (data.payload || {}) as TeamPayload;
+      const hooks = cloud.hooks?.length ? [...cloud.hooks, ...starterHooks.filter(seed => !cloud.hooks!.some(x => x.id === seed.id))] : hookLibrary;
+      const points = cloud.points?.length ? cloud.points : pointLibrary;
+      const scripts = cloud.history?.length ? cloud.history : history;
+      setHookLibrary(hooks); setPointLibrary(points); setHistory(scripts); setTeamConnected(true); setShowTeamLogin(false);
+      localStorage.setItem("susu-hook-library", JSON.stringify(hooks)); localStorage.setItem("susu-point-library", JSON.stringify(points)); localStorage.setItem("viralcraft-history", JSON.stringify(scripts));
+      if (!data.payload) await fetch(teamApi, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ password: teamPassword, action: "save", payload: { hooks, points, history: scripts } }) });
+    } catch (e) { setTeamError(e instanceof Error ? e.message : "连接失败"); }
+    finally { setTeamBusy(false); }
+  }
+  function saveHooks(items: HookItem[]) { setHookLibrary(items); localStorage.setItem("susu-hook-library", JSON.stringify(items)); void syncTeam(currentTeamPayload({ hooks: items })); }
+  function savePoints(items: SellingPointItem[]) { setPointLibrary(items); localStorage.setItem("susu-point-library", JSON.stringify(items)); void syncTeam(currentTeamPayload({ points: items })); }
   function addHookItem() { if (!hookDraft.title.trim() || !hookDraft.copy.trim()) return; saveHooks([{ id: Date.now(), title: hookDraft.title.trim(), language: hookDraft.language, copy: hookDraft.copy.trim() }, ...hookLibrary]); setHookDraft({ title: "", language: "中文", copy: "" }); }
   function addPointItem() { if (!pointDraft.product.trim() || !pointDraft.points.trim()) return; savePoints([{ id: Date.now(), product: pointDraft.product.trim(), points: pointDraft.points.trim() }, ...pointLibrary]); setPointDraft({ product: "", points: "" }); }
 
@@ -97,9 +129,20 @@ export default function Home() {
       const res = await fetch("/api/scripts", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ ...form, referenceScript: active === "replicate" ? referenceScript : undefined, recent, nonce: Date.now() + Math.random() }) });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "生成失败");
-      const nextHistory = [data.script, ...history].slice(0, 100); setResult(data.script); setHistory(nextHistory); localStorage.setItem("viralcraft-history", JSON.stringify(nextHistory));
+      const nextHistory = [data.script, ...history].slice(0, 100); setResult(data.script); setHistory(nextHistory); localStorage.setItem("viralcraft-history", JSON.stringify(nextHistory)); void syncTeam(currentTeamPayload({ history: nextHistory }));
     } catch (e) { setError(e instanceof Error ? e.message : "生成失败，请重试。"); }
     finally { setLoading(false); }
+  }
+  async function generateRace() {
+    if (!inputReady || raceLoading) return;
+    setRaceLoading(true); setError("");
+    try {
+      const recent = history.slice(0, 12).map(({title,hook,narration}) => ({title,hook,narration}));
+      const requests = Array.from({ length: 5 }, (_, index) => fetch("/api/scripts", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ ...form, referenceScript: active === "replicate" ? referenceScript : undefined, recent, nonce: Date.now() + index * 7919 + Math.random() }) }).then(async res => { const data = await res.json(); if (!res.ok) throw new Error(data.error || "生成失败"); return data.script as Script; }));
+      const scripts = await Promise.all(requests); const nextHistory = [...scripts, ...history].slice(0, 100);
+      setRaceResults(scripts); setResult(scripts[0]); setHistory(nextHistory); localStorage.setItem("viralcraft-history", JSON.stringify(nextHistory)); void syncTeam(currentTeamPayload({ history: nextHistory }));
+    } catch (e) { setError(e instanceof Error ? e.message : "赛马稿生成失败"); }
+    finally { setRaceLoading(false); }
   }
   function update(key: keyof typeof form, value: string) { setForm(prev => ({ ...prev, [key]: value })); }
   function copyText(text: string) { navigator.clipboard.writeText(text); }
@@ -124,7 +167,7 @@ export default function Home() {
     <aside className="sidebar">
       <div className="brand"><span className="brand-mark">苏</span><div><strong>苏苏</strong><small>爆款脚本工作台</small></div></div>
       <nav><button className={active === "create" ? "nav-active" : ""} onClick={() => setActive("create")}><span>✦</span> 脚本生成</button><button className={active === "replicate" ? "nav-active" : ""} onClick={() => setActive("replicate")}><span>◎</span> 爆款复刻</button><button className={active === "checker" ? "nav-active" : ""} onClick={() => setActive("checker")}><span>✓</span> 文案检测</button><button className={active === "library" ? "nav-active" : ""} onClick={() => setActive("library")}><span>▦</span> 素材库 <em>{hookLibrary.length + pointLibrary.length}</em></button><button className={active === "monitor" ? "nav-active" : ""} onClick={() => setActive("monitor")}><span>⌁</span> 爆款监控 <em>{monitorAccounts.length}</em></button><button className={active === "history" ? "nav-active" : ""} onClick={() => { setActive("history"); loadHistory(); }}><span>◷</span> 历史脚本 <em>{history.length}</em></button></nav>
-      <div className="sidebar-note"><span>团队创作提示</span><p>先固定产品卖点，每次只更换一种钩子风格，复盘数据会更准确。</p></div>
+      <div className={`sidebar-note team-note ${teamConnected ? "connected" : ""}`}><span>{teamConnected ? "● 团队云端已连接" : "团队云端空间"}</span><p>{teamConnected ? "开头库、卖点库和历史脚本将同步给团队。" : "连接后，多台电脑可共享素材和历史脚本。"}</p><button onClick={() => { if (teamConnected) { setTeamConnected(false); setTeamPassword(""); } else setShowTeamLogin(true); }}>{teamConnected ? "断开本机" : "输入团队密码"}</button></div>
     </aside>
     <section className="workspace">
       <header><div><p className="eyebrow">TIKTOK COMMERCE STUDIO</p><h1>{active === "create" ? "爆款脚本生成器" : active === "replicate" ? "爆款文案复刻" : active === "checker" ? "文案合规检测" : active === "library" ? "爆款素材库" : active === "monitor" ? "每日爆款开头监控" : "历史脚本库"}</h1><p>{active === "create" ? "把产品卖点，变成能拍、能剪、能转化的多语言脚本。" : active === "replicate" ? "粘贴一条爆款文案，复刻它的结构和节奏，重新创作你的产品脚本。" : active === "checker" ? "发布前检查绝对词、夸大承诺、医疗功效、促销和危险演示风险。" : active === "library" ? "集中保存高表现开头和产品卖点，创作时一键调用。" : active === "monitor" ? "监控竞品新视频，沉淀前3秒钩子并一键改写。" : "团队生成的脚本会保存在这里，可随时复用与导出。"}</p></div><div className="status"><i /> 团队在线版</div></header>
@@ -139,13 +182,13 @@ export default function Home() {
           <div className="two-cols"><label>脚本框架<select value={form.framework} onChange={e => update("framework", e.target.value)}><option>智能随机</option>{frameworkGroups.map(group => <optgroup key={group} label={group}>{frameworkCatalog.filter(item => item.group === group).map(item => <option key={item.name}>{item.name}</option>)}</optgroup>)}</select></label><label>表达风格<select value={form.style} onChange={e => update("style", e.target.value)}>{styles.map(x => <option key={x}>{x}</option>)}</select></label></div>
           <div className={`framework-note ${aiConnected ? "ai-ready" : ""}`}><b>{aiConnected ? "Magic John完整脚本引擎已连接" : form.framework === "智能随机" ? "稳定本地模式：自动切换叙事框架" : `当前固定：${form.framework}`}</b><span>{aiConnected ? "V4 Pro会让开头、安装、卖点演示、复测和促单沿用同一条剧情，同时锁住所有必讲卖点。" : "使用经过整理的TikTok转化结构。"}</span></div>
           <div className="two-cols"><label>视频时长<select value={form.duration} onChange={e => update("duration", e.target.value)}><option value="30">30秒</option><option value="45">45秒</option><option value="60">60秒</option></select></label><label>促销信息<input value={form.offer} onChange={e => update("offer", e.target.value)} /></label></div>
-          {error && <p className="error">{error}</p>}<button className="generate" disabled={!inputReady || loading} onClick={generate}>{loading ? <><b className="spinner" /> {active === "replicate" ? "正在拆解并复刻…" : aiConnected ? "DeepSeek正在原创…" : "正在生成脚本…"}</> : <>{active === "replicate" ? result ? "↻ 再复刻一版" : "◎ 开始复刻爆款" : result ? "↻ 换一版不同脚本" : aiConnected ? "✦ DeepSeek生成原创脚本" : "✦ 生成爆款脚本"}</>}</button>
+          {error && <p className="error">{error}</p>}<button className="generate" disabled={!inputReady || loading || raceLoading} onClick={generate}>{loading ? <><b className="spinner" /> {active === "replicate" ? "正在拆解并复刻…" : aiConnected ? "DeepSeek正在原创…" : "正在生成脚本…"}</> : <>{active === "replicate" ? result ? "↻ 再复刻一版" : "◎ 开始复刻爆款" : result ? "↻ 换一版不同脚本" : aiConnected ? "✦ DeepSeek生成原创脚本" : "✦ 生成爆款脚本"}</>}</button><button className="race-button" disabled={!inputReady || loading || raceLoading} onClick={generateRace}>{raceLoading ? "正在生成5条不同赛马稿…" : "一次生成 5 条赛马稿"}</button>
         </section>
         <section className="panel result-panel">{!result ? <div className="empty"><div className="empty-orbit"><span>✦</span></div><h2>你的脚本将在这里生成</h2><p>系统会输出3个钩子、完整口播和逐镜头分镜表，并自动保存到团队历史。</p><div className="empty-tags"><span>3秒钩子</span><span>口播节奏</span><span>拍摄分镜</span><span>转化CTA</span></div></div> : <>
-          <div className="result-head"><div><span className="tag">{result.language}</span><span className="tag">{result.style}</span>{result.aiGenerated && <span className="tag ai-tag">V4 Pro完整脚本</span>}<h2>{result.title}</h2></div><button onClick={() => exportExcel(result)}>⇩ 导出Excel</button></div>
+          {raceResults.length > 0 && <div className="race-tabs">{raceResults.map((item,index) => <button className={result === item ? "selected" : ""} key={`${item.title}-${index}`} onClick={() => setResult(item)}>赛马 {index + 1} · {scoreScript(item).total}分</button>)}</div>}<div className="result-head"><div><span className="tag">{result.language}</span><span className="tag">{result.style}</span>{result.aiGenerated && <span className="tag ai-tag">V4 Pro完整脚本</span>}<span className="tag score-tag">质量 {scoreScript(result).total}/100</span><h2>{result.title}</h2></div><button onClick={() => exportExcel(result)}>⇩ 导出Excel</button></div>
           <article className="hook-card"><div><span>主钩子 · 前3秒</span><button onClick={() => copyText(result.hook)}>复制</button></div><p>{result.hook}</p></article>
           <div className="alt-hooks">{result.alternateHooks.map((h, i) => <button key={h} onClick={() => copyText(h)}><span>备选 {i + 1}</span>{h}</button>)}</div>
-          <article className="narration"><div><h3>完整口播</h3><button onClick={() => copyText(result.narration)}>复制全文</button></div><p>{result.narration}</p></article>
+          <article className="narration"><div><h3>完整口播</h3><button onClick={() => copyText(result.narration)}>复制全文</button></div><p>{result.narration}</p><div className="score-grid"><span>钩子 {scoreScript(result).hook}/25</span><span>结构 {scoreScript(result).structure}/25</span><span>证据 {scoreScript(result).proof}/22</span><span>转化 {scoreScript(result).conversion}/20</span><span>风险 {scoreScript(result).risks}处</span></div></article>
           <div className="storyboard"><h3>逐镜头分镜表</h3><div className="scene-head"><span>时间</span><span>画面</span><span>口播 / 字幕</span><span>剪辑</span></div>{result.scenes.map((s, i) => <div className="scene" key={i}><b>{s.time}</b><span>{s.visual}</span><p>{s.line}</p><small>{s.edit}</small></div>)}</div>
         </>}</section>
       </div> : active === "checker" ? <section className="checker-panel"><div className="checker-grid"><section className="checker-input"><span className="modal-kicker">COPY SAFETY CHECK</span><h2>粘贴需要检测的文案</h2><p>支持中文、西班牙语和英语。结果仅作为发布前辅助检查，平台还会结合画面、字幕、商品和账号情况。</p><textarea value={checkText} onChange={e => { setCheckText(e.target.value); setHasChecked(false); }} rows={18} placeholder="把完整口播、字幕或商品文案粘贴到这里…" /><div><small>{checkText.length}字</small><button disabled={!checkText.trim()} onClick={() => setHasChecked(true)}>开始检测</button></div></section><section className="checker-result">{!hasChecked ? <div className="checker-empty"><span>✓</span><h3>等待检测</h3><p>系统会逐项标出风险词和修改建议。</p></div> : complianceHits.length === 0 ? <div className="checker-clear"><span>✓</span><h3>暂未命中已知风险词</h3><p>这不代表平台一定审核通过，请继续检查画面真实性、测试条件和促销信息。</p></div> : <><div className="checker-summary"><div><span>检测结果</span><strong>{complianceHits.length}处风险</strong></div><b>{complianceHits.filter(x => x.level === "高").length}项高风险</b></div><div className="risk-list">{complianceHits.map((hit,index) => <article key={`${hit.category}-${hit.term}-${index}`} className={hit.level === "高" ? "risk-high" : "risk-medium"}><div><span>{hit.level}风险</span><em>{hit.category}</em></div><h3>命中：{hit.term}</h3><p>{hit.suggestion}</p></article>)}</div></>}</section></div></section> : active === "library" ? <section className="library-panel">
@@ -163,5 +206,6 @@ export default function Home() {
     </section>
     {showAddAccount && <div className="modal-backdrop" onMouseDown={e => { if (e.target === e.currentTarget) setShowAddAccount(false); }}><section className="monitor-modal" role="dialog" aria-modal="true" aria-labelledby="add-account-title"><button className="modal-close" onClick={() => setShowAddAccount(false)}>×</button><span className="modal-kicker">ADD COMPETITOR</span><h2 id="add-account-title">添加TikTok竞品账号</h2><p>填写账号主页链接，添加后会保存到团队监控清单。</p><label>账号主页链接<input autoFocus value={accountForm.url} onChange={e => setAccountForm(prev => ({ ...prev, url: e.target.value }))} placeholder="https://www.tiktok.com/@username" /></label><div className="two-cols"><label>市场<select value={accountForm.market} onChange={e => setAccountForm(prev => ({ ...prev, market: e.target.value }))}><option>全球</option><option>美国</option><option>西班牙</option><option>意大利</option><option>英国</option><option>墨西哥</option><option>德国</option><option>法国</option></select></label><label>产品<input value={accountForm.product} onChange={e => setAccountForm(prev => ({ ...prev, product: e.target.value }))} /></label></div>{accountError && <p className="error">{accountError}</p>}<button className="modal-primary" disabled={accountSaving || !accountForm.url.trim()} onClick={addMonitorAccount}>{accountSaving ? "正在保存…" : "确认添加"}</button></section></div>}
     {showConnection && <div className="modal-backdrop" onMouseDown={e => { if (e.target === e.currentTarget) setShowConnection(false); }}><section className="monitor-modal connection-modal" role="dialog" aria-modal="true" aria-labelledby="connection-title"><button className="modal-close" onClick={() => setShowConnection(false)}>×</button><span className="modal-kicker">DATA CONNECTION</span><h2 id="connection-title">自动采集接口尚未配置</h2><p>竞品账号的公开数据不能直接通过普通TikTok账号授权读取，需要使用合规的第三方TikTok数据服务。</p><div className="connection-steps"><article><b>1</b><div><strong>选择数据服务商</strong><span>需要支持按账号获取新视频、播放量、发布时间和视频链接。</span></div></article><article><b>2</b><div><strong>安全配置API密钥</strong><span>密钥应放在网站安全环境变量中，不要粘贴到普通页面或聊天记录。</span></div></article><article><b>3</b><div><strong>启用每日任务</strong><span>接口接通后再开启每日09:00同步、开头提取和去重。</span></div></article></div><div className="connection-status"><i /> 当前状态：未连接，不会伪造采集结果</div><button className="modal-primary" onClick={() => setShowConnection(false)}>我知道了</button></section></div>}
+    {showTeamLogin && <div className="modal-backdrop" onMouseDown={e => { if (e.target === e.currentTarget) setShowTeamLogin(false); }}><section className="monitor-modal" role="dialog" aria-modal="true"><button className="modal-close" onClick={() => setShowTeamLogin(false)}>×</button><span className="modal-kicker">TEAM CLOUD</span><h2>连接苏苏团队空间</h2><p>输入团队专用密码。密码只用于本次页面连接，不会写入网页源码。</p><label>团队密码<input autoFocus type="password" value={teamPassword} onChange={e => setTeamPassword(e.target.value)} onKeyDown={e => { if (e.key === "Enter") void connectTeam(); }} placeholder="请输入团队密码" /></label>{teamError && <p className="error">{teamError}</p>}<button className="modal-primary" disabled={!teamPassword || teamBusy} onClick={connectTeam}>{teamBusy ? "正在连接…" : "连接并同步"}</button></section></div>}
   </main>;
 }

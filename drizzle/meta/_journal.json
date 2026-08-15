@@ -15,6 +15,13 @@
       "when": 1786777827796,
       "tag": "0001_gigantic_sunset_bain",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1786788634633,
+      "tag": "0002_busy_korvac",
+      "breakpoints": true
     }
   ]
 }
