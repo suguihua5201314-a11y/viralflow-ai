@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { frameworkCatalog } from "./frameworks";
+import { seedHooks } from "./hook-seeds";
 
 type Scene = { time: string; visual: string; line: string; edit: string };
 type Script = { id?: number; title: string; product: string; language: string; country: string; style: string; hook: string; alternateHooks: string[]; narration: string; scenes: Scene[]; createdAt?: string; aiGenerated?: boolean };
@@ -12,12 +13,7 @@ type SellingPointItem = { id: number; product: string; points: string };
 const languages = ["中文", "西班牙语", "意大利语", "德语", "英语"];
 const styles = ["强冲突测评", "真实KOC种草", "悬念揭秘", "导演朋友的新玩具", "痛点解决"];
 const frameworkGroups = [...new Set(frameworkCatalog.map(item => item.group))];
-const starterHooks: HookItem[] = [
-  { id: 1, title: "神秘道具", language: "中文", copy: "这是我导演朋友刚带回来的新玩具，先看看它对木头做了什么。" },
-  { id: 2, title: "递增测试", language: "中文", copy: "30厘米，50厘米，80厘米——你真的觉得它还能保护手机吗？" },
-  { id: 3, title: "同条件对决", language: "西班牙语", copy: "Misma herramienta, misma fuerza y cuatro resultados completamente distintos." },
-  { id: 4, title: "新品玩具", language: "西班牙语", copy: "Este es mi nuevo juguete. Mira primero lo que le hace a la madera." },
-];
+const starterHooks: HookItem[] = seedHooks;
 const starterPoints: SellingPointItem[] = [{ id: 1, product: "变形金刚钢化膜", points: "10秒自动除尘安装；自动对位；无灰尘、无气泡、不贴歪；左右28°防窥；电镀疏水疏油层；不易残留指纹；抗刮耐磨、抗冲击；贴合紧密、不易翘边" }];
 const initialMonitorAccounts: MonitorAccount[] = [
   { handle: "@magicjohn.official", market: "全球", product: "钢化膜", url: "https://www.tiktok.com/@magicjohn.official" },
@@ -39,7 +35,7 @@ export default function Home() {
   const [result, setResult] = useState<Script | null>(null);
   const [referenceScript, setReferenceScript] = useState("");
   const [libraryType, setLibraryType] = useState<"hooks" | "points">("hooks");
-  const [hookLibrary, setHookLibrary] = useState<HookItem[]>(() => { if (typeof window === "undefined") return starterHooks; try { const saved = JSON.parse(localStorage.getItem("susu-hook-library") || "null"); return Array.isArray(saved) ? saved : starterHooks; } catch { return starterHooks; } });
+  const [hookLibrary, setHookLibrary] = useState<HookItem[]>(() => { if (typeof window === "undefined") return starterHooks; try { const saved = JSON.parse(localStorage.getItem("susu-hook-library") || "null"); if (!Array.isArray(saved)) return starterHooks; const savedIds = new Set(saved.map((item:HookItem) => item.id)); return [...saved, ...starterHooks.filter(item => !savedIds.has(item.id))]; } catch { return starterHooks; } });
   const [pointLibrary, setPointLibrary] = useState<SellingPointItem[]>(() => { if (typeof window === "undefined") return starterPoints; try { const saved = JSON.parse(localStorage.getItem("susu-point-library") || "null"); return Array.isArray(saved) ? saved : starterPoints; } catch { return starterPoints; } });
   const [hookDraft, setHookDraft] = useState({ title: "", language: "中文", copy: "" });
   const [pointDraft, setPointDraft] = useState({ product: "", points: "" });
