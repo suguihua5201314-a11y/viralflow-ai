@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { frameworkCatalog } from "./frameworks";
 import { seedHooks } from "./hook-seeds";
+import { checkCompliance } from "./compliance-rules";
 
 type Scene = { time: string; visual: string; line: string; edit: string };
 type Script = { id?: number; title: string; product: string; language: string; country: string; style: string; hook: string; alternateHooks: string[]; narration: string; scenes: Scene[]; createdAt?: string; aiGenerated?: boolean };
@@ -27,7 +28,7 @@ const initialMonitorAccounts: MonitorAccount[] = [
 ];
 
 export default function Home() {
-  const [active, setActive] = useState<"create" | "replicate" | "library" | "history" | "monitor">("create");
+  const [active, setActive] = useState<"create" | "replicate" | "checker" | "library" | "history" | "monitor">("create");
   const [loading, setLoading] = useState(false);
   const [aiConnected, setAiConnected] = useState(false);
   const [error, setError] = useState("");
@@ -40,6 +41,8 @@ export default function Home() {
   const [hookDraft, setHookDraft] = useState({ title: "", language: "中文", copy: "" });
   const [pointDraft, setPointDraft] = useState({ product: "", points: "" });
   const [librarySearch, setLibrarySearch] = useState("");
+  const [checkText, setCheckText] = useState("");
+  const [hasChecked, setHasChecked] = useState(false);
   const [importForm, setImportForm] = useState({ url: "", market: "西班牙", hook: "" });
   const [importedHooks, setImportedHooks] = useState<ImportedHook[]>([]);
   const [monitorAccounts, setMonitorAccounts] = useState<MonitorAccount[]>(initialMonitorAccounts);
@@ -50,6 +53,7 @@ export default function Home() {
   const [accountForm, setAccountForm] = useState({ url: "", market: "西班牙", product: "钢化膜" });
   const [form, setForm] = useState({ product: "变形金刚钢化膜", sellingPoints: "10秒自动除尘安装；无气泡、不歪；28°防窥；表层电镀疏水疏油层；抗刮耐磨、抗冲击；贴合紧密、不易翘边", audience: "经常自己贴坏钢化膜、在意隐私的手机用户", country: "西班牙", language: "西班牙语", style: "强冲突测评", framework: "智能随机", duration: "45", offer: "库存有限；买一份到手两张膜；现在下单加赠镜头保护膜" });
   const inputReady = useMemo(() => Boolean(form.product.trim() && form.sellingPoints.trim() && (active !== "replicate" || referenceScript.trim().length >= 30)), [form, active, referenceScript]);
+  const complianceHits = useMemo(() => hasChecked ? checkCompliance(checkText) : [], [checkText, hasChecked]);
 
   async function loadHistory() {
     try { const saved = JSON.parse(localStorage.getItem("viralcraft-history") || "[]"); setHistory(saved); const res = await fetch("/api/scripts", { cache: "no-store" }); const data = await res.json(); if (res.ok) setAiConnected(Boolean(data.aiConnected)); }
@@ -119,11 +123,11 @@ export default function Home() {
   return <main className="app-shell">
     <aside className="sidebar">
       <div className="brand"><span className="brand-mark">苏</span><div><strong>苏苏</strong><small>爆款脚本工作台</small></div></div>
-      <nav><button className={active === "create" ? "nav-active" : ""} onClick={() => setActive("create")}><span>✦</span> 脚本生成</button><button className={active === "replicate" ? "nav-active" : ""} onClick={() => setActive("replicate")}><span>◎</span> 爆款复刻</button><button className={active === "library" ? "nav-active" : ""} onClick={() => setActive("library")}><span>▦</span> 素材库 <em>{hookLibrary.length + pointLibrary.length}</em></button><button className={active === "monitor" ? "nav-active" : ""} onClick={() => setActive("monitor")}><span>⌁</span> 爆款监控 <em>{monitorAccounts.length}</em></button><button className={active === "history" ? "nav-active" : ""} onClick={() => { setActive("history"); loadHistory(); }}><span>◷</span> 历史脚本 <em>{history.length}</em></button></nav>
+      <nav><button className={active === "create" ? "nav-active" : ""} onClick={() => setActive("create")}><span>✦</span> 脚本生成</button><button className={active === "replicate" ? "nav-active" : ""} onClick={() => setActive("replicate")}><span>◎</span> 爆款复刻</button><button className={active === "checker" ? "nav-active" : ""} onClick={() => setActive("checker")}><span>✓</span> 文案检测</button><button className={active === "library" ? "nav-active" : ""} onClick={() => setActive("library")}><span>▦</span> 素材库 <em>{hookLibrary.length + pointLibrary.length}</em></button><button className={active === "monitor" ? "nav-active" : ""} onClick={() => setActive("monitor")}><span>⌁</span> 爆款监控 <em>{monitorAccounts.length}</em></button><button className={active === "history" ? "nav-active" : ""} onClick={() => { setActive("history"); loadHistory(); }}><span>◷</span> 历史脚本 <em>{history.length}</em></button></nav>
       <div className="sidebar-note"><span>团队创作提示</span><p>先固定产品卖点，每次只更换一种钩子风格，复盘数据会更准确。</p></div>
     </aside>
     <section className="workspace">
-      <header><div><p className="eyebrow">TIKTOK COMMERCE STUDIO</p><h1>{active === "create" ? "爆款脚本生成器" : active === "replicate" ? "爆款文案复刻" : active === "library" ? "爆款素材库" : active === "monitor" ? "每日爆款开头监控" : "历史脚本库"}</h1><p>{active === "create" ? "把产品卖点，变成能拍、能剪、能转化的多语言脚本。" : active === "replicate" ? "粘贴一条爆款文案，复刻它的结构和节奏，重新创作你的产品脚本。" : active === "library" ? "集中保存高表现开头和产品卖点，创作时一键调用。" : active === "monitor" ? "监控竞品新视频，沉淀前3秒钩子并一键改写。" : "团队生成的脚本会保存在这里，可随时复用与导出。"}</p></div><div className="status"><i /> 团队在线版</div></header>
+      <header><div><p className="eyebrow">TIKTOK COMMERCE STUDIO</p><h1>{active === "create" ? "爆款脚本生成器" : active === "replicate" ? "爆款文案复刻" : active === "checker" ? "文案合规检测" : active === "library" ? "爆款素材库" : active === "monitor" ? "每日爆款开头监控" : "历史脚本库"}</h1><p>{active === "create" ? "把产品卖点，变成能拍、能剪、能转化的多语言脚本。" : active === "replicate" ? "粘贴一条爆款文案，复刻它的结构和节奏，重新创作你的产品脚本。" : active === "checker" ? "发布前检查绝对词、夸大承诺、医疗功效、促销和危险演示风险。" : active === "library" ? "集中保存高表现开头和产品卖点，创作时一键调用。" : active === "monitor" ? "监控竞品新视频，沉淀前3秒钩子并一键改写。" : "团队生成的脚本会保存在这里，可随时复用与导出。"}</p></div><div className="status"><i /> 团队在线版</div></header>
       {(active === "create" || active === "replicate") ? <div className="creator-grid">
         <section className="panel form-panel">
           <div className="panel-title"><span>01</span><div><h2>{active === "replicate" ? "粘贴爆款并填写产品" : "填写产品信息"}</h2><p>{active === "replicate" ? "AI只复刻结构与节奏，不照抄原句" : "信息越具体，脚本越接近可拍状态"}</p></div></div>
@@ -144,7 +148,7 @@ export default function Home() {
           <article className="narration"><div><h3>完整口播</h3><button onClick={() => copyText(result.narration)}>复制全文</button></div><p>{result.narration}</p></article>
           <div className="storyboard"><h3>逐镜头分镜表</h3><div className="scene-head"><span>时间</span><span>画面</span><span>口播 / 字幕</span><span>剪辑</span></div>{result.scenes.map((s, i) => <div className="scene" key={i}><b>{s.time}</b><span>{s.visual}</span><p>{s.line}</p><small>{s.edit}</small></div>)}</div>
         </>}</section>
-      </div> : active === "library" ? <section className="library-panel">
+      </div> : active === "checker" ? <section className="checker-panel"><div className="checker-grid"><section className="checker-input"><span className="modal-kicker">COPY SAFETY CHECK</span><h2>粘贴需要检测的文案</h2><p>支持中文、西班牙语和英语。结果仅作为发布前辅助检查，平台还会结合画面、字幕、商品和账号情况。</p><textarea value={checkText} onChange={e => { setCheckText(e.target.value); setHasChecked(false); }} rows={18} placeholder="把完整口播、字幕或商品文案粘贴到这里…" /><div><small>{checkText.length}字</small><button disabled={!checkText.trim()} onClick={() => setHasChecked(true)}>开始检测</button></div></section><section className="checker-result">{!hasChecked ? <div className="checker-empty"><span>✓</span><h3>等待检测</h3><p>系统会逐项标出风险词和修改建议。</p></div> : complianceHits.length === 0 ? <div className="checker-clear"><span>✓</span><h3>暂未命中已知风险词</h3><p>这不代表平台一定审核通过，请继续检查画面真实性、测试条件和促销信息。</p></div> : <><div className="checker-summary"><div><span>检测结果</span><strong>{complianceHits.length}处风险</strong></div><b>{complianceHits.filter(x => x.level === "高").length}项高风险</b></div><div className="risk-list">{complianceHits.map((hit,index) => <article key={`${hit.category}-${hit.term}-${index}`} className={hit.level === "高" ? "risk-high" : "risk-medium"}><div><span>{hit.level}风险</span><em>{hit.category}</em></div><h3>命中：{hit.term}</h3><p>{hit.suggestion}</p></article>)}</div></>}</section></div></section> : active === "library" ? <section className="library-panel">
         <div className="library-toolbar"><div className="library-tabs"><button className={libraryType === "hooks" ? "selected" : ""} onClick={() => setLibraryType("hooks")}>爆款开头库 <em>{hookLibrary.length}</em></button><button className={libraryType === "points" ? "selected" : ""} onClick={() => setLibraryType("points")}>产品卖点库 <em>{pointLibrary.length}</em></button></div><input value={librarySearch} onChange={e => setLibrarySearch(e.target.value)} placeholder="搜索内容或产品…" /></div>
         <div className="library-grid"><section className="library-form">{libraryType === "hooks" ? <><span className="modal-kicker">NEW HOOK</span><h2>新增爆款开头</h2><label>名称<input value={hookDraft.title} onChange={e => setHookDraft(prev => ({ ...prev, title: e.target.value }))} placeholder="例如：斧头暴力测试" /></label><label>语言<select value={hookDraft.language} onChange={e => setHookDraft(prev => ({ ...prev, language: e.target.value }))}>{languages.map(x => <option key={x}>{x}</option>)}</select></label><label>开头文案<textarea rows={7} value={hookDraft.copy} onChange={e => setHookDraft(prev => ({ ...prev, copy: e.target.value }))} placeholder="粘贴前3–8秒爆款开头" /></label><button className="modal-primary" disabled={!hookDraft.title.trim() || !hookDraft.copy.trim()} onClick={addHookItem}>保存到开头库</button></> : <><span className="modal-kicker">NEW SELLING POINTS</span><h2>新增产品卖点</h2><label>产品名称<input value={pointDraft.product} onChange={e => setPointDraft(prev => ({ ...prev, product: e.target.value }))} placeholder="例如：变形金刚钢化膜" /></label><label>完整卖点<textarea rows={10} value={pointDraft.points} onChange={e => setPointDraft(prev => ({ ...prev, points: e.target.value }))} placeholder="每条卖点用分号隔开" /></label><button className="modal-primary" disabled={!pointDraft.product.trim() || !pointDraft.points.trim()} onClick={addPointItem}>保存到卖点库</button></>}</section>
           <section className="library-list">{libraryType === "hooks" ? hookLibrary.filter(item => `${item.title}${item.copy}${item.language}`.toLowerCase().includes(librarySearch.toLowerCase())).map(item => <article key={item.id}><div><span>{item.language}</span><button onClick={() => saveHooks(hookLibrary.filter(x => x.id !== item.id))}>删除</button></div><h3>{item.title}</h3><p>{item.copy}</p><footer><button onClick={() => copyText(item.copy)}>复制</button><button className="use-item" onClick={() => { setReferenceScript(item.copy); setActive("replicate"); }}>用它复刻</button></footer></article>) : pointLibrary.filter(item => `${item.product}${item.points}`.toLowerCase().includes(librarySearch.toLowerCase())).map(item => <article key={item.id}><div><span>产品卖点</span><button onClick={() => savePoints(pointLibrary.filter(x => x.id !== item.id))}>删除</button></div><h3>{item.product}</h3><p>{item.points}</p><footer><button onClick={() => copyText(item.points)}>复制</button><button className="use-item" onClick={() => { setForm(prev => ({ ...prev, product: item.product, sellingPoints: item.points })); setActive("create"); }}>用于生成</button></footer></article>)}</section>

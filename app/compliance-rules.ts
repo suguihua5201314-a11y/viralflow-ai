@@ -1,0 +1,11 @@
+export type ComplianceHit = { category:string; level:"高"|"中"; term:string; suggestion:string };
+const rules = [
+  { category:"绝对化表述", level:"高" as const, terms:["百分之百","100%","绝对","永远","从不","零风险","完全不会","一定","必然","最佳","最好","第一","唯一","顶级","完美无瑕","garantizado","garantizada","100 %","nunca","siempre","el mejor","la mejor","número uno","único","única","perfecto","perfecta","guaranteed","never","always","the best","number one","perfect"], suggestion:"改成有条件、可验证的描述，例如‘有助于’‘实测中’‘在本次条件下’。" },
+  { category:"夸大防护", level:"高" as const, terms:["摔不坏","砸不坏","永不碎","绝对防摔","防爆","无敌","坚不可摧","不会刮花","屏幕毫发无损","indestructible","irrompible","nunca se rompe","a prueba de todo","no se raya","unbreakable","scratch proof"], suggestion:"避免无条件保证，改成‘提升日常抗刮能力’或明确展示本次测试条件。" },
+  { category:"医疗功效", level:"高" as const, terms:["治疗","治愈","根治","消炎","杀菌","抗菌","修复疾病","医生推荐","医学证明","cura","curar","tratamiento","elimina bacterias","antibacteriano","médicamente probado","doctor recommended","cure","treat","kills bacteria","medical proof"], suggestion:"删除疾病治疗或医学背书表述；若确有资质，应按对应市场法规展示证据。" },
+  { category:"虚假紧迫", level:"中" as const, terms:["最后一天","仅限今天","马上涨价","最后一批","只剩最后","再不买就没了","último día","solo hoy","últimas unidades","se acaba ahora","last day","today only","last units"], suggestion:"只有在库存和活动真实可核验时使用，并写清活动时间或数量。" },
+  { category:"价格促销", level:"中" as const, terms:["全网最低","最低价","免费送","白送","零元","不要钱","precio más bajo","el más barato","gratis","regalo gratis","lowest price","cheapest","free gift","completely free"], suggestion:"补充适用条件、活动期限和价格依据，避免无条件‘免费’或‘最低价’。" },
+  { category:"结果保证", level:"中" as const, terms:["保证有效","保证成功","一次成功","任何人都能","所有人都适用","效果立刻","resultados garantizados","funciona para todos","resultado inmediato","guaranteed results","works for everyone","instant result"], suggestion:"改成体验或概率表达，例如‘操作更容易’‘本次演示一次完成’。" },
+  { category:"危险演示", level:"中" as const, terms:["斧头","电钻","刀片","锤子砸","火烧","高空抛下","hacha","taladro","cuchilla","martillo","fuego","axe","drill","blade","hammer","fire test"], suggestion:"危险测试应由专业人员在受控环境完成，并避免鼓励观众模仿。" },
+];
+export function checkCompliance(text:string):ComplianceHit[] { const normalized = text.toLowerCase(); return rules.flatMap(rule => rule.terms.filter(term => normalized.includes(term.toLowerCase())).map(term => ({ category:rule.category, level:rule.level, term, suggestion:rule.suggestion }))); }
