@@ -11,6 +11,8 @@ type ImportedHook = { url: string; market: string; hook: string; createdAt: stri
 type MonitorAccount = { id?: number; handle: string; market: string; product: string; url: string };
 type HookItem = { id: number; title: string; language: string; copy: string };
 type SellingPointItem = { id: number; product: string; points: string };
+type BreakdownPart = { label: string; purpose: string; evidence: string };
+type Breakdown = { score: number; hookType: string; hook: string; emotion: string; rhythm: string; proof: string; cta: string; strengths: string[]; risks: string[]; parts: BreakdownPart[]; formula: string };
 type TeamPayload = { hooks?: HookItem[]; points?: SellingPointItem[]; history?: Script[] };
 const teamApi = "/api/team-data";
 const languages = ["中文", "西班牙语", "意大利语", "德语", "英语"];
@@ -18,6 +20,34 @@ const styles = ["强冲突测评", "真实KOC种草", "悬念揭秘", "导演朋
 const frameworkGroups = [...new Set(frameworkCatalog.map(item => item.group))];
 const starterHooks: HookItem[] = seedHooks;
 const starterPoints: SellingPointItem[] = [{ id: 1, product: "变形金刚钢化膜", points: "10秒自动除尘安装；自动对位；无灰尘、无气泡、不贴歪；左右28°防窥；电镀疏水疏油层；不易残留指纹；抗刮耐磨、抗冲击；贴合紧密、不易翘边" }];
+function splitCopy(text: string) { return text.replace(/\r/g, "").split(/(?<=[。！？!?；;])|\n+/).map(x => x.trim()).filter(Boolean); }
+function analyzeViralCopy(text: string): Breakdown {
+  const lines = splitCopy(text); const hook = lines[0]?.slice(0, 160) || text.slice(0, 160);
+  const hasConflict = /浪费|垃圾|别买|不要买|骗局|错了|失败|普通|versus|contra|no compres|dinero|basura/i.test(hook);
+  const hasQuestion = /[?？]|为什么|猜|what|why|cómo|por qué|adivina/i.test(hook);
+  const hasSuspense = /最后|看到最后|等等|接下来|没想到|居然|wait|final|espera|al final/i.test(hook);
+  const hasNumber = /\d+|一秒|三步|三个|四个|秒|%|度/.test(hook);
+  const hookType = hasConflict ? "冲突 / 反常识钩子" : hasQuestion ? "提问 / 好奇钩子" : hasSuspense ? "悬念 / 延迟揭晓钩子" : hasNumber ? "数字 / 结果承诺钩子" : "场景 / 新奇事物钩子";
+  const demoIndex = lines.findIndex(x => /安装|打开|取出|擦|对准|滑|按|测试|砸|刮|步骤|instal|coloca|desliza|prueba|test/i.test(x));
+  const proofIndex = lines.findIndex(x => /结果|无气泡|灰尘|防窥|兼容|抗|层|表面|指纹|result|burbuja|polvo|privacidad|compatible|resisten/i.test(x));
+  const ctaIndex = lines.findIndex(x => /买|下单|链接|库存|优惠|售罄|购买|buy|compra|enlace|stock|oferta/i.test(x));
+  const slice = (start: number, end: number) => lines.slice(Math.max(0,start), Math.max(start + 1,end)).join(" ").slice(0, 220) || "原文未明显表达";
+  const introEnd = demoIndex > 0 ? demoIndex : Math.min(2, lines.length);
+  const proofStart = proofIndex >= 0 ? proofIndex : Math.max(introEnd, lines.length - 2);
+  const ctaStart = ctaIndex >= 0 ? ctaIndex : Math.max(proofStart + 1, lines.length - 1);
+  const parts: BreakdownPart[] = [
+    { label: "前3秒钩子", purpose: "制造停留，让观众立刻想知道结果", evidence: hook },
+    { label: "问题与铺垫", purpose: "放大旧方法的问题，建立观看理由", evidence: slice(1, introEnd) },
+    { label: "过程演示", purpose: "用动作推进内容，降低广告感", evidence: slice(introEnd, proofStart) },
+    { label: "卖点与证明", purpose: "让功能通过结果被看见，而不是只口头宣称", evidence: slice(proofStart, ctaStart) },
+    { label: "转化收口", purpose: "给观众明确的下一步行动", evidence: slice(ctaStart, lines.length) },
+  ];
+  const emotions = [hasConflict && "冲突感", hasSuspense && "好奇感", /省|简单|容易|快速|秒|easy|fácil|rápid/i.test(text) && "爽感", /钱|浪费|贵|dinero|precio/i.test(text) && "损失厌恶"].filter(Boolean) as string[];
+  const risks = checkCompliance(text).slice(0, 4).map(x => `${x.category}：${x.term}`);
+  const strengths = [hasConflict ? "开头有明确对立，容易打断滑动" : "开头直接进入主题，没有冗长铺垫", demoIndex >= 0 ? "用操作过程承接卖点，画面可拍性强" : "信息表达集中，适合补充动作演示", proofIndex >= 0 ? "有结果或功能证明，能建立信任" : "可加入对比结果，提高可信度", ctaIndex >= 0 ? "结尾有行动指令，转化路径完整" : "结尾可补充自然促单，提高转化" ];
+  const score = Math.min(96, 55 + (hasConflict || hasQuestion || hasSuspense ? 12 : 5) + (demoIndex >= 0 ? 10 : 3) + (proofIndex >= 0 ? 10 : 2) + (ctaIndex >= 0 ? 8 : 1) - risks.length * 2);
+  return { score, hookType, hook, emotion: emotions.join("＋") || "新奇感", rhythm: lines.length >= 8 ? "快节奏：短句连续推进，适合1–2秒切镜" : lines.length >= 4 ? "中快节奏：每个信息点配一个画面动作" : "信息较短：建议补充演示和结果镜头", proof: proofIndex >= 0 ? lines[proofIndex] : "原文证明不足，建议加入实拍结果或同条件对比", cta: ctaIndex >= 0 ? lines[ctaIndex] : "原文缺少明确收口，可补充自然的购买理由", strengths, risks: risks.length ? risks : ["暂未命中已知高风险词，仍需检查画面与促销真实性"], parts, formula: `${hookType.replace("钩子", "")} → 旧方法痛点 → 连续动作演示 → 结果证明 → 自然促单` };
+}
 function scoreScript(script: Script) { const risks = checkCompliance(script.narration).length; const hook = script.hook.length >= 8 && script.hook.length <= 90 ? 25 : 17; const structure = Math.min(25, 12 + script.scenes.length * 2); const proof = /测试|对比|实测|test|prueba|probar/i.test(script.narration) ? 22 : 14; const conversion = /链接|下单|购买|库存|click|compra|enlace/i.test(script.narration) ? 20 : 12; return { total: Math.max(0, hook + structure + proof + conversion - risks * 4), hook, structure, proof, conversion, risks }; }
 function saferCopy(text: string) { const rules: [RegExp,string][] = [[/绝对不会|百分之百|100%|永久/gi,"在正常使用条件下不易"],[/全网第一|最强|顶级|唯一/gi,"表现突出"],[/保证|一定能|必然/gi,"有助于"],[/完全防爆|砸不坏|摔不坏/gi,"提升日常抗冲击能力"],[/最后一天|仅剩最后|马上售罄/gi,"库存与活动以页面显示为准"]]; return rules.reduce((copy,[pattern,replacement]) => copy.replace(pattern,replacement), text); }
 const initialMonitorAccounts: MonitorAccount[] = [
@@ -32,7 +62,7 @@ const initialMonitorAccounts: MonitorAccount[] = [
 ];
 
 export default function Home() {
-  const [active, setActive] = useState<"create" | "replicate" | "checker" | "library" | "history" | "monitor">("create");
+  const [active, setActive] = useState<"create" | "breakdown" | "replicate" | "checker" | "library" | "history" | "monitor">("create");
   const [loading, setLoading] = useState(false);
   const [aiConnected, setAiConnected] = useState(false);
   const [error, setError] = useState("");
@@ -41,6 +71,8 @@ export default function Home() {
   const [raceResults, setRaceResults] = useState<Script[]>([]);
   const [raceLoading, setRaceLoading] = useState(false);
   const [referenceScript, setReferenceScript] = useState("");
+  const [breakdownText, setBreakdownText] = useState("");
+  const [breakdown, setBreakdown] = useState<Breakdown | null>(null);
   const [libraryType, setLibraryType] = useState<"hooks" | "points">("hooks");
   const [hookLibrary, setHookLibrary] = useState<HookItem[]>(() => { if (typeof window === "undefined") return starterHooks; try { const saved = JSON.parse(localStorage.getItem("susu-hook-library") || "null"); if (!Array.isArray(saved)) return starterHooks; const savedIds = new Set(saved.map((item:HookItem) => item.id)); return [...saved, ...starterHooks.filter(item => !savedIds.has(item.id))]; } catch { return starterHooks; } });
   const [pointLibrary, setPointLibrary] = useState<SellingPointItem[]>(() => { if (typeof window === "undefined") return starterPoints; try { const saved = JSON.parse(localStorage.getItem("susu-point-library") || "null"); return Array.isArray(saved) ? saved : starterPoints; } catch { return starterPoints; } });
@@ -166,12 +198,12 @@ export default function Home() {
   return <main className="app-shell">
     <aside className="sidebar">
       <div className="brand"><span className="brand-mark">苏</span><div><strong>苏苏</strong><small>爆款脚本工作台</small></div></div>
-      <nav><button className={active === "create" ? "nav-active" : ""} onClick={() => setActive("create")}><span>✦</span> 脚本生成</button><button className={active === "replicate" ? "nav-active" : ""} onClick={() => setActive("replicate")}><span>◎</span> 爆款复刻</button><button className={active === "checker" ? "nav-active" : ""} onClick={() => setActive("checker")}><span>✓</span> 文案检测</button><button className={active === "library" ? "nav-active" : ""} onClick={() => setActive("library")}><span>▦</span> 素材库 <em>{hookLibrary.length + pointLibrary.length}</em></button><button className={active === "monitor" ? "nav-active" : ""} onClick={() => setActive("monitor")}><span>⌁</span> 爆款监控 <em>{monitorAccounts.length}</em></button><button className={active === "history" ? "nav-active" : ""} onClick={() => { setActive("history"); loadHistory(); }}><span>◷</span> 历史脚本 <em>{history.length}</em></button></nav>
+      <nav><button className={active === "create" ? "nav-active" : ""} onClick={() => setActive("create")}><span>✦</span> 脚本生成</button><button className={active === "breakdown" ? "nav-active" : ""} onClick={() => setActive("breakdown")}><span>◇</span> 爆款拆解</button><button className={active === "replicate" ? "nav-active" : ""} onClick={() => setActive("replicate")}><span>◎</span> 爆款复刻</button><button className={active === "checker" ? "nav-active" : ""} onClick={() => setActive("checker")}><span>✓</span> 文案检测</button><button className={active === "library" ? "nav-active" : ""} onClick={() => setActive("library")}><span>▦</span> 素材库 <em>{hookLibrary.length + pointLibrary.length}</em></button><button className={active === "monitor" ? "nav-active" : ""} onClick={() => setActive("monitor")}><span>⌁</span> 爆款监控 <em>{monitorAccounts.length}</em></button><button className={active === "history" ? "nav-active" : ""} onClick={() => { setActive("history"); loadHistory(); }}><span>◷</span> 历史脚本 <em>{history.length}</em></button></nav>
       <div className={`sidebar-note team-note ${teamConnected ? "connected" : ""}`}><span>{teamConnected ? "● 团队云端已连接" : "团队云端空间"}</span><p>{teamConnected ? "开头库、卖点库和历史脚本将同步给团队。" : "连接后，多台电脑可共享素材和历史脚本。"}</p><button onClick={() => { if (teamConnected) { setTeamConnected(false); setTeamPassword(""); } else setShowTeamLogin(true); }}>{teamConnected ? "断开本机" : "输入团队密码"}</button></div>
     </aside>
     <section className="workspace">
-      <header><div><p className="eyebrow">TIKTOK COMMERCE STUDIO</p><h1>{active === "create" ? "爆款脚本生成器" : active === "replicate" ? "爆款文案复刻" : active === "checker" ? "文案合规检测" : active === "library" ? "爆款素材库" : active === "monitor" ? "每日爆款开头监控" : "历史脚本库"}</h1><p>{active === "create" ? "把产品卖点，变成能拍、能剪、能转化的多语言脚本。" : active === "replicate" ? "粘贴一条爆款文案，复刻它的结构和节奏，重新创作你的产品脚本。" : active === "checker" ? "发布前检查绝对词、夸大承诺、医疗功效、促销和危险演示风险。" : active === "library" ? "集中保存高表现开头和产品卖点，创作时一键调用。" : active === "monitor" ? "监控竞品新视频，沉淀前3秒钩子并一键改写。" : "团队生成的脚本会保存在这里，可随时复用与导出。"}</p></div><div className="status"><i /> 团队在线版</div></header>
-      {(active === "create" || active === "replicate") ? <div className="creator-grid">
+      <header><div><p className="eyebrow">TIKTOK COMMERCE STUDIO</p><h1>{active === "create" ? "爆款脚本生成器" : active === "breakdown" ? "爆款视频拆解器" : active === "replicate" ? "爆款文案复刻" : active === "checker" ? "文案合规检测" : active === "library" ? "爆款素材库" : active === "monitor" ? "每日爆款开头监控" : "历史脚本库"}</h1><p>{active === "create" ? "把产品卖点，变成能拍、能剪、能转化的多语言脚本。" : active === "breakdown" ? "看清一条视频为什么爆，并提取团队可以重复使用的内容公式。" : active === "replicate" ? "粘贴一条爆款文案，复刻它的结构和节奏，重新创作你的产品脚本。" : active === "checker" ? "发布前检查绝对词、夸大承诺、医疗功效、促销和危险演示风险。" : active === "library" ? "集中保存高表现开头和产品卖点，创作时一键调用。" : active === "monitor" ? "监控竞品新视频，沉淀前3秒钩子并一键改写。" : "团队生成的脚本会保存在这里，可随时复用与导出。"}</p></div><div className="status"><i /> 团队在线版</div></header>
+      {active === "breakdown" ? <section className="breakdown-panel"><div className="breakdown-grid"><section className="breakdown-input"><span className="modal-kicker">VIRAL VIDEO BREAKDOWN</span><h2>粘贴爆款口播或字幕</h2><p>支持中文、西语、意大利语和英语。建议粘贴完整文案，拆解会更准确。</p><textarea value={breakdownText} onChange={e => { setBreakdownText(e.target.value); setBreakdown(null); }} rows={20} placeholder="把爆款视频的完整口播、字幕或转写文案粘贴到这里……" /><div className="breakdown-input-foot"><small>{breakdownText.length}字 · 建议80字以上</small><button disabled={breakdownText.trim().length < 20} onClick={() => setBreakdown(analyzeViralCopy(breakdownText))}>◇ 开始拆解</button></div></section><section className="breakdown-result">{!breakdown ? <div className="breakdown-empty"><span>◇</span><h3>等待爆款文案</h3><p>系统会拆出钩子、情绪、节奏、内容结构、证明方式与转化收口。</p></div> : <><div className="breakdown-score"><div><span>爆款结构评分</span><strong>{breakdown.score}<small>/100</small></strong></div><div><span>钩子类型</span><b>{breakdown.hookType}</b><em>{breakdown.emotion}</em></div></div><article className="breakdown-hook"><span>原文前3秒</span><p>{breakdown.hook}</p></article><div className="breakdown-meta"><article><span>节奏判断</span><p>{breakdown.rhythm}</p></article><article><span>证明方式</span><p>{breakdown.proof}</p></article><article><span>转化收口</span><p>{breakdown.cta}</p></article></div><div className="breakdown-structure"><h3>内容结构拆解</h3>{breakdown.parts.map((part,index) => <article key={part.label}><b>{String(index + 1).padStart(2,"0")}</b><div><span>{part.label}</span><p>{part.purpose}</p><small>原文：{part.evidence}</small></div></article>)}</div><article className="breakdown-formula"><span>可直接复刻的公式</span><strong>{breakdown.formula}</strong><button onClick={() => { setReferenceScript(breakdownText); setActive("replicate"); }}>用这个结构生成新脚本 →</button></article><div className="breakdown-lists"><article><h3>值得保留</h3>{breakdown.strengths.map(x => <p key={x}>✓ {x}</p>)}</article><article><h3>风险提醒</h3>{breakdown.risks.map(x => <p key={x}>! {x}</p>)}</article></div></>}</section></div></section> : (active === "create" || active === "replicate") ? <div className="creator-grid">
         <section className="panel form-panel">
           <div className="panel-title"><span>01</span><div><h2>{active === "replicate" ? "粘贴爆款并填写产品" : "填写产品信息"}</h2><p>{active === "replicate" ? "AI只复刻结构与节奏，不照抄原句" : "信息越具体，脚本越接近可拍状态"}</p></div></div>
           {active === "replicate" && <label>爆款参考文案<textarea value={referenceScript} onChange={e => setReferenceScript(e.target.value)} rows={9} placeholder="把完整爆款口播粘贴到这里。系统会拆解钩子、节奏、安装顺序、卖点展示和促单方式，再重新创作。" /><small>{referenceScript.length}字 · 至少30字</small></label>}
