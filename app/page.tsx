@@ -7,9 +7,18 @@ type Scene = { time: string; visual: string; line: string; edit: string };
 type Script = { id?: number; title: string; product: string; language: string; country: string; style: string; hook: string; alternateHooks: string[]; narration: string; scenes: Scene[]; createdAt?: string; aiGenerated?: boolean };
 type ImportedHook = { url: string; market: string; hook: string; createdAt: string };
 type MonitorAccount = { id?: number; handle: string; market: string; product: string; url: string };
+type HookItem = { id: number; title: string; language: string; copy: string };
+type SellingPointItem = { id: number; product: string; points: string };
 const languages = ["中文", "西班牙语", "意大利语", "德语", "英语"];
 const styles = ["强冲突测评", "真实KOC种草", "悬念揭秘", "导演朋友的新玩具", "痛点解决"];
 const frameworkGroups = [...new Set(frameworkCatalog.map(item => item.group))];
+const starterHooks: HookItem[] = [
+  { id: 1, title: "神秘道具", language: "中文", copy: "这是我导演朋友刚带回来的新玩具，先看看它对木头做了什么。" },
+  { id: 2, title: "递增测试", language: "中文", copy: "30厘米，50厘米，80厘米——你真的觉得它还能保护手机吗？" },
+  { id: 3, title: "同条件对决", language: "西班牙语", copy: "Misma herramienta, misma fuerza y cuatro resultados completamente distintos." },
+  { id: 4, title: "新品玩具", language: "西班牙语", copy: "Este es mi nuevo juguete. Mira primero lo que le hace a la madera." },
+];
+const starterPoints: SellingPointItem[] = [{ id: 1, product: "变形金刚钢化膜", points: "10秒自动除尘安装；自动对位；无灰尘、无气泡、不贴歪；左右28°防窥；电镀疏水疏油层；不易残留指纹；抗刮耐磨、抗冲击；贴合紧密、不易翘边" }];
 const initialMonitorAccounts: MonitorAccount[] = [
   { handle: "@magicjohn.official", market: "全球", product: "钢化膜", url: "https://www.tiktok.com/@magicjohn.official" },
   { handle: "@magicjohn_official.us3", market: "美国", product: "钢化膜", url: "https://www.tiktok.com/@magicjohn_official.us3" },
@@ -22,13 +31,19 @@ const initialMonitorAccounts: MonitorAccount[] = [
 ];
 
 export default function Home() {
-  const [active, setActive] = useState<"create" | "replicate" | "history" | "monitor">("create");
+  const [active, setActive] = useState<"create" | "replicate" | "library" | "history" | "monitor">("create");
   const [loading, setLoading] = useState(false);
   const [aiConnected, setAiConnected] = useState(false);
   const [error, setError] = useState("");
   const [history, setHistory] = useState<Script[]>([]);
   const [result, setResult] = useState<Script | null>(null);
   const [referenceScript, setReferenceScript] = useState("");
+  const [libraryType, setLibraryType] = useState<"hooks" | "points">("hooks");
+  const [hookLibrary, setHookLibrary] = useState<HookItem[]>(() => { if (typeof window === "undefined") return starterHooks; try { const saved = JSON.parse(localStorage.getItem("susu-hook-library") || "null"); return Array.isArray(saved) ? saved : starterHooks; } catch { return starterHooks; } });
+  const [pointLibrary, setPointLibrary] = useState<SellingPointItem[]>(() => { if (typeof window === "undefined") return starterPoints; try { const saved = JSON.parse(localStorage.getItem("susu-point-library") || "null"); return Array.isArray(saved) ? saved : starterPoints; } catch { return starterPoints; } });
+  const [hookDraft, setHookDraft] = useState({ title: "", language: "中文", copy: "" });
+  const [pointDraft, setPointDraft] = useState({ product: "", points: "" });
+  const [librarySearch, setLibrarySearch] = useState("");
   const [importForm, setImportForm] = useState({ url: "", market: "西班牙", hook: "" });
   const [importedHooks, setImportedHooks] = useState<ImportedHook[]>([]);
   const [monitorAccounts, setMonitorAccounts] = useState<MonitorAccount[]>(initialMonitorAccounts);
@@ -54,6 +69,11 @@ export default function Home() {
       .then(data => { if (data.accounts) setMonitorAccounts(data.accounts); })
       .catch(() => undefined);
   }, []);
+
+  function saveHooks(items: HookItem[]) { setHookLibrary(items); localStorage.setItem("susu-hook-library", JSON.stringify(items)); }
+  function savePoints(items: SellingPointItem[]) { setPointLibrary(items); localStorage.setItem("susu-point-library", JSON.stringify(items)); }
+  function addHookItem() { if (!hookDraft.title.trim() || !hookDraft.copy.trim()) return; saveHooks([{ id: Date.now(), title: hookDraft.title.trim(), language: hookDraft.language, copy: hookDraft.copy.trim() }, ...hookLibrary]); setHookDraft({ title: "", language: "中文", copy: "" }); }
+  function addPointItem() { if (!pointDraft.product.trim() || !pointDraft.points.trim()) return; savePoints([{ id: Date.now(), product: pointDraft.product.trim(), points: pointDraft.points.trim() }, ...pointLibrary]); setPointDraft({ product: "", points: "" }); }
 
   async function addMonitorAccount() {
     if (accountSaving) return;
@@ -103,11 +123,11 @@ export default function Home() {
   return <main className="app-shell">
     <aside className="sidebar">
       <div className="brand"><span className="brand-mark">苏</span><div><strong>苏苏</strong><small>爆款脚本工作台</small></div></div>
-      <nav><button className={active === "create" ? "nav-active" : ""} onClick={() => setActive("create")}><span>✦</span> 脚本生成</button><button className={active === "replicate" ? "nav-active" : ""} onClick={() => setActive("replicate")}><span>◎</span> 爆款复刻</button><button className={active === "monitor" ? "nav-active" : ""} onClick={() => setActive("monitor")}><span>⌁</span> 爆款监控 <em>{monitorAccounts.length}</em></button><button className={active === "history" ? "nav-active" : ""} onClick={() => { setActive("history"); loadHistory(); }}><span>◷</span> 历史脚本 <em>{history.length}</em></button></nav>
+      <nav><button className={active === "create" ? "nav-active" : ""} onClick={() => setActive("create")}><span>✦</span> 脚本生成</button><button className={active === "replicate" ? "nav-active" : ""} onClick={() => setActive("replicate")}><span>◎</span> 爆款复刻</button><button className={active === "library" ? "nav-active" : ""} onClick={() => setActive("library")}><span>▦</span> 素材库 <em>{hookLibrary.length + pointLibrary.length}</em></button><button className={active === "monitor" ? "nav-active" : ""} onClick={() => setActive("monitor")}><span>⌁</span> 爆款监控 <em>{monitorAccounts.length}</em></button><button className={active === "history" ? "nav-active" : ""} onClick={() => { setActive("history"); loadHistory(); }}><span>◷</span> 历史脚本 <em>{history.length}</em></button></nav>
       <div className="sidebar-note"><span>团队创作提示</span><p>先固定产品卖点，每次只更换一种钩子风格，复盘数据会更准确。</p></div>
     </aside>
     <section className="workspace">
-      <header><div><p className="eyebrow">TIKTOK COMMERCE STUDIO</p><h1>{active === "create" ? "爆款脚本生成器" : active === "replicate" ? "爆款文案复刻" : active === "monitor" ? "每日爆款开头监控" : "历史脚本库"}</h1><p>{active === "create" ? "把产品卖点，变成能拍、能剪、能转化的多语言脚本。" : active === "replicate" ? "粘贴一条爆款文案，复刻它的结构和节奏，重新创作你的产品脚本。" : active === "monitor" ? "监控竞品新视频，沉淀前3秒钩子并一键改写。" : "团队生成的脚本会保存在这里，可随时复用与导出。"}</p></div><div className="status"><i /> 团队在线版</div></header>
+      <header><div><p className="eyebrow">TIKTOK COMMERCE STUDIO</p><h1>{active === "create" ? "爆款脚本生成器" : active === "replicate" ? "爆款文案复刻" : active === "library" ? "爆款素材库" : active === "monitor" ? "每日爆款开头监控" : "历史脚本库"}</h1><p>{active === "create" ? "把产品卖点，变成能拍、能剪、能转化的多语言脚本。" : active === "replicate" ? "粘贴一条爆款文案，复刻它的结构和节奏，重新创作你的产品脚本。" : active === "library" ? "集中保存高表现开头和产品卖点，创作时一键调用。" : active === "monitor" ? "监控竞品新视频，沉淀前3秒钩子并一键改写。" : "团队生成的脚本会保存在这里，可随时复用与导出。"}</p></div><div className="status"><i /> 团队在线版</div></header>
       {(active === "create" || active === "replicate") ? <div className="creator-grid">
         <section className="panel form-panel">
           <div className="panel-title"><span>01</span><div><h2>{active === "replicate" ? "粘贴爆款并填写产品" : "填写产品信息"}</h2><p>{active === "replicate" ? "AI只复刻结构与节奏，不照抄原句" : "信息越具体，脚本越接近可拍状态"}</p></div></div>
@@ -128,7 +148,12 @@ export default function Home() {
           <article className="narration"><div><h3>完整口播</h3><button onClick={() => copyText(result.narration)}>复制全文</button></div><p>{result.narration}</p></article>
           <div className="storyboard"><h3>逐镜头分镜表</h3><div className="scene-head"><span>时间</span><span>画面</span><span>口播 / 字幕</span><span>剪辑</span></div>{result.scenes.map((s, i) => <div className="scene" key={i}><b>{s.time}</b><span>{s.visual}</span><p>{s.line}</p><small>{s.edit}</small></div>)}</div>
         </>}</section>
-      </div> : active === "monitor" ? <section className="monitor-panel">
+      </div> : active === "library" ? <section className="library-panel">
+        <div className="library-toolbar"><div className="library-tabs"><button className={libraryType === "hooks" ? "selected" : ""} onClick={() => setLibraryType("hooks")}>爆款开头库 <em>{hookLibrary.length}</em></button><button className={libraryType === "points" ? "selected" : ""} onClick={() => setLibraryType("points")}>产品卖点库 <em>{pointLibrary.length}</em></button></div><input value={librarySearch} onChange={e => setLibrarySearch(e.target.value)} placeholder="搜索内容或产品…" /></div>
+        <div className="library-grid"><section className="library-form">{libraryType === "hooks" ? <><span className="modal-kicker">NEW HOOK</span><h2>新增爆款开头</h2><label>名称<input value={hookDraft.title} onChange={e => setHookDraft(prev => ({ ...prev, title: e.target.value }))} placeholder="例如：斧头暴力测试" /></label><label>语言<select value={hookDraft.language} onChange={e => setHookDraft(prev => ({ ...prev, language: e.target.value }))}>{languages.map(x => <option key={x}>{x}</option>)}</select></label><label>开头文案<textarea rows={7} value={hookDraft.copy} onChange={e => setHookDraft(prev => ({ ...prev, copy: e.target.value }))} placeholder="粘贴前3–8秒爆款开头" /></label><button className="modal-primary" disabled={!hookDraft.title.trim() || !hookDraft.copy.trim()} onClick={addHookItem}>保存到开头库</button></> : <><span className="modal-kicker">NEW SELLING POINTS</span><h2>新增产品卖点</h2><label>产品名称<input value={pointDraft.product} onChange={e => setPointDraft(prev => ({ ...prev, product: e.target.value }))} placeholder="例如：变形金刚钢化膜" /></label><label>完整卖点<textarea rows={10} value={pointDraft.points} onChange={e => setPointDraft(prev => ({ ...prev, points: e.target.value }))} placeholder="每条卖点用分号隔开" /></label><button className="modal-primary" disabled={!pointDraft.product.trim() || !pointDraft.points.trim()} onClick={addPointItem}>保存到卖点库</button></>}</section>
+          <section className="library-list">{libraryType === "hooks" ? hookLibrary.filter(item => `${item.title}${item.copy}${item.language}`.toLowerCase().includes(librarySearch.toLowerCase())).map(item => <article key={item.id}><div><span>{item.language}</span><button onClick={() => saveHooks(hookLibrary.filter(x => x.id !== item.id))}>删除</button></div><h3>{item.title}</h3><p>{item.copy}</p><footer><button onClick={() => copyText(item.copy)}>复制</button><button className="use-item" onClick={() => { setReferenceScript(item.copy); setActive("replicate"); }}>用它复刻</button></footer></article>) : pointLibrary.filter(item => `${item.product}${item.points}`.toLowerCase().includes(librarySearch.toLowerCase())).map(item => <article key={item.id}><div><span>产品卖点</span><button onClick={() => savePoints(pointLibrary.filter(x => x.id !== item.id))}>删除</button></div><h3>{item.product}</h3><p>{item.points}</p><footer><button onClick={() => copyText(item.points)}>复制</button><button className="use-item" onClick={() => { setForm(prev => ({ ...prev, product: item.product, sellingPoints: item.points })); setActive("create"); }}>用于生成</button></footer></article>)}</section>
+        </div>
+      </section> : active === "monitor" ? <section className="monitor-panel">
         <div className="monitor-banner"><div><span>采集连接状态</span><h2>{monitorAccounts.length}个竞品账号已加入监控</h2><p>账号清单和市场分类已经保存。配置第三方TikTok数据服务后，才能每天自动同步新视频并提取前3–5秒开头。</p></div><button onClick={() => setShowConnection(true)}>配置采集接口</button></div>
         <div className="monitor-stats"><article><span>监控账号</span><strong>{monitorAccounts.length}</strong><small>{new Set(monitorAccounts.map(x => x.market)).size}个市场</small></article><article><span>自动采集</span><strong>未启用</strong><small>完成接口配置后开启</small></article><article><span>今日新视频</span><strong>—</strong><small>等待数据接口</small></article><article><span>已沉淀开头</span><strong>{importedHooks.length}</strong><small>本次页面人工导入</small></article></div>
         <div className="monitor-grid"><section className="account-card"><div className="monitor-title"><div><h2>竞品账号清单</h2><p>按市场自动分类，新增账号会保存到团队清单</p></div><button onClick={() => { setAccountError(""); setShowAddAccount(true); }}>＋ 添加账号</button></div><div className="account-list">{monitorAccounts.map((account, index) => <article key={account.url}><div className="account-avatar">M</div><div><h3>{account.handle}</h3><p><span>{account.market}</span><span>{account.product}</span></p></div><small>{index === 0 ? "主账号" : "已添加"}</small><a href={account.url} target="_blank" rel="noreferrer">打开主页 ↗</a></article>)}</div></section>
