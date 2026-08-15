@@ -1,16 +1,15 @@
-import { and, desc, eq, sql } from "drizzle-orm";
-import { getDb } from "../../../db";
-import { scripts } from "../../../db/schema";
+import { frameworkCatalog } from "../../frameworks";
 
-type Payload = { product: string; sellingPoints: string; audience: string; country: string; language: string; style: string; framework?: string; duration: string; offer: string; nonce?: number };
+type RecentScript = { title:string; hook:string; narration:string };
+type Payload = { product: string; sellingPoints: string; audience: string; country: string; language: string; style: string; framework?: string; duration: string; offer: string; nonce?: number; recent?: RecentScript[] };
 type Pack = { hooks: string[]; intros: string[]; proofs: string[]; demos: string[]; benefits: string[]; ctas: string[] };
 
 function localized(p: Payload) {
   const maps: Record<string, Record<string, string>> = {
-    西班牙语: { "钢化膜": "protector de pantalla", "10秒自动除尘安装": "instalación con eliminación automática de polvo en 10 segundos", "无气泡、不歪": "sin burbujas ni desalineación", "28°防窥": "privacidad de 28°", "98%手机壳兼容": "compatible con el 98 % de las fundas", "经常自己贴坏钢化膜、在意隐私的手机用户": "quienes suelen instalar mal el protector y valoran su privacidad", "限时折扣，库存有限": "descuento por tiempo limitado y unidades limitadas" },
-    意大利语: { "钢化膜": "protezione per lo schermo", "10秒自动除尘安装": "installazione antipolvere automatica in 10 secondi", "无气泡、不歪": "senza bolle né disallineamenti", "28°防窥": "privacy a 28°", "98%手机壳兼容": "compatibile con il 98% delle cover", "经常自己贴坏钢化膜、在意隐私的手机用户": "chi applica spesso male la protezione e tiene alla privacy", "限时折扣，库存有限": "sconto a tempo limitato e scorte limitate" },
-    德语: { "钢化膜": "Displayschutz", "10秒自动除尘安装": "automatische staubfreie Montage in 10 Sekunden", "无气泡、不歪": "ohne Blasen oder schiefe Ausrichtung", "28°防窥": "28° Sichtschutz", "98%手机壳兼容": "mit 98 % der Hüllen kompatibel", "经常自己贴坏钢化膜、在意隐私的手机用户": "alle, die Schutzfolien oft schief anbringen und Privatsphäre schätzen", "限时折扣，库存有限": "zeitlich begrenzter Rabatt, nur solange der Vorrat reicht" },
-    英语: { "钢化膜": "screen protector", "10秒自动除尘安装": "automatic dust-removal installation in 10 seconds", "无气泡、不歪": "no bubbles or misalignment", "28°防窥": "28° privacy protection", "98%手机壳兼容": "compatible with 98% of cases", "经常自己贴坏钢化膜、在意隐私的手机用户": "people who often install protectors crooked and care about privacy", "限时折扣，库存有限": "limited-time discount while stock lasts" },
+    西班牙语: { "变形金刚钢化膜":"protector de pantalla Transformers", "钢化膜": "protector de pantalla", "10秒自动除尘安装": "instalación con eliminación automática de polvo en 10 segundos", "无气泡、不歪": "sin burbujas ni desalineación", "28°防窥": "privacidad de 28°", "98%手机壳兼容": "compatible con el 98 % de las fundas", "表层电镀疏水疏油层":"capa electrochapada hidrofóbica y oleofóbica", "抗刮耐磨、抗冲击":"resistente a rayaduras, desgaste e impactos", "贴合紧密、不易翘边":"adhesión firme sin levantarse en los bordes", "库存有限":"stock limitado", "买一份到手两张膜":"dos protectores por el precio de uno", "现在下单加赠镜头保护膜":"compra ahora y recibe un protector de cámara de regalo", "经常自己贴坏钢化膜、在意隐私的手机用户": "quienes suelen instalar mal el protector y valoran su privacidad", "限时折扣，库存有限": "descuento por tiempo limitado y unidades limitadas" },
+    意大利语: { "变形金刚钢化膜":"protezione schermo Transformers", "钢化膜": "protezione per lo schermo", "10秒自动除尘安装": "installazione antipolvere automatica in 10 secondi", "无气泡、不歪": "senza bolle né disallineamenti", "28°防窥": "privacy a 28°", "98%手机壳兼容": "compatibile con il 98% delle cover", "表层电镀疏水疏油层":"rivestimento elettroplaccato idrofobico e oleofobico", "抗刮耐磨、抗冲击":"resistente a graffi, usura e urti", "贴合紧密、不易翘边":"aderenza salda senza bordi sollevati", "经常自己贴坏钢化膜、在意隐私的手机用户": "chi applica spesso male la protezione e tiene alla privacy", "限时折扣，库存有限": "sconto a tempo limitato e scorte limitate" },
+    德语: { "变形金刚钢化膜":"Transformers Displayschutz", "钢化膜": "Displayschutz", "10秒自动除尘安装": "automatische staubfreie Montage in 10 Sekunden", "无气泡、不歪": "ohne Blasen oder schiefe Ausrichtung", "28°防窥": "28° Sichtschutz", "98%手机壳兼容": "mit 98 % der Hüllen kompatibel", "表层电镀疏水疏油层":"galvanisierte wasser- und ölabweisende Beschichtung", "抗刮耐磨、抗冲击":"kratz-, verschleiß- und stoßfest", "贴合紧密、不易翘边":"fester Halt ohne abhebende Kanten", "经常自己贴坏钢化膜、在意隐私的手机用户": "alle, die Schutzfolien oft schief anbringen und Privatsphäre schätzen", "限时折扣，库存有限": "zeitlich begrenzter Rabatt, nur solange der Vorrat reicht" },
+    英语: { "变形金刚钢化膜":"Transformers screen protector", "钢化膜": "screen protector", "10秒自动除尘安装": "automatic dust-removal installation in 10 seconds", "无气泡、不歪": "no bubbles or misalignment", "28°防窥": "28° privacy protection", "98%手机壳兼容": "compatible with 98% of cases", "表层电镀疏水疏油层":"electroplated hydrophobic and oleophobic coating", "抗刮耐磨、抗冲击":"scratch-, wear- and impact-resistant", "贴合紧密、不易翘边":"firm adhesion without lifting edges", "经常自己贴坏钢化膜、在意隐私的手机用户": "people who often install protectors crooked and care about privacy", "限时折扣，库存有限": "limited-time discount while stock lasts" },
   };
   const translate = (value: string) => Object.entries(maps[p.language] ?? {}).sort((a, b) => b[0].length - a[0].length).reduce((out, [a, b]) => out.split(a).join(b), value).replaceAll("；", "; ").replaceAll("、", ", ");
   return { product: translate(p.product), sellingPoints: translate(p.sellingPoints), audience: translate(p.audience), offer: translate(p.offer) };
@@ -74,9 +73,9 @@ function fill(template: string, vars: Record<string,string>) {
   return Object.entries(vars).reduce((out,[key,value]) => out.replaceAll(`\${${key}}`, value), template);
 }
 
-const frameworkNames = ["破坏测试对比", "失败救援反转", "导演朋友神秘道具", "价格挑战对比", "评论区质疑实测", "十秒安装挑战", "隐私视角实验", "第一视角开箱"];
+const frameworkNames = frameworkCatalog.map(item => item.name);
 
-function createAlternativeScript(p: Payload, framework: string, seed: number) {
+function createAlternativeScript(p: Payload, framework: string, seed: number, avoidHooks: string[] = []) {
   const l = localized(p); const x = l.product, points = l.sellingPoints, offer = l.offer;
   type Copy = { hooks: Record<string,string[]>; fail:string; question:string; reveal:string; install:string; result:string; features:string; test:string; proof:string; cta:string };
   const copies: Record<string,Copy> = {
@@ -94,13 +93,15 @@ function createAlternativeScript(p: Payload, framework: string, seed: number) {
     },
     西班牙语: {
       hooks: {
-        失败救援反转:["Ya arruiné tres protectores y este pequeño aparato acaba de salvar el último intento.","Antes de culpar a tus manos por instalarlo mal, mira dónde empieza realmente el problema."],
-        导演朋友神秘道具:["Este es el nuevo juguete de mi amigo director. ¿Adivinas para qué sirve?","Hoy apareció un aparato extraño en el set y terminó instalado en mi teléfono."],
-        价格挑战对比:["Un protector de 3 euros contra uno de 30: la diferencia real aparece después de instalarlo.","Barato o caro, hoy los dos se enfrentan a la misma prueba en el mismo teléfono."],
-        评论区质疑实测:["Los comentarios dicen que la eliminación automática de polvo es falsa, así que voy a llenar la pantalla de polvo.","Dicen que solo funciona por la edición; hoy lo instalo en un solo plano y sin cortes."],
-        十秒安装挑战:["Diez segundos para instalarlo perfecto; si fallo, le regalo el móvil al cámara.","Empieza el cronómetro: sin recolocar, sin una segunda limpieza y sin esconder errores."],
-        隐私视角实验:["Puse el mismo mensaje en tres pantallas y la persona de al lado solo no pudo leer la última.","Lo peor del metro no es ir de pie, es que la persona de al lado pueda leer toda tu pantalla."],
-        第一视角开箱:["Primera persona probando el accesorio para móvil que siempre aparece agotado.","La caja parece normal, pero al abrirla este mecanismo me hizo detenerme."],
+        失败救援反转:["Ya arruiné tres protectores y este pequeño aparato acaba de salvar el último intento.","Antes de culpar a tus manos por instalarlo mal, mira dónde empieza realmente el problema.","Polvo, burbujas y otra lámina a la basura… hasta que probé este sistema.","Esta instalación empezó como otro desastre, pero el final no tiene sentido.","Iba a tirar este último protector, y entonces encontré el paso que estaba haciendo mal."],
+        导演朋友神秘道具:["Este es el nuevo juguete de mi amigo director. ¿Adivinas para qué sirve?","Hoy apareció un aparato extraño en el set y terminó instalado en mi teléfono.","Mi director dejó esto sobre la mesa y me prohibió abrirlo hasta encender la cámara.","Nadie del equipo acertó para qué servía esta caja negra.","Parece una herramienta de cine, pero espera a ver dónde termina."],
+        价格挑战对比:["Un protector de 3 euros contra uno de 30: la diferencia real aparece después de instalarlo.","Barato o caro, hoy los dos se enfrentan a la misma prueba en el mismo teléfono.","Compré cuatro protectores baratos; al final gasté más que con esta caja.","¿Dos láminas por este precio o seguir pagando por instalaciones fallidas?","El protector más barato de la mesa acaba de salir carísimo."],
+        评论区质疑实测:["Los comentarios dicen que la eliminación automática de polvo es falsa, así que voy a llenar la pantalla de polvo.","Dicen que solo funciona por la edición; hoy lo instalo en un solo plano y sin cortes.","Este comentario asegura que el aplicador es puro marketing; vamos a comprobarlo.","Me pidieron probarlo sin limpiar la pantalla una segunda vez. Aquí está.","Según vosotros, las burbujas están ocultas por la luz; hoy cambio el ángulo."],
+        十秒安装挑战:["Diez segundos para instalarlo perfecto; si fallo, le regalo el móvil al cámara.","Empieza el cronómetro: sin recolocar, sin una segunda limpieza y sin esconder errores.","Tengo diez segundos y una sola oportunidad para dejar esta pantalla perfecta.","Cuando llegue a cero, no puedo tocar otra vez el protector.","Cronómetro, teléfono nuevo y cero margen de error: empezamos."],
+        隐私视角实验:["Puse el mismo mensaje en tres pantallas y la persona de al lado solo no pudo leer la última.","Lo peor del metro no es ir de pie, es que la persona de al lado pueda leer toda tu pantalla.","Desde aquí puedes leerlo todo; da dos pasos al lado y desaparece.","Le pedí a mi compañero que leyera este mensaje sin mirar de frente.","Esta pantalla muestra dos cosas distintas según dónde estés sentado."],
+        第一视角开箱:["Primera persona probando el accesorio para móvil que siempre aparece agotado.","La caja parece normal, pero al abrirla este mecanismo me hizo detenerme.","Acabo de recibir el protector que se instala sin tocar el cristal.","Abrí el paquete esperando una lámina normal, pero venía con esto.","POV: cambias de móvil y esta es la primera caja que abres."],
+        生活事故救场:["El móvil cayó justo sobre las llaves; ahora toca comprobar si la pantalla sobrevivió.","Un vaso volcado, una mesa llena y el teléfono en el peor lugar posible.","Mi pantalla rozó el cierre metálico del bolso durante todo el día.","Este golpe ocurre todos los días, pero casi nadie prueba el protector así.","Dejé el móvil donde nunca debería estar: debajo de todo lo que llevo en el bolso."],
+        视觉谜题反转:["¿Por qué esta gota no se queda sobre la pantalla?","Hay algo raro en esta pantalla: mírala desde el lado.","Parece que estoy deslizando una caja vacía, pero mira el cristal.","Tres pantallas, una misma imagen y solo una desaparece al girarla.","No es un truco de edición: la suciedad acaba de salir sola por este lado."],
       },
       fail:"Con el método normal aparecen polvo, burbujas o desalineación, y basta un error para empezar otra vez.", question:"No decidas todavía si es útil o una pérdida de dinero; mira la prueba completa.", reveal:`La diferencia está en este ${x} y su aplicador integrado.`, install:"Colocas el móvil, presionas abajo y deslizas; alineación, eliminación de polvo y adhesión ocurren en un solo movimiento.", result:"Retiramos la herramienta: sin polvo, sin burbujas, bordes rectos y listo en menos de diez segundos.", features:`Ahora comprobamos los puntos clave: ${points}.`, test:"Aumento la dificultad con luz fuerte, vista lateral, líquido y una prueba de rayaduras.", proof:"Sin trucos de edición: el proceso y el resultado permanecen en el mismo plano.", cta:`Si lo necesitas, haz clic en el enlace. ${offer}; comprueba primero tu modelo.`
     },
@@ -143,7 +144,9 @@ function createAlternativeScript(p: Payload, framework: string, seed: number) {
   };
   const c = copies[p.language] ?? copies.中文;
   const hookOptions = c.hooks[framework] ?? c.hooks.失败救援反转;
-  const hook = hookOptions[seededIndex(seed, 31, hookOptions.length)];
+  const freshHookOptions = hookOptions.filter(item => !avoidHooks.includes(item));
+  const selectableHooks = freshHookOptions.length ? freshHookOptions : hookOptions;
+  const hook = selectableHooks[seededIndex(seed, 31, selectableHooks.length)];
   const orders: Record<string,Array<keyof Omit<Copy,"hooks"> | "hook">> = {
     失败救援反转:["hook","fail","reveal","install","result","features","cta"],
     导演朋友神秘道具:["hook","question","reveal","install","result","test","cta"],
@@ -170,12 +173,14 @@ function createAlternativeScript(p: Payload, framework: string, seed: number) {
   return { title:`${p.product}｜${framework}`, product:p.product, language:p.language, country:p.country, style:p.style, hook, alternateHooks:[...hookOptions.filter(x => x !== hook), c.question].slice(0,2), narration:lines.join(" "), scenes };
 }
 
-function createScript(p: Payload, avoidHook?: string, avoidTitle?: string) {
+type AiOpening = { hook:string; bridge:string; hookVisual?:string; bridgeVisual?:string };
+
+function createScript(p: Payload, avoidHooks: string[] = [], avoidTitles: string[] = [], aiOpenings: AiOpening[] = []) {
   void words(p);
   const l = localized(p); const seed = p.nonce ?? Date.now();
-  const availableFrameworks = frameworkNames.filter(name => !avoidTitle?.endsWith(`｜${name}`));
+  const freshFrameworks = frameworkNames.filter(name => !avoidTitles.some(title => title.endsWith(`｜${name}`)));
+  const availableFrameworks = freshFrameworks.length ? freshFrameworks : frameworkNames;
   const framework = p.framework && p.framework !== "智能随机" ? p.framework : availableFrameworks[seededIndex(seed, 30, availableFrameworks.length)];
-  if (framework !== "破坏测试对比") return createAlternativeScript(p, framework, seed);
   const vars = { x: l.product, points: l.sellingPoints, audience: l.audience, offer: l.offer };
   const choose = (items: string[], offset: number) => fill(items[seededIndex(seed, offset, items.length)], vars);
   const tools: Record<string, string[]> = {
@@ -193,19 +198,19 @@ function createScript(p: Payload, avoidHook?: string, avoidTitle?: string) {
       [`但今天我们要测试一款完全不同的${l.product}。`, `最后登场的，是结构完全不同的${l.product}。`],
       [`等一下我会用同一个工具测试它，先放在这里，我们先看它怎么安装。`, `破坏测试先别急，工具不换，安装完成以后马上继续。`],
       [`安装比你想得更简单，只需要三步：定位、按下、滑动。自动对齐工具会在贴合时带走灰尘。`, `把手机放进去，对准位置，按下底部再向前滑，整个过程不用用手找位置。`],
-      [`完成以后撕掉安装器，再用附送的布压实四周。你看到的结果是：没有灰尘、没有气泡、没有贴歪，十秒内完成。`, `取下工具看结果，边缘整齐、屏幕干净，一次安装成功，而且兼容大多数手机壳。`],
+      [`完成以后撕掉安装器，再用附送的布压实四周。你看到的结果是：没有灰尘、没有气泡、没有贴歪，十秒内完成。`, `取下工具看结果，边缘整齐、屏幕干净，一次安装成功。`],
       [`它的核心表现包括：${l.sellingPoints}。表面疏水疏油，液体会滑走，也不容易留下指纹。`, `除了${l.sellingPoints}，它还能减少刮痕和日常撞击，贴合后不容易翘边。`],
       [`现在回到刚才的${tool}，同样的力度，直接落下去。屏幕依然完好。`, `刚才留下的悬念现在揭晓：同一件工具、同一种测试，它扛住了。`],
       [`这才是你的手机应该得到的保护，也是${l.product}提供的品质。`, `不是看起来高级，而是在安装和测试中都经得住验证。`],
       [`喜欢的话点击购买链接。${l.offer}，现在下单还可以查看双片装和镜头膜赠品。`, `${l.offer}。需要的话现在点击购物入口，先确认你的手机型号。`],
     ],
     西班牙语: [
-      [`${tool} versus vidrio templado convencional, protector de privacidad y una lámina de aluminio.`, `${tool}, cuatro protectores y exactamente la misma prueba.`],
+      [`${tool} versus vidrio templado convencional, protector de privacidad y una lámina de aluminio.`, `${tool}, cuatro protectores y exactamente la misma prueba.`, `Hoy esta ${tool} decide cuál de estos protectores merece estar en tu móvil.`, `Tres protectores prometen lo mismo; esta ${tool} va a descubrir cuál miente.`, `No compres otro protector hasta ver lo que esta ${tool} hace con los cuatro.`, `Misma pantalla, mismo golpe y cuatro resultados completamente distintos.`, `Uno de estos protectores cuesta dinero; los otros tres también pueden costarte la pantalla.`, `Voy a golpear el último con la misma ${tool}, pero antes mira cómo se instala.`],
       [`Esos tres protectores solo están gastando tu dinero, dinero directamente tirado a la basura.`, `Los tres primeros parecen protección, pero cuando llega la prueba solo hacen que pierdas dinero.`],
       [`Pero hoy vamos a probar un ${l.product} completamente diferente.`, `El último es un ${l.product} con una estructura totalmente distinta.`],
       [`En un momento lo pruebo con la misma herramienta. La dejo aquí, pero antes mira cómo se instala.`, `No cambio la herramienta y no cambio la prueba; primero vamos a instalarlo y después volvemos al golpe.`],
       [`Es más sencillo que nunca: solo tres pasos. Colocas el móvil, haces clic aquí abajo y deslizas. La herramienta se autoalinea y elimina el polvo al mismo tiempo.`, `Posicionas el teléfono, presionas la parte inferior y deslizas. No necesitas tocar el cristal ni buscar la posición con los dedos.`],
-      [`Retiramos el aplicador y repasamos las esquinas con el paño incluido. El resultado es impecable: sin polvo, sin burbujas, sin desalineación e instalado en menos de diez segundos.`, `Quitamos la herramienta y mira los bordes: limpio, recto y bien adherido al primer intento, además compatible con la mayoría de las fundas.`],
+      [`Retiramos el aplicador y repasamos las esquinas con el paño incluido. El resultado es impecable: sin polvo, sin burbujas, sin desalineación e instalado en menos de diez segundos.`, `Quitamos la herramienta y mira los bordes: limpio, recto y bien adherido al primer intento.`],
       [`Sus puntos clave son ${l.sellingPoints}. La capa hidrofóbica y oleofóbica hace que los líquidos resbalen y evita que las huellas se queden marcadas.`, `Además de ${l.sellingPoints}, resiste rayaduras y golpes cotidianos y se adhiere firmemente sin levantarse con facilidad.`],
       [`Ahora volvemos al ${tool}. Misma herramienta, misma fuerza y golpe directo. La pantalla sigue intacta.`, `¿Recuerdas la prueba del principio? Aquí está la respuesta: mismo impacto y el protector lo resiste.`],
       [`Esta es la protección que tu móvil merece y la calidad que ofrece ${l.product}.`, `No es solo una instalación bonita; es protección demostrada delante de la cámara.`],
@@ -249,6 +254,7 @@ function createScript(p: Payload, avoidHook?: string, avoidTitle?: string) {
     ],
   };
   const sections = scriptsByLanguage[p.language] ?? scriptsByLanguage.中文;
+  const alternative = framework !== "破坏测试对比" ? createAlternativeScript(p, framework, seed, avoidHooks) : null;
   const thirdOpenings: Record<string,string> = {
     中文: `如果连${tool}都扛不住，这些保护膜就不值得你花钱。`,
     西班牙语: `Si no resisten ${tool}, estos protectores no merecen ni un euro de tu dinero.`,
@@ -256,46 +262,131 @@ function createScript(p: Payload, avoidHook?: string, avoidTitle?: string) {
     德语: `Wenn sie ${tool} nicht aushalten, sind diese Schutzfolien dein Geld nicht wert.`,
     英语: `If they cannot survive ${tool}, these protectors are not worth your money.`,
   };
-  const openingPool = [...sections[0], thirdOpenings[p.language] ?? thirdOpenings.中文];
+  const freshAiOpenings = aiOpenings.filter(item => item.hook && item.bridge && !avoidHooks.includes(item.hook));
+  const selectedAiOpening = freshAiOpenings[seededIndex(seed, 88, Math.max(1, freshAiOpenings.length))];
+  const allOpenings = freshAiOpenings.length ? freshAiOpenings.map(item => item.hook) : alternative ? [alternative.hook, ...alternative.alternateHooks] : [...sections[0], thirdOpenings[p.language] ?? thirdOpenings.中文];
+  const freshOpenings = allOpenings.filter(item => !avoidHooks.includes(item));
+  const openingPool = freshOpenings.length ? freshOpenings : allOpenings;
   const hookStart = seededIndex(seed, 1, openingPool.length);
-  let hooks = [0,1,2].map(i => openingPool[(hookStart + i) % openingPool.length]);
-  if (avoidHook && hooks[0] === avoidHook) hooks = [hooks[1], hooks[2], hooks[0]];
-  const lines = sections.map((variants, index) => choose(variants, 20 + index));
-  lines[0] = hooks[0];
+  const hooks = [0,1,2].map(i => openingPool[(hookStart + i) % openingPool.length]);
+  const fixedBodies:Record<string,string[]> = {
+    中文:[
+      "你只需要取出TRANSFORMERS钢化膜，用配套清洁布擦干净屏幕，清除污渍和指纹，擦成这样就没问题。",
+      "就算落上一点灰尘也不用担心，直接盖上膜。贴上除尘贴，轻轻一滑，再撕掉表层薄膜，膜就自动贴合上去了。",
+      "你可以轻轻掀起边角，用手指抚平边缘，再撕掉最外层保护膜。搞定！没有灰尘、没有气泡、不会贴歪，边缘顺滑。",
+      "这款是防窥版本，左右28°防窥，保护你的隐私。",
+      "表层还有电镀疏水疏油涂层，水珠不会挂屏，指纹很难残留。",
+      "还能防刮，就算用这种刀片划也没事。如果你经常把手机丢包里，这个性能对你来说至关重要。",
+      "接下来我们马上做暴力测试。这就是好坏保护膜实实在在的差距。",
+      "优惠库存有限，抓紧入手！"
+    ],
+    西班牙语:[
+      "Solo tienes que sacar el protector de pantalla TRANSFORMERS, limpiar bien la pantalla con el paño incluido y eliminar la suciedad y las huellas. Así está perfecto.",
+      "Aunque caiga un poco de polvo, no pasa nada. Colocas el protector, pegas la tira antipolvo, deslizas suavemente y retiras la película superior. Se adhiere automáticamente.",
+      "Puedes levantar un poco una esquina, repasar los bordes con el dedo y retirar la última capa protectora. Listo: sin polvo, sin burbujas, sin desalineación y con bordes suaves.",
+      "Esta es la versión de privacidad: 28 grados a cada lado para proteger lo que ves en tu pantalla.",
+      "También tiene una capa electrochapada hidrofóbica y oleofóbica. El agua no se queda y las huellas apenas dejan marca.",
+      "Además resiste los arañazos; incluso una cuchilla como esta no le hace nada. Si llevas el móvil dentro del bolso, esta función es muy importante.",
+      "Ahora vamos directamente a la prueba de impacto. Esta es la diferencia real entre un protector bueno y uno malo.",
+      "La oferta y el stock son limitados. Consíguelo ahora."
+    ],
+    意大利语:[
+      "Basta prendere la protezione TRANSFORMERS, pulire bene lo schermo con il panno incluso ed eliminare sporco e impronte. Così va benissimo.",
+      "Anche se cade un po' di polvere, non importa. Appoggia la protezione, applica la striscia antipolvere, fai scorrere e rimuovi la pellicola superiore. Aderisce automaticamente.",
+      "Solleva leggermente un angolo, passa il dito sui bordi e rimuovi l'ultimo strato. Fatto: niente polvere, bolle o disallineamento, con bordi lisci.",
+      "Questa è la versione privacy: 28 gradi su entrambi i lati per proteggere ciò che guardi.",
+      "Ha anche un rivestimento elettroplaccato idrofobico e oleofobico: l'acqua scivola via e le impronte non restano.",
+      "È resistente ai graffi: persino una lama come questa non lascia segni. Se tieni spesso il telefono in borsa, è fondamentale.",
+      "Ora passiamo subito al test d'impatto. Questa è la vera differenza tra una buona protezione e una scadente.",
+      "Offerta e scorte sono limitate. Prendila ora."
+    ],
+    德语:[
+      "Nimm einfach den TRANSFORMERS Displayschutz heraus, reinige das Display mit dem beiliegenden Tuch und entferne Schmutz und Fingerabdrücke. So ist es perfekt.",
+      "Selbst etwas Staub ist kein Problem. Schutz auflegen, Staubstreifen anbringen, sanft schieben und die obere Folie abziehen. Er haftet automatisch.",
+      "Eine Ecke leicht anheben, mit dem Finger über die Ränder fahren und die letzte Schutzschicht abziehen. Fertig: kein Staub, keine Blasen, nicht schief und glatte Kanten.",
+      "Das ist die Sichtschutzversion: 28 Grad auf beiden Seiten schützen deine Privatsphäre.",
+      "Dazu kommt eine galvanisierte wasser- und ölabweisende Beschichtung. Wasser bleibt nicht liegen und Fingerabdrücke haften kaum.",
+      "Er ist außerdem kratzfest; selbst eine Klinge wie diese hinterlässt nichts. Wenn dein Handy oft in der Tasche liegt, ist das entscheidend.",
+      "Jetzt folgt sofort der Härtetest. Das ist der echte Unterschied zwischen gutem und schlechtem Displayschutz.",
+      "Angebot und Bestand sind begrenzt. Hol ihn dir jetzt."
+    ],
+    英语:[
+      "Just take out the TRANSFORMERS screen protector, clean the screen with the included cloth, and remove the dirt and fingerprints. Once it looks like this, you're good.",
+      "Even if a little dust lands on it, don't worry. Place the protector, apply the dust-removal strip, slide it gently, and peel off the top film. It attaches automatically.",
+      "Lift one corner slightly, run your finger around the edges, and remove the outer protective layer. Done: no dust, no bubbles, no misalignment, and smooth edges.",
+      "This is the privacy version, with 28-degree privacy protection on both sides to protect your screen.",
+      "It also has an electroplated hydrophobic and oleophobic coating. Water does not stay, and fingerprints barely leave a mark.",
+      "It is scratch resistant too; even a blade like this does nothing. If you keep your phone in your bag, this feature is essential.",
+      "Now we're going straight to the impact test. This is the real difference between a good and a bad screen protector.",
+      "The offer and stock are limited. Get yours now."
+    ]
+  };
+  const localBridge = alternative?.scenes[1]?.line ?? choose(sections[1], 21);
+  const lines = [hooks[0], selectedAiOpening?.bridge ?? localBridge, ...(fixedBodies[p.language] ?? fixedBodies.中文)];
   const narration = lines.join(" ");
   const times = ["0–3s","3–6s","6–9s","9–13s","13–22s","22–29s","29–36s","36–41s","41–44s",`44–${p.duration}s`];
-  const visuals = ["破坏工具砸向三种普通保护膜，首帧直接给冲突","三种竞品并排，逐个打叉或扔进垃圾桶","产品和包装从画外快速推入镜头","工具留在画面边缘，镜头转向安装器","俯拍完整展示定位、按下、滑动三步","撕下安装器，用布压实四角并展示干净屏幕","微距展示防窥、疏水、指纹和手机壳兼容测试","回到开头的工具，完成同力度破坏测试","屏幕亮起，展示完好结果和产品特写","双片装、赠品和购物入口同框收尾"];
+  const visuals = [selectedAiOpening?.hookVisual ?? alternative?.scenes[0]?.visual ?? "真实测试道具与普通保护膜同框，首帧直接开始动作",selectedAiOpening?.bridgeVisual ?? alternative?.scenes[1]?.visual ?? "普通保护膜测试失败，TRANSFORMERS产品入镜并预告稍后复测","用配套清洁布彻底擦净屏幕污渍和指纹","直接盖上保护膜，贴除尘贴后滑动并撕掉表层薄膜","轻掀边角、手指抚平四周，再撕掉最外层保护膜并展示无尘无泡结果","左右移动机位展示28°防窥效果","滴水并按压指纹，展示疏水疏油效果","用刀片划过表面，再展示手机与钥匙同放包内的场景","回到开头的道具，完成同条件暴力复测并展示差距","产品包装、库存优惠和购买入口同框收尾"];
   const edits = ["撞击音效＋首帧大字","快速跳切＋红叉","产品登场音效","悬念音乐压低","保留真实操作声","无滤镜近景＋结果字幕","每个卖点1秒快切","慢动作回放＋局部放大","定格1秒突出结果","库存与优惠字幕停留2秒"];
   const scenes = lines.map((line, index) => ({ time: times[index], visual: visuals[index], line, edit: edits[index] }));
-  return { title: `${p.product}｜破坏测试对比`, product: p.product, language: p.language, country: p.country, style: p.style, hook: hooks[0], alternateHooks: hooks.slice(1), narration, scenes };
+  return { title: `${p.product}｜${framework}`, product: p.product, language: p.language, country: p.country, style: p.style, hook: hooks[0], alternateHooks: hooks.slice(1), narration, scenes };
 }
 
 async function createAiScript(p: Payload, recent: Array<{ title:string; hook:string; narration:string }>) {
-  const { env } = await import("cloudflare:workers");
-  const apiKey = env.OPENAI_API_KEY as string | undefined;
+  const apiKey = process.env.DEEPSEEK_API_KEY;
   if (!apiKey) return null;
-  const recentText = recent.length ? recent.map((item,index) => `${index + 1}. ${item.title}\n钩子：${item.hook}\n口播：${item.narration}`).join("\n\n") : "暂无历史脚本";
-  const instructions = `你是资深TikTok电商短视频编导，擅长钢化膜桌拍、模特实拍和强转化口播。你的任务是创作真正全新的脚本，而不是替换模板里的名词。
-强制规则：
-1. 输出语言必须是用户指定语言，表达自然、口语化，不能有翻译腔或AI腔。
-2. 阅读最近脚本后，禁止复用相同开头句、故事顺序、冲突装置、测试方式和CTA表达。
-3. 如果框架为“智能随机”，必须自主发明一个与最近脚本不同的新框架；可以使用误会反转、生活场景、挑战、实验、剧情、评论回应、身份冲突、视觉谜题等，但不要机械轮换固定模板。
-4. 如果用户指定框架，保留该框架的核心逻辑，但具体故事、镜头和措辞必须重新创作。
-5. 前3秒必须能独立作为强钩子；完整口播适配指定时长；卖点必须来自用户输入，不得虚构产品能力。
-6. 输出2个真正不同的备选钩子，以及可直接拍摄的逐镜头分镜。
-7. 不解释创作过程，只输出符合JSON结构的脚本。`;
+  const seed = Number(p.nonce ?? Date.now());
+  const selectedFramework = p.framework && p.framework !== "智能随机" ? p.framework : frameworkNames[seededIndex(seed, 73, frameworkNames.length)];
+  const selectedCatalogFramework = frameworkCatalog.find(item => item.name === selectedFramework);
+  const blueprint: Record<string,string> = {
+    破坏测试对比:"危险工具或强冲击首帧→三种普通款逐一失败并判定浪费钱→新品登场，承诺稍后用同一工具测试→先完整安装→逐项展示输入卖点→回到同一工具完成复测→结果特写→优惠CTA",
+    失败救援反转:"贴膜失败结果首帧→气泡/灰尘/贴歪连续暴露→指出旧方法问题→新品登场→完整安装救援→逐项可视化验证卖点→新旧结果并排→优惠CTA",
+    导演朋友神秘道具:"奇怪装置首帧并称为导演朋友的新玩具→观众猜用途→快速揭晓是产品→展示三步操作→逐项验证卖点→最终成片级结果→优惠CTA",
+    价格挑战对比:"两种价格或浪费的钱首帧→便宜款连续失败的隐性成本→新品登场→同样条件安装与测试→结果和价值对照→购买建议→优惠CTA",
+    评论区质疑实测:"质疑评论占满首帧→直接宣布现场验证→产品登场→按评论要求完成安装和测试→逐条给证据→正面回应质疑→优惠CTA",
+    十秒安装挑战:"倒计时与未拆封产品首帧→宣布十秒挑战→连续无剪切完成安装→停表展示结果→补充可视化卖点测试→挑战结论→优惠CTA",
+    隐私视角实验:"旁人能看见屏幕的尴尬首帧→普通屏左右视角测试→产品登场和安装→同机位复测视角→补充其它输入卖点→隐私结果→优惠CTA",
+    第一视角开箱:"第一视角拆包发现关键机关→马上猜测它的用途→取出产品直接安装→展示一次成功结果→日常场景验证卖点→真实评价→优惠CTA",
+    生活事故救场:"手机在真实生活场景遭遇意外首帧→旧保护方式暴露问题→新品登场→安装与针对性验证→回到同类意外复测→结果特写→优惠CTA",
+    视觉谜题反转:"一个看不懂但强烈的画面首帧→给一个错误猜测→三秒内揭晓产品用途→安装操作→卖点证据→谜题答案回扣→优惠CTA"
+  };
+  const recentText = recent.length ? recent.slice(0,5).map((item,index) => `${index + 1}. ${item.title}｜${item.hook}`).join("\n") : "暂无历史钩子";
+  const instructions = `你是Magic John风格的TikTok钢化膜实拍编导。你要写的是一条从头到尾属于同一个创意的完整脚本，不是“随机开头＋固定产品介绍”。不得混合两套框架，不得让开头测试与结尾测试脱节。
+
+每条脚本输出9到11个镜头，并严格走完这一条主线：
+1. 真实动作钩子：首帧就出现道具、数字、失败结果或强对比，不说空泛广告句。
+2. 冲突升级：普通膜、仿品或旧方法在同一测试中暴露具体问题。
+3. 新品登场：TRANSFORMERS出现，并承诺稍后用开头的同一道具、同一高度或同一条件复测。
+4. 自然转场：用一句真人口语把测试暂停，顺势进入安装，不能像广告旁白硬切。
+5. 安装演示：清洁屏幕→放入/盖上产品→除尘与滑动贴合→取下安装器→抚平边缘。步骤不能漏，但句子必须根据本条剧情重新写，禁止套固定文案。
+6. 成品结果：没有灰尘、没有气泡、不会贴歪、边缘顺滑；用画面检查证明。
+7. 卖点连击：28°防窥、电镀疏水疏油、防指纹、抗刮耐磨、抗冲击、贴合紧密不易翘边。每个卖点必须配一个能拍出来的动作，不得只报参数。
+8. 首尾闭环：回到开头完全相同的测试条件，兑现悬念并给出明确结果。
+9. 促单收尾：只使用用户输入的优惠，短而直接。
+
+写作硬规则：
+1. 输出语言必须是用户指定语言。西班牙语要像西班牙或拉美TikTok真人说话，短句、自然、有停顿，禁止翻译腔和AI腔。
+2. 模仿Magic John的“动作推动口播”：一个动作一句话，一句话一个镜头；允许重复关键词制造节奏。
+3. 开头不能只是换斧头、锤子名称。测试机制、数字、失败过程、悬念方式和结尾回扣都要服从本次指定框架。
+4. 安装和卖点可以换说法、换顺序、换拍法，但上面列出的必要事实一个都不能少。
+5. 不得出现“兼容98%手机壳”。不得虚构9H等级、认证、防水等级、价格或折扣。
+6. 禁止这些通用AI开头：你不会相信、看到最后、今天我要给大家介绍、这可能是最好的、你还在用吗。
+7. hook必须等于第一个镜头的line；narration必须严格由全部scene.line按顺序组成。
+8. 两个备选钩子必须能无缝接入同一个第二镜头，不能改变后面的测试道具或剧情。
+9. 画面必须能由桌拍或模特实拍完成，visual写具体道具、手部动作、机位和结果；edit只写必要的节奏与音效。
+10. 不解释创作过程，只输出严格有效JSON。`;
   const input = `请创作一条全新TikTok带货脚本。
 产品：${p.product}
 核心卖点：${p.sellingPoints}
 目标用户：${p.audience}
 市场：${p.country}
 输出语言：${p.language}
-脚本框架：${p.framework || "智能随机"}
+指定框架：${selectedFramework}
+唯一允许的框架逻辑：${selectedCatalogFramework?.blueprint ?? blueprint[selectedFramework] ?? blueprint.破坏测试对比}
 表达风格：${p.style}
 视频时长：${p.duration}秒
 促销信息：${p.offer}
 
-最近生成内容（必须主动避开）：
+最近使用过的钩子（只需避开原句，不要受它们的结构影响）：
 ${recentText}`;
   const schema = {
     type:"object", additionalProperties:false,
@@ -309,55 +400,37 @@ ${recentText}`;
     },
     required:["title","framework","hook","alternateHooks","narration","scenes"]
   };
-  const response = await fetch("https://api.openai.com/v1/responses", {
+  const response = await fetch("https://api.deepseek.com/chat/completions", {
     method:"POST",
     headers:{"content-type":"application/json",authorization:`Bearer ${apiKey}`},
-    body:JSON.stringify({ model:"gpt-5.4-mini", instructions, input, reasoning:{effort:"low"}, text:{format:{type:"json_schema",name:"viral_script",strict:true,schema}} })
+    body:JSON.stringify({
+      model:"deepseek-v4-pro",
+      messages:[{role:"system",content:`${instructions}\n必须返回严格有效的JSON，结构必须符合：${JSON.stringify(schema)}`},{role:"user",content:input}],
+      thinking:{type:"disabled"},
+      response_format:{type:"json_object"},
+      temperature:0.82,
+      max_tokens:5000
+    })
   });
-  const data = await response.json() as { error?:{message?:string}; output?:Array<{content?:Array<{type?:string;text?:string}>}> };
-  if (!response.ok) throw new Error(data.error?.message || "GPT生成失败");
-  const outputText = data.output?.flatMap(item => item.content ?? []).find(item => item.type === "output_text")?.text;
-  if (!outputText) throw new Error("GPT没有返回有效脚本");
+  const data = await response.json() as { error?:{message?:string}; choices?:Array<{message?:{content?:string}}> };
+  if (!response.ok) throw new Error(data.error?.message || "DeepSeek生成失败");
+  const outputText = data.choices?.[0]?.message?.content;
+  if (!outputText) throw new Error("DeepSeek没有返回有效脚本");
   const generated = JSON.parse(outputText) as { title:string; framework:string; hook:string; alternateHooks:string[]; narration:string; scenes:Array<{time:string;visual:string;line:string;edit:string}> };
-  return { title:`${p.product}｜${generated.framework || generated.title}`, product:p.product, language:p.language, country:p.country, style:p.style, hook:generated.hook, alternateHooks:generated.alternateHooks.slice(0,2), narration:generated.narration, scenes:generated.scenes, aiGenerated:true };
+  if (!Array.isArray(generated.scenes) || generated.scenes.length < 8 || !generated.hook || !Array.isArray(generated.alternateHooks)) throw new Error("生成结果结构不完整");
+  const narration = generated.scenes.map(scene => scene.line.trim()).filter(Boolean).join("\n");
+  return { title:`${p.product}｜${selectedFramework}`, product:p.product, language:p.language, country:p.country, style:p.style, hook:generated.scenes[0]?.line || generated.hook, alternateHooks:generated.alternateHooks.slice(0,2), narration, scenes:generated.scenes, aiGenerated:true };
 }
-function rowToScript(row: typeof scripts.$inferSelect) { return { ...row, alternateHooks: JSON.parse(row.alternateHooks), scenes: JSON.parse(row.scenes) }; }
-async function ensureSchema() {
-  const db = await getDb();
-  await db.run(sql.raw(`CREATE TABLE IF NOT EXISTS scripts (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    title TEXT NOT NULL,
-    product TEXT NOT NULL,
-    language TEXT NOT NULL,
-    country TEXT NOT NULL,
-    style TEXT NOT NULL,
-    hook TEXT NOT NULL,
-    alternate_hooks TEXT NOT NULL,
-    narration TEXT NOT NULL,
-    scenes TEXT NOT NULL,
-    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
-  )`));
-}
-
 export async function GET() {
-  try { await ensureSchema(); const db = await getDb(); const rows = await db.select().from(scripts).orderBy(desc(scripts.id)).limit(100); const { env } = await import("cloudflare:workers"); return Response.json({ scripts: rows.map(rowToScript), aiConnected:Boolean(env.OPENAI_API_KEY) }); }
-  catch { return Response.json({ scripts: [] }); }
+  return Response.json({ scripts: [], aiConnected:Boolean(process.env.DEEPSEEK_API_KEY), provider:"DeepSeek V4 Pro" });
 }
 export async function POST(request: Request) {
   try {
-    await ensureSchema();
     const p = await request.json() as Payload;
     if (!p.product?.trim() || !p.sellingPoints?.trim()) return Response.json({ error: "请填写产品名称和核心卖点。" }, { status: 400 });
-    const db = await getDb();
-    const recent = await db.select({ title:scripts.title, hook:scripts.hook, narration:scripts.narration }).from(scripts).where(and(eq(scripts.product, p.product), eq(scripts.language, p.language))).orderBy(desc(scripts.id)).limit(8);
-    const previous = recent[0];
-    const generated = await createAiScript(p, recent) ?? createScript(p, previous?.hook, previous?.title);
-    const [saved] = await db.insert(scripts).values({ ...generated, alternateHooks: JSON.stringify(generated.alternateHooks), scenes: JSON.stringify(generated.scenes) }).returning();
-    return Response.json({
-      script: {
-        ...rowToScript(saved),
-        aiGenerated: "aiGenerated" in generated && generated.aiGenerated === true,
-      },
-    }, { status: 201 });
+    const recent = (p.recent ?? []).slice(0, 8);
+    const aiScript = await createAiScript(p, recent).catch(() => null);
+    const generated = aiScript ?? createScript(p, recent.map(item => item.hook), recent.map(item => item.title), []);
+    return Response.json({ script: { ...generated, aiGenerated:Boolean(aiScript), id:Date.now(), createdAt:new Date().toISOString() } }, { status: 201 });
   } catch (error) { return Response.json({ error: error instanceof Error ? error.message : "生成失败" }, { status: 500 }); }
 }

@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { frameworkCatalog } from "./frameworks";
 
 type Scene = { time: string; visual: string; line: string; edit: string };
 type Script = { id?: number; title: string; product: string; language: string; country: string; style: string; hook: string; alternateHooks: string[]; narration: string; scenes: Scene[]; createdAt?: string; aiGenerated?: boolean };
@@ -8,7 +9,7 @@ type ImportedHook = { url: string; market: string; hook: string; createdAt: stri
 type MonitorAccount = { id?: number; handle: string; market: string; product: string; url: string };
 const languages = ["中文", "西班牙语", "意大利语", "德语", "英语"];
 const styles = ["强冲突测评", "真实KOC种草", "悬念揭秘", "导演朋友的新玩具", "痛点解决"];
-const frameworks = ["智能随机", "破坏测试对比", "失败救援反转", "导演朋友神秘道具", "价格挑战对比", "评论区质疑实测", "十秒安装挑战", "隐私视角实验", "第一视角开箱"];
+const frameworkGroups = [...new Set(frameworkCatalog.map(item => item.group))];
 const initialMonitorAccounts: MonitorAccount[] = [
   { handle: "@magicjohn.official", market: "全球", product: "钢化膜", url: "https://www.tiktok.com/@magicjohn.official" },
   { handle: "@magicjohn_official.us3", market: "美国", product: "钢化膜", url: "https://www.tiktok.com/@magicjohn_official.us3" },
@@ -35,17 +36,17 @@ export default function Home() {
   const [accountSaving, setAccountSaving] = useState(false);
   const [accountError, setAccountError] = useState("");
   const [accountForm, setAccountForm] = useState({ url: "", market: "西班牙", product: "钢化膜" });
-  const [form, setForm] = useState({ product: "钢化膜", sellingPoints: "10秒自动除尘安装；无气泡、不歪；28°防窥；98%手机壳兼容", audience: "经常自己贴坏钢化膜、在意隐私的手机用户", country: "西班牙", language: "西班牙语", style: "强冲突测评", framework: "智能随机", duration: "45", offer: "限时折扣，库存有限" });
+  const [form, setForm] = useState({ product: "变形金刚钢化膜", sellingPoints: "10秒自动除尘安装；无气泡、不歪；28°防窥；表层电镀疏水疏油层；抗刮耐磨、抗冲击；贴合紧密、不易翘边", audience: "经常自己贴坏钢化膜、在意隐私的手机用户", country: "西班牙", language: "西班牙语", style: "强冲突测评", framework: "智能随机", duration: "45", offer: "库存有限；买一份到手两张膜；现在下单加赠镜头保护膜" });
   const inputReady = useMemo(() => form.product.trim() && form.sellingPoints.trim(), [form]);
 
   async function loadHistory() {
-    try { const res = await fetch("/api/scripts", { cache: "no-store" }); const data = await res.json(); if (res.ok) { setHistory(data.scripts ?? []); setAiConnected(Boolean(data.aiConnected)); } }
+    try { const saved = JSON.parse(localStorage.getItem("viralcraft-history") || "[]"); setHistory(saved); const res = await fetch("/api/scripts", { cache: "no-store" }); const data = await res.json(); if (res.ok) setAiConnected(Boolean(data.aiConnected)); }
     catch { setError("历史记录暂时加载失败，请稍后再试。"); }
   }
   useEffect(() => {
     fetch("/api/scripts", { cache: "no-store" })
       .then(res => res.json())
-      .then(data => { setHistory(data.scripts ?? []); setAiConnected(Boolean(data.aiConnected)); })
+      .then(data => { setHistory(JSON.parse(localStorage.getItem("viralcraft-history") || "[]")); setAiConnected(Boolean(data.aiConnected)); })
       .catch(() => setError("历史记录暂时加载失败，请稍后再试。"));
     fetch("/api/monitor/accounts", { cache: "no-store" })
       .then(res => res.json())
@@ -71,10 +72,11 @@ export default function Home() {
     if (!inputReady || loading) return;
     setLoading(true); setError("");
     try {
-      const res = await fetch("/api/scripts", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ ...form, nonce: Date.now() + Math.random() }) });
+      const recent = history.filter(item => item.product === form.product && item.language === form.language).slice(0, 8).map(({title,hook,narration}) => ({title,hook,narration}));
+      const res = await fetch("/api/scripts", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ ...form, recent, nonce: Date.now() + Math.random() }) });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "生成失败");
-      setResult(data.script); await loadHistory();
+      const nextHistory = [data.script, ...history].slice(0, 100); setResult(data.script); setHistory(nextHistory); localStorage.setItem("viralcraft-history", JSON.stringify(nextHistory));
     } catch (e) { setError(e instanceof Error ? e.message : "生成失败，请重试。"); }
     finally { setLoading(false); }
   }
@@ -112,13 +114,13 @@ export default function Home() {
           <label>核心卖点<textarea value={form.sellingPoints} onChange={e => update("sellingPoints", e.target.value)} rows={4} placeholder="用分号隔开，每条尽量具体" /><small>{form.sellingPoints.length}/300</small></label>
           <label>目标用户<input value={form.audience} onChange={e => update("audience", e.target.value)} /></label>
           <div className="two-cols"><label>目标国家<input value={form.country} onChange={e => update("country", e.target.value)} /></label><label>输出语言<select value={form.language} onChange={e => update("language", e.target.value)}>{languages.map(x => <option key={x}>{x}</option>)}</select></label></div>
-          <div className="two-cols"><label>脚本框架<select value={form.framework} onChange={e => update("framework", e.target.value)}>{frameworks.map(x => <option key={x}>{x}</option>)}</select></label><label>表达风格<select value={form.style} onChange={e => update("style", e.target.value)}>{styles.map(x => <option key={x}>{x}</option>)}</select></label></div>
-          <div className={`framework-note ${aiConnected ? "ai-ready" : ""}`}><b>{aiConnected ? "GPT实时创作已连接" : form.framework === "智能随机" ? "本地模式：每次切换叙事框架" : `当前固定：${form.framework}`}</b><span>{aiConnected ? "生成时会读取最近8篇脚本并主动避开重复结构与措辞。" : "配置OpenAI API密钥后，将升级为GPT实时原创。"}</span></div>
+          <div className="two-cols"><label>脚本框架<select value={form.framework} onChange={e => update("framework", e.target.value)}><option>智能随机</option>{frameworkGroups.map(group => <optgroup key={group} label={group}>{frameworkCatalog.filter(item => item.group === group).map(item => <option key={item.name}>{item.name}</option>)}</optgroup>)}</select></label><label>表达风格<select value={form.style} onChange={e => update("style", e.target.value)}>{styles.map(x => <option key={x}>{x}</option>)}</select></label></div>
+          <div className={`framework-note ${aiConnected ? "ai-ready" : ""}`}><b>{aiConnected ? "Magic John完整脚本引擎已连接" : form.framework === "智能随机" ? "稳定本地模式：自动切换叙事框架" : `当前固定：${form.framework}`}</b><span>{aiConnected ? "V4 Pro会让开头、安装、卖点演示、复测和促单沿用同一条剧情，同时锁住所有必讲卖点。" : "使用经过整理的TikTok转化结构。"}</span></div>
           <div className="two-cols"><label>视频时长<select value={form.duration} onChange={e => update("duration", e.target.value)}><option value="30">30秒</option><option value="45">45秒</option><option value="60">60秒</option></select></label><label>促销信息<input value={form.offer} onChange={e => update("offer", e.target.value)} /></label></div>
-          {error && <p className="error">{error}</p>}<button className="generate" disabled={!inputReady || loading} onClick={generate}>{loading ? <><b className="spinner" /> {aiConnected ? "GPT正在原创…" : "正在生成脚本…"}</> : <>{result ? "↻ 换一版不同脚本" : aiConnected ? "✦ GPT生成原创脚本" : "✦ 生成爆款脚本"}</>}</button>
+          {error && <p className="error">{error}</p>}<button className="generate" disabled={!inputReady || loading} onClick={generate}>{loading ? <><b className="spinner" /> {aiConnected ? "DeepSeek正在原创…" : "正在生成脚本…"}</> : <>{result ? "↻ 换一版不同脚本" : aiConnected ? "✦ DeepSeek生成原创脚本" : "✦ 生成爆款脚本"}</>}</button>
         </section>
         <section className="panel result-panel">{!result ? <div className="empty"><div className="empty-orbit"><span>✦</span></div><h2>你的脚本将在这里生成</h2><p>系统会输出3个钩子、完整口播和逐镜头分镜表，并自动保存到团队历史。</p><div className="empty-tags"><span>3秒钩子</span><span>口播节奏</span><span>拍摄分镜</span><span>转化CTA</span></div></div> : <>
-          <div className="result-head"><div><span className="tag">{result.language}</span><span className="tag">{result.style}</span>{result.aiGenerated && <span className="tag ai-tag">GPT原创</span>}<h2>{result.title}</h2></div><button onClick={() => exportExcel(result)}>⇩ 导出Excel</button></div>
+          <div className="result-head"><div><span className="tag">{result.language}</span><span className="tag">{result.style}</span>{result.aiGenerated && <span className="tag ai-tag">V4 Pro完整脚本</span>}<h2>{result.title}</h2></div><button onClick={() => exportExcel(result)}>⇩ 导出Excel</button></div>
           <article className="hook-card"><div><span>主钩子 · 前3秒</span><button onClick={() => copyText(result.hook)}>复制</button></div><p>{result.hook}</p></article>
           <div className="alt-hooks">{result.alternateHooks.map((h, i) => <button key={h} onClick={() => copyText(h)}><span>备选 {i + 1}</span>{h}</button>)}</div>
           <article className="narration"><div><h3>完整口播</h3><button onClick={() => copyText(result.narration)}>复制全文</button></div><p>{result.narration}</p></article>
