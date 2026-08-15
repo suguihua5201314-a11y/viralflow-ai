@@ -430,7 +430,8 @@ export async function GET() {
 export async function POST(request: Request) {
   try {
     const body = await request.json() as Payload & { teamSync?: boolean; password?: string; action?: "load" | "save"; payload?: unknown };
-    if (body.teamSync) {
+    const isTeamSync = body.teamSync === true || new URL(request.url).searchParams.get("teamSync") === "1";
+    if (isTeamSync) {
       const expectedPassword = process.env.TEAM_PASSWORD;
       if (!expectedPassword || body.password !== expectedPassword) return Response.json({ error: "团队密码不正确" }, { status: 401 });
       // @ts-expect-error Cloudflare injects this module in the hosted runtime.
