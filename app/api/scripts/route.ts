@@ -2,7 +2,7 @@ import { and, desc, eq, sql } from "drizzle-orm";
 import { getDb } from "../../../db";
 import { scripts } from "../../../db/schema";
 
-type Payload = { product: string; sellingPoints: string; audience: string; country: string; language: string; style: string; duration: string; offer: string; nonce?: number };
+type Payload = { product: string; sellingPoints: string; audience: string; country: string; language: string; style: string; framework?: string; duration: string; offer: string; nonce?: number };
 type Pack = { hooks: string[]; intros: string[]; proofs: string[]; demos: string[]; benefits: string[]; ctas: string[] };
 
 function localized(p: Payload) {
@@ -74,9 +74,108 @@ function fill(template: string, vars: Record<string,string>) {
   return Object.entries(vars).reduce((out,[key,value]) => out.replaceAll(`\${${key}}`, value), template);
 }
 
-function createScript(p: Payload, avoidHook?: string) {
+const frameworkNames = ["破坏测试对比", "失败救援反转", "导演朋友神秘道具", "价格挑战对比", "评论区质疑实测", "十秒安装挑战", "隐私视角实验", "第一视角开箱"];
+
+function createAlternativeScript(p: Payload, framework: string, seed: number) {
+  const l = localized(p); const x = l.product, points = l.sellingPoints, offer = l.offer;
+  type Copy = { hooks: Record<string,string[]>; fail:string; question:string; reveal:string; install:string; result:string; features:string; test:string; proof:string; cta:string };
+  const copies: Record<string,Copy> = {
+    中文: {
+      hooks: {
+        失败救援反转:["我已经贴废了三张膜，最后一次居然被这个工具救回来了。","别急着扔掉贴坏的膜，真正的问题可能不是你的手。"],
+        导演朋友神秘道具:["这是我导演朋友今天带来的新玩具，猜猜它到底是干什么的？","剧组桌上突然多了一个奇怪装置，最后居然装到了手机上。"],
+        价格挑战对比:["3欧元和30欧元的保护膜，真正的差距藏在安装以后。","便宜膜和高价膜都别急着买，我用同一台手机把它们测清楚。"],
+        评论区质疑实测:["评论区都说这个自动除尘是假的，所以我故意把灰尘撒满屏幕。","有人说它只是广告效果，那我今天不剪镜头直接装一次。"],
+        十秒安装挑战:["十秒之内贴好一张膜，失败我就把手机送给摄影师。","计时开始：不擦第二遍、不重新对位，看看十秒能不能完成。"],
+        隐私视角实验:["我把同一句聊天内容放在三块屏幕上，旁边的人只看不到最后一块。","地铁上最尴尬的不是没座位，是旁边的人能看清你的整个屏幕。"],
+        第一视角开箱:["第一视角体验最近一直缺货的手机配件，看它到底值不值。","包装看起来很普通，但打开以后这个结构让我停了一下。"],
+      },
+      fail:"先看普通方法：灰尘、气泡和贴歪，只要出现一个就得重新来。", question:"先别告诉答案，看到最后再判断它是不是智商税。", reveal:`真正不同的是这套${x}和一体式安装器。`, install:"手机放进去，按下底部再向前滑，定位、除尘和贴合一次完成。", result:"揭开工具看结果：没有灰尘、没有气泡、边缘整齐，十秒内完成。", features:`继续实测核心卖点：${points}。`, test:"我故意加大难度，用强光、侧视角、液体和刮擦逐项检查。", proof:"不靠剪辑，所有步骤和结果都在同一个镜头里完成。", cta:`需要的话点击购买入口，${offer}，先确认适配型号。`
+    },
+    西班牙语: {
+      hooks: {
+        失败救援反转:["Ya arruiné tres protectores y este pequeño aparato acaba de salvar el último intento.","Antes de culpar a tus manos por instalarlo mal, mira dónde empieza realmente el problema."],
+        导演朋友神秘道具:["Este es el nuevo juguete de mi amigo director. ¿Adivinas para qué sirve?","Hoy apareció un aparato extraño en el set y terminó instalado en mi teléfono."],
+        价格挑战对比:["Un protector de 3 euros contra uno de 30: la diferencia real aparece después de instalarlo.","Barato o caro, hoy los dos se enfrentan a la misma prueba en el mismo teléfono."],
+        评论区质疑实测:["Los comentarios dicen que la eliminación automática de polvo es falsa, así que voy a llenar la pantalla de polvo.","Dicen que solo funciona por la edición; hoy lo instalo en un solo plano y sin cortes."],
+        十秒安装挑战:["Diez segundos para instalarlo perfecto; si fallo, le regalo el móvil al cámara.","Empieza el cronómetro: sin recolocar, sin una segunda limpieza y sin esconder errores."],
+        隐私视角实验:["Puse el mismo mensaje en tres pantallas y la persona de al lado solo no pudo leer la última.","Lo peor del metro no es ir de pie, es que la persona de al lado pueda leer toda tu pantalla."],
+        第一视角开箱:["Primera persona probando el accesorio para móvil que siempre aparece agotado.","La caja parece normal, pero al abrirla este mecanismo me hizo detenerme."],
+      },
+      fail:"Con el método normal aparecen polvo, burbujas o desalineación, y basta un error para empezar otra vez.", question:"No decidas todavía si es útil o una pérdida de dinero; mira la prueba completa.", reveal:`La diferencia está en este ${x} y su aplicador integrado.`, install:"Colocas el móvil, presionas abajo y deslizas; alineación, eliminación de polvo y adhesión ocurren en un solo movimiento.", result:"Retiramos la herramienta: sin polvo, sin burbujas, bordes rectos y listo en menos de diez segundos.", features:`Ahora comprobamos los puntos clave: ${points}.`, test:"Aumento la dificultad con luz fuerte, vista lateral, líquido y una prueba de rayaduras.", proof:"Sin trucos de edición: el proceso y el resultado permanecen en el mismo plano.", cta:`Si lo necesitas, haz clic en el enlace. ${offer}; comprueba primero tu modelo.`
+    },
+    意大利语: {
+      hooks: {
+        失败救援反转:["Ho già rovinato tre pellicole e questo strumento ha salvato l'ultimo tentativo.","Prima di dare la colpa alle tue mani, guarda dove inizia davvero l'errore."],
+        导演朋友神秘道具:["Questo è il nuovo giocattolo del mio amico regista. Indovina a cosa serve.","Oggi sul set è apparso uno strano dispositivo ed è finito sul mio telefono."],
+        价格挑战对比:["Protezione da 3 euro contro una da 30: la vera differenza arriva dopo l'installazione.","Economica o costosa, oggi affrontano lo stesso test sullo stesso telefono."],
+        评论区质疑实测:["I commenti dicono che la rimozione automatica della polvere è falsa, quindi riempio lo schermo di polvere.","Dicono che funziona solo grazie al montaggio: oggi faccio tutto senza tagli."],
+        十秒安装挑战:["Dieci secondi per installarla perfettamente; se sbaglio regalo il telefono al cameraman.","Parte il cronometro: niente riallineamento e nessun errore nascosto."],
+        隐私视角实验:["Ho messo lo stesso messaggio su tre schermi e quello accanto non riusciva a leggere solo l'ultimo.","In metro il problema è quando chi ti sta accanto legge tutto lo schermo."],
+        第一视角开箱:["In prima persona provo l'accessorio per telefono che è sempre esaurito.","La scatola sembra normale, ma questo meccanismo mi ha fatto fermare."],
+      },
+      fail:"Con il metodo normale bastano polvere, bolle o un disallineamento per ricominciare.", question:"Non decidere ancora se serve davvero: guarda il test completo.", reveal:`La differenza è questa ${x} con applicatore integrato.`, install:"Inserisci il telefono, premi in basso e fai scorrere: allineamento, polvere e adesione in un gesto.", result:"Rimuovi lo strumento: niente polvere o bolle, bordi dritti e meno di dieci secondi.", features:`Ora verifichiamo i punti chiave: ${points}.`, test:"Aumento la difficoltà con luce forte, vista laterale, liquido e graffi.", proof:"Nessun trucco di montaggio: processo e risultato restano nello stesso piano.", cta:`Se ti serve, clicca sul link. ${offer}; controlla prima il modello.`
+    },
+    德语: {
+      hooks: {
+        失败救援反转:["Drei Schutzfolien sind schon kaputt, doch dieses Werkzeug rettet den letzten Versuch.","Bevor du deinen Händen die Schuld gibst, sieh dir an, wo der Fehler wirklich beginnt."],
+        导演朋友神秘道具:["Das ist das neue Spielzeug meines Regisseur-Freundes. Rate, wofür es ist.","Heute lag ein seltsames Gerät am Set und landete schließlich auf meinem Handy."],
+        价格挑战对比:["3 Euro gegen 30 Euro: Der echte Unterschied zeigt sich erst nach der Montage.","Billig oder teuer, beide machen heute denselben Test auf demselben Handy."],
+        评论区质疑实测:["Die Kommentare sagen, die automatische Staubentfernung sei falsch – also streue ich Staub aufs Display.","Angeblich klappt es nur durch Schnitte; heute montiere ich alles in einer Aufnahme."],
+        十秒安装挑战:["Zehn Sekunden für eine perfekte Montage; wenn ich scheitere, bekommt der Kameramann das Handy.","Die Uhr läuft: kein Neuausrichten und keine versteckten Fehler."],
+        隐私视角实验:["Dieselbe Nachricht auf drei Displays – nur das letzte konnte die Person daneben nicht lesen.","In der Bahn ist das Schlimmste, wenn die Person neben dir dein Display mitliest."],
+        第一视角开箱:["Aus der Ich-Perspektive teste ich das ständig ausverkaufte Handy-Zubehör.","Die Box wirkt normal, doch dieser Mechanismus ließ mich kurz stoppen."],
+      },
+      fail:"Bei der normalen Methode reichen Staub, Blasen oder Schieflage für einen neuen Versuch.", question:"Urteile noch nicht, ob es nützlich ist – sieh dir den ganzen Test an.", reveal:`Der Unterschied ist dieser ${x} mit integriertem Applikator.`, install:"Handy einlegen, unten drücken und schieben: Ausrichtung, Staubentfernung und Haftung in einem Zug.", result:"Werkzeug abnehmen: kein Staub, keine Blasen, gerade Kanten und unter zehn Sekunden.", features:`Jetzt prüfen wir die Hauptvorteile: ${points}.`, test:"Der Test wird härter: starkes Licht, Seitenansicht, Flüssigkeit und Kratzer.", proof:"Keine Schnitt-Tricks: Ablauf und Ergebnis bleiben in derselben Aufnahme.", cta:`Wenn du ihn brauchst, klicke auf den Link. ${offer}; prüfe zuerst dein Modell.`
+    },
+    英语: {
+      hooks: {
+        失败救援反转:["I've already ruined three protectors, and this tiny tool just saved the last attempt.","Before blaming your hands, look at where the installation actually goes wrong."],
+        导演朋友神秘道具:["This is my director friend's new toy. Can you guess what it does?","A strange device appeared on set today and ended up on my phone."],
+        价格挑战对比:["A 3-dollar protector versus a 30-dollar one: the real difference appears after installation.","Cheap or expensive, both face the same test on the same phone."],
+        评论区质疑实测:["The comments say automatic dust removal is fake, so I'm covering the screen in dust.","They say it only works because of editing, so today this is one take with no cuts."],
+        十秒安装挑战:["Ten seconds for a perfect install; if I fail, the cameraman gets my phone.","Start the timer: no realigning, no second cleaning and no hidden mistakes."],
+        隐私视角实验:["I put the same message on three screens, and the person beside me could only not read the last one.","The worst part of the subway is the person next to you reading your entire screen."],
+        第一视角开箱:["First-person test of the phone accessory that always seems sold out.","The box looks ordinary, but this mechanism made me stop for a second."],
+      },
+      fail:"With the normal method, dust, bubbles or misalignment can force you to start again.", question:"Don't decide whether it is useful yet; watch the complete test.", reveal:`The difference is this ${x} with its integrated applicator.`, install:"Place the phone, press the bottom and slide; alignment, dust removal and adhesion happen in one move.", result:"Lift the tool: no dust, no bubbles, straight edges and finished in under ten seconds.", features:`Now we verify the key claims: ${points}.`, test:"I make it harder with strong light, a side angle, liquid and a scratch test.", proof:"No editing tricks: the process and result stay in the same shot.", cta:`If you need it, click the link. ${offer}; check your model first.`
+    }
+  };
+  const c = copies[p.language] ?? copies.中文;
+  const hookOptions = c.hooks[framework] ?? c.hooks.失败救援反转;
+  const hook = hookOptions[seededIndex(seed, 31, hookOptions.length)];
+  const orders: Record<string,Array<keyof Omit<Copy,"hooks"> | "hook">> = {
+    失败救援反转:["hook","fail","reveal","install","result","features","cta"],
+    导演朋友神秘道具:["hook","question","reveal","install","result","test","cta"],
+    价格挑战对比:["hook","fail","test","reveal","install","proof","cta"],
+    评论区质疑实测:["hook","question","test","install","result","proof","cta"],
+    十秒安装挑战:["hook","install","result","features","test","proof","cta"],
+    隐私视角实验:["hook","test","reveal","install","features","proof","cta"],
+    第一视角开箱:["hook","reveal","install","result","features","proof","cta"],
+  };
+  const order = orders[framework] ?? orders.失败救援反转;
+  const lines = order.map(key => key === "hook" ? hook : c[key]);
+  const visualSets: Record<string,string[]> = {
+    失败救援反转:["桌面摆出三张失败成品，第四张拿在手里","极近景展示灰尘、气泡和歪边","神秘安装器快速入镜","俯拍一镜到底完成安装","撕开工具展示反转结果","连续验证产品卖点","产品、优惠和购物入口收尾"],
+    导演朋友神秘道具:["只展示神秘装置局部，不说用途","旋转装置让观众猜用途","拉远镜头揭晓产品","导演视角俯拍完整操作","特写展示成品","回放开头并完成压力测试","包装与优惠字幕定格"],
+    价格挑战对比:["左右摆放低价和高价产品及价格牌","同步展示两种安装失败点","同一标准进行多项测试","新品从中间进入画面","完整展示安装步骤","分屏公布测试结果","选择建议与购买入口"],
+    评论区质疑实测:["首帧放大评论截图式字幕","镜头前读出质疑并立下挑战","故意撒灰或增加测试难度","全程不切镜完成安装","近景检查四角和屏幕","原镜头回放证明无剪辑","回应评论并给购买入口"],
+    十秒安装挑战:["手机与倒计时器同时入镜","计时开始后快速完成三步","10秒停表并揭开工具","立即检查气泡和对齐","快切验证防窥与疏水","回放计时全过程","挑战结果与限时优惠"],
+    隐私视角实验:["公共场景模拟旁人偷看屏幕","左右移动机位测试可视角度","揭晓防窥产品","返回桌面完成安装","多角度测试防窥和触控","普通膜与新品分屏对比","适用场景和购买入口"],
+    第一视角开箱:["第一视角拆开快递包装","逐层拿出产品和安装器","手机放入工具","第一视角完成按压和滑动","拿起手机检查成品","切换日常使用场景验证","包装、赠品和CTA收尾"],
+  };
+  const visuals = visualSets[framework] ?? visualSets.失败救援反转;
+  const duration = Number(p.duration) || 45; const step = Math.max(4, Math.floor(duration / lines.length));
+  const scenes = lines.map((line,index) => ({ time: index === lines.length - 1 ? `${index * step}–${duration}s` : `${index * step}–${(index + 1) * step}s`, visual: visuals[index], line, edit: index === 0 ? "首帧大字＋即时冲突音效" : index === lines.length - 1 ? "优惠字幕停留2秒" : "按动作节点快切，保留真实操作声" }));
+  return { title:`${p.product}｜${framework}`, product:p.product, language:p.language, country:p.country, style:p.style, hook, alternateHooks:[...hookOptions.filter(x => x !== hook), c.question].slice(0,2), narration:lines.join(" "), scenes };
+}
+
+function createScript(p: Payload, avoidHook?: string, avoidTitle?: string) {
   void words(p);
   const l = localized(p); const seed = p.nonce ?? Date.now();
+  const availableFrameworks = frameworkNames.filter(name => !avoidTitle?.endsWith(`｜${name}`));
+  const framework = p.framework && p.framework !== "智能随机" ? p.framework : availableFrameworks[seededIndex(seed, 30, availableFrameworks.length)];
+  if (framework !== "破坏测试对比") return createAlternativeScript(p, framework, seed);
   const vars = { x: l.product, points: l.sellingPoints, audience: l.audience, offer: l.offer };
   const choose = (items: string[], offset: number) => fill(items[seededIndex(seed, offset, items.length)], vars);
   const tools: Record<string, string[]> = {
@@ -168,7 +267,7 @@ function createScript(p: Payload, avoidHook?: string) {
   const visuals = ["破坏工具砸向三种普通保护膜，首帧直接给冲突","三种竞品并排，逐个打叉或扔进垃圾桶","产品和包装从画外快速推入镜头","工具留在画面边缘，镜头转向安装器","俯拍完整展示定位、按下、滑动三步","撕下安装器，用布压实四角并展示干净屏幕","微距展示防窥、疏水、指纹和手机壳兼容测试","回到开头的工具，完成同力度破坏测试","屏幕亮起，展示完好结果和产品特写","双片装、赠品和购物入口同框收尾"];
   const edits = ["撞击音效＋首帧大字","快速跳切＋红叉","产品登场音效","悬念音乐压低","保留真实操作声","无滤镜近景＋结果字幕","每个卖点1秒快切","慢动作回放＋局部放大","定格1秒突出结果","库存与优惠字幕停留2秒"];
   const scenes = lines.map((line, index) => ({ time: times[index], visual: visuals[index], line, edit: edits[index] }));
-  return { title: `${p.product}｜破坏测试完整结构`, product: p.product, language: p.language, country: p.country, style: p.style, hook: hooks[0], alternateHooks: hooks.slice(1), narration, scenes };
+  return { title: `${p.product}｜破坏测试对比`, product: p.product, language: p.language, country: p.country, style: p.style, hook: hooks[0], alternateHooks: hooks.slice(1), narration, scenes };
 }
 function rowToScript(row: typeof scripts.$inferSelect) { return { ...row, alternateHooks: JSON.parse(row.alternateHooks), scenes: JSON.parse(row.scenes) }; }
 async function ensureSchema() {
@@ -198,8 +297,8 @@ export async function POST(request: Request) {
     const p = await request.json() as Payload;
     if (!p.product?.trim() || !p.sellingPoints?.trim()) return Response.json({ error: "请填写产品名称和核心卖点。" }, { status: 400 });
     const db = await getDb();
-    const [previous] = await db.select({ hook: scripts.hook }).from(scripts).where(and(eq(scripts.product, p.product), eq(scripts.language, p.language), eq(scripts.style, p.style))).orderBy(desc(scripts.id)).limit(1);
-    const generated = createScript(p, previous?.hook);
+    const [previous] = await db.select({ hook: scripts.hook, title: scripts.title }).from(scripts).where(and(eq(scripts.product, p.product), eq(scripts.language, p.language), eq(scripts.style, p.style))).orderBy(desc(scripts.id)).limit(1);
+    const generated = createScript(p, previous?.hook, previous?.title);
     const [saved] = await db.insert(scripts).values({ ...generated, alternateHooks: JSON.stringify(generated.alternateHooks), scenes: JSON.stringify(generated.scenes) }).returning();
     return Response.json({ script: rowToScript(saved) }, { status: 201 });
   } catch (error) { return Response.json({ error: error instanceof Error ? error.message : "生成失败" }, { status: 500 }); }

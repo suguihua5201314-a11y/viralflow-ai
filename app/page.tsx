@@ -8,6 +8,7 @@ type ImportedHook = { url: string; market: string; hook: string; createdAt: stri
 type MonitorAccount = { id?: number; handle: string; market: string; product: string; url: string };
 const languages = ["中文", "西班牙语", "意大利语", "德语", "英语"];
 const styles = ["强冲突测评", "真实KOC种草", "悬念揭秘", "导演朋友的新玩具", "痛点解决"];
+const frameworks = ["智能随机", "破坏测试对比", "失败救援反转", "导演朋友神秘道具", "价格挑战对比", "评论区质疑实测", "十秒安装挑战", "隐私视角实验", "第一视角开箱"];
 const initialMonitorAccounts: MonitorAccount[] = [
   { handle: "@magicjohn.official", market: "全球", product: "钢化膜", url: "https://www.tiktok.com/@magicjohn.official" },
   { handle: "@magicjohn_official.us3", market: "美国", product: "钢化膜", url: "https://www.tiktok.com/@magicjohn_official.us3" },
@@ -33,7 +34,7 @@ export default function Home() {
   const [accountSaving, setAccountSaving] = useState(false);
   const [accountError, setAccountError] = useState("");
   const [accountForm, setAccountForm] = useState({ url: "", market: "西班牙", product: "钢化膜" });
-  const [form, setForm] = useState({ product: "钢化膜", sellingPoints: "10秒自动除尘安装；无气泡、不歪；28°防窥；98%手机壳兼容", audience: "经常自己贴坏钢化膜、在意隐私的手机用户", country: "西班牙", language: "西班牙语", style: "强冲突测评", duration: "45", offer: "限时折扣，库存有限" });
+  const [form, setForm] = useState({ product: "钢化膜", sellingPoints: "10秒自动除尘安装；无气泡、不歪；28°防窥；98%手机壳兼容", audience: "经常自己贴坏钢化膜、在意隐私的手机用户", country: "西班牙", language: "西班牙语", style: "强冲突测评", framework: "智能随机", duration: "45", offer: "限时折扣，库存有限" });
   const inputReady = useMemo(() => form.product.trim() && form.sellingPoints.trim(), [form]);
 
   async function loadHistory() {
@@ -110,7 +111,8 @@ export default function Home() {
           <label>核心卖点<textarea value={form.sellingPoints} onChange={e => update("sellingPoints", e.target.value)} rows={4} placeholder="用分号隔开，每条尽量具体" /><small>{form.sellingPoints.length}/300</small></label>
           <label>目标用户<input value={form.audience} onChange={e => update("audience", e.target.value)} /></label>
           <div className="two-cols"><label>目标国家<input value={form.country} onChange={e => update("country", e.target.value)} /></label><label>输出语言<select value={form.language} onChange={e => update("language", e.target.value)}>{languages.map(x => <option key={x}>{x}</option>)}</select></label></div>
-          <label>内容风格<select value={form.style} onChange={e => update("style", e.target.value)}>{styles.map(x => <option key={x}>{x}</option>)}</select></label>
+          <div className="two-cols"><label>脚本框架<select value={form.framework} onChange={e => update("framework", e.target.value)}>{frameworks.map(x => <option key={x}>{x}</option>)}</select></label><label>表达风格<select value={form.style} onChange={e => update("style", e.target.value)}>{styles.map(x => <option key={x}>{x}</option>)}</select></label></div>
+          <div className="framework-note"><b>{form.framework === "智能随机" ? "每次自动切换不同叙事框架" : `当前固定：${form.framework}`}</b><span>框架决定故事逻辑，表达风格决定语气，二者独立组合。</span></div>
           <div className="two-cols"><label>视频时长<select value={form.duration} onChange={e => update("duration", e.target.value)}><option value="30">30秒</option><option value="45">45秒</option><option value="60">60秒</option></select></label><label>促销信息<input value={form.offer} onChange={e => update("offer", e.target.value)} /></label></div>
           {error && <p className="error">{error}</p>}<button className="generate" disabled={!inputReady || loading} onClick={generate}>{loading ? <><b className="spinner" /> 正在生成脚本…</> : <>{result ? "↻ 换一版不同脚本" : "✦ 生成爆款脚本"}</>}</button>
         </section>
