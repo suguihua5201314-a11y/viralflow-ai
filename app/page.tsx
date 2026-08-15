@@ -31,7 +31,7 @@ export default function Home() {
     if (!inputReady || loading) return;
     setLoading(true); setError("");
     try {
-      const res = await fetch("/api/scripts", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(form) });
+      const res = await fetch("/api/scripts", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ ...form, nonce: Date.now() + Math.random() }) });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "生成失败");
       setResult(data.script); await loadHistory();
@@ -65,7 +65,7 @@ export default function Home() {
           <div className="two-cols"><label>目标国家<input value={form.country} onChange={e => update("country", e.target.value)} /></label><label>输出语言<select value={form.language} onChange={e => update("language", e.target.value)}>{languages.map(x => <option key={x}>{x}</option>)}</select></label></div>
           <label>内容风格<select value={form.style} onChange={e => update("style", e.target.value)}>{styles.map(x => <option key={x}>{x}</option>)}</select></label>
           <div className="two-cols"><label>视频时长<select value={form.duration} onChange={e => update("duration", e.target.value)}><option value="30">30秒</option><option value="45">45秒</option><option value="60">60秒</option></select></label><label>促销信息<input value={form.offer} onChange={e => update("offer", e.target.value)} /></label></div>
-          {error && <p className="error">{error}</p>}<button className="generate" disabled={!inputReady || loading} onClick={generate}>{loading ? <><b className="spinner" /> 正在生成脚本…</> : <>✦ 生成爆款脚本</>}</button>
+          {error && <p className="error">{error}</p>}<button className="generate" disabled={!inputReady || loading} onClick={generate}>{loading ? <><b className="spinner" /> 正在生成脚本…</> : <>{result ? "↻ 换一版不同脚本" : "✦ 生成爆款脚本"}</>}</button>
         </section>
         <section className="panel result-panel">{!result ? <div className="empty"><div className="empty-orbit"><span>✦</span></div><h2>你的脚本将在这里生成</h2><p>系统会输出3个钩子、完整口播和逐镜头分镜表，并自动保存到团队历史。</p><div className="empty-tags"><span>3秒钩子</span><span>口播节奏</span><span>拍摄分镜</span><span>转化CTA</span></div></div> : <>
           <div className="result-head"><div><span className="tag">{result.language}</span><span className="tag">{result.style}</span><h2>{result.title}</h2></div><button onClick={() => exportExcel(result)}>⇩ 导出Excel</button></div>
