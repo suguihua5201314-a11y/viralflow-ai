@@ -12,7 +12,7 @@ type MonitorAccount = { id?: number; handle: string; market: string; product: st
 type HookItem = { id: number; title: string; language: string; copy: string };
 type SellingPointItem = { id: number; product: string; points: string };
 type TeamPayload = { hooks?: HookItem[]; points?: SellingPointItem[]; history?: Script[] };
-const teamApi = "https://viral-script-studio.oaken-elm-6682.chatgpt.site/api/team-data";
+const teamApi = "/api/team-data";
 const languages = ["中文", "西班牙语", "意大利语", "德语", "英语"];
 const styles = ["强冲突测评", "真实KOC种草", "悬念揭秘", "导演朋友的新玩具", "痛点解决"];
 const frameworkGroups = [...new Set(frameworkCatalog.map(item => item.group))];
