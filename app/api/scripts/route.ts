@@ -431,7 +431,8 @@ export async function POST(request: Request) {
   try {
     const body = await request.json() as Payload & { teamSync?: boolean; password?: string; action?: "load" | "save"; payload?: unknown };
     if (body.teamSync) {
-      if (body.password !== "587666") return Response.json({ error: "团队密码不正确" }, { status: 401 });
+      const expectedPassword = process.env.TEAM_PASSWORD;
+      if (!expectedPassword || body.password !== expectedPassword) return Response.json({ error: "团队密码不正确" }, { status: 401 });
       // @ts-expect-error Cloudflare injects this module in the hosted runtime.
       const { env } = await import("cloudflare:workers");
       if (!env.DB) return Response.json({ error: "云端数据库未连接" }, { status: 503 });
