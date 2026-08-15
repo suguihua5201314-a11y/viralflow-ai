@@ -269,6 +269,58 @@ function createScript(p: Payload, avoidHook?: string, avoidTitle?: string) {
   const scenes = lines.map((line, index) => ({ time: times[index], visual: visuals[index], line, edit: edits[index] }));
   return { title: `${p.product}｜破坏测试对比`, product: p.product, language: p.language, country: p.country, style: p.style, hook: hooks[0], alternateHooks: hooks.slice(1), narration, scenes };
 }
+
+async function createAiScript(p: Payload, recent: Array<{ title:string; hook:string; narration:string }>) {
+  const { env } = await import("cloudflare:workers");
+  const apiKey = env.OPENAI_API_KEY as string | undefined;
+  if (!apiKey) return null;
+  const recentText = recent.length ? recent.map((item,index) => `${index + 1}. ${item.title}\n钩子：${item.hook}\n口播：${item.narration}`).join("\n\n") : "暂无历史脚本";
+  const instructions = `你是资深TikTok电商短视频编导，擅长钢化膜桌拍、模特实拍和强转化口播。你的任务是创作真正全新的脚本，而不是替换模板里的名词。
+强制规则：
+1. 输出语言必须是用户指定语言，表达自然、口语化，不能有翻译腔或AI腔。
+2. 阅读最近脚本后，禁止复用相同开头句、故事顺序、冲突装置、测试方式和CTA表达。
+3. 如果框架为“智能随机”，必须自主发明一个与最近脚本不同的新框架；可以使用误会反转、生活场景、挑战、实验、剧情、评论回应、身份冲突、视觉谜题等，但不要机械轮换固定模板。
+4. 如果用户指定框架，保留该框架的核心逻辑，但具体故事、镜头和措辞必须重新创作。
+5. 前3秒必须能独立作为强钩子；完整口播适配指定时长；卖点必须来自用户输入，不得虚构产品能力。
+6. 输出2个真正不同的备选钩子，以及可直接拍摄的逐镜头分镜。
+7. 不解释创作过程，只输出符合JSON结构的脚本。`;
+  const input = `请创作一条全新TikTok带货脚本。
+产品：${p.product}
+核心卖点：${p.sellingPoints}
+目标用户：${p.audience}
+市场：${p.country}
+输出语言：${p.language}
+脚本框架：${p.framework || "智能随机"}
+表达风格：${p.style}
+视频时长：${p.duration}秒
+促销信息：${p.offer}
+
+最近生成内容（必须主动避开）：
+${recentText}`;
+  const schema = {
+    type:"object", additionalProperties:false,
+    properties:{
+      title:{type:"string"},
+      framework:{type:"string"},
+      hook:{type:"string"},
+      alternateHooks:{type:"array",items:{type:"string"}},
+      narration:{type:"string"},
+      scenes:{type:"array",items:{type:"object",additionalProperties:false,properties:{time:{type:"string"},visual:{type:"string"},line:{type:"string"},edit:{type:"string"}},required:["time","visual","line","edit"]}}
+    },
+    required:["title","framework","hook","alternateHooks","narration","scenes"]
+  };
+  const response = await fetch("https://api.openai.com/v1/responses", {
+    method:"POST",
+    headers:{"content-type":"application/json",authorization:`Bearer ${apiKey}`},
+    body:JSON.stringify({ model:"gpt-5.4-mini", instructions, input, reasoning:{effort:"low"}, text:{format:{type:"json_schema",name:"viral_script",strict:true,schema}} })
+  });
+  const data = await response.json() as { error?:{message?:string}; output?:Array<{content?:Array<{type?:string;text?:string}>}> };
+  if (!response.ok) throw new Error(data.error?.message || "GPT生成失败");
+  const outputText = data.output?.flatMap(item => item.content ?? []).find(item => item.type === "output_text")?.text;
+  if (!outputText) throw new Error("GPT没有返回有效脚本");
+  const generated = JSON.parse(outputText) as { title:string; framework:string; hook:string; alternateHooks:string[]; narration:string; scenes:Array<{time:string;visual:string;line:string;edit:string}> };
+  return { title:`${p.product}｜${generated.framework || generated.title}`, product:p.product, language:p.language, country:p.country, style:p.style, hook:generated.hook, alternateHooks:generated.alternateHooks.slice(0,2), narration:generated.narration, scenes:generated.scenes, aiGenerated:true };
+}
 function rowToScript(row: typeof scripts.$inferSelect) { return { ...row, alternateHooks: JSON.parse(row.alternateHooks), scenes: JSON.parse(row.scenes) }; }
 async function ensureSchema() {
   const db = await getDb();
@@ -288,7 +340,7 @@ async function ensureSchema() {
 }
 
 export async function GET() {
-  try { await ensureSchema(); const db = await getDb(); const rows = await db.select().from(scripts).orderBy(desc(scripts.id)).limit(100); return Response.json({ scripts: rows.map(rowToScript) }); }
+  try { await ensureSchema(); const db = await getDb(); const rows = await db.select().from(scripts).orderBy(desc(scripts.id)).limit(100); const { env } = await import("cloudflare:workers"); return Response.json({ scripts: rows.map(rowToScript), aiConnected:Boolean(env.OPENAI_API_KEY) }); }
   catch { return Response.json({ scripts: [] }); }
 }
 export async function POST(request: Request) {
@@ -297,9 +349,15 @@ export async function POST(request: Request) {
     const p = await request.json() as Payload;
     if (!p.product?.trim() || !p.sellingPoints?.trim()) return Response.json({ error: "请填写产品名称和核心卖点。" }, { status: 400 });
     const db = await getDb();
-    const [previous] = await db.select({ hook: scripts.hook, title: scripts.title }).from(scripts).where(and(eq(scripts.product, p.product), eq(scripts.language, p.language), eq(scripts.style, p.style))).orderBy(desc(scripts.id)).limit(1);
-    const generated = createScript(p, previous?.hook, previous?.title);
+    const recent = await db.select({ title:scripts.title, hook:scripts.hook, narration:scripts.narration }).from(scripts).where(and(eq(scripts.product, p.product), eq(scripts.language, p.language))).orderBy(desc(scripts.id)).limit(8);
+    const previous = recent[0];
+    const generated = await createAiScript(p, recent) ?? createScript(p, previous?.hook, previous?.title);
     const [saved] = await db.insert(scripts).values({ ...generated, alternateHooks: JSON.stringify(generated.alternateHooks), scenes: JSON.stringify(generated.scenes) }).returning();
-    return Response.json({ script: rowToScript(saved) }, { status: 201 });
+    return Response.json({
+      script: {
+        ...rowToScript(saved),
+        aiGenerated: "aiGenerated" in generated && generated.aiGenerated === true,
+      },
+    }, { status: 201 });
   } catch (error) { return Response.json({ error: error instanceof Error ? error.message : "生成失败" }, { status: 500 }); }
 }

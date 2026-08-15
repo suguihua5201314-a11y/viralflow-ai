@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 
 type Scene = { time: string; visual: string; line: string; edit: string };
-type Script = { id?: number; title: string; product: string; language: string; country: string; style: string; hook: string; alternateHooks: string[]; narration: string; scenes: Scene[]; createdAt?: string };
+type Script = { id?: number; title: string; product: string; language: string; country: string; style: string; hook: string; alternateHooks: string[]; narration: string; scenes: Scene[]; createdAt?: string; aiGenerated?: boolean };
 type ImportedHook = { url: string; market: string; hook: string; createdAt: string };
 type MonitorAccount = { id?: number; handle: string; market: string; product: string; url: string };
 const languages = ["中文", "西班牙语", "意大利语", "德语", "英语"];
@@ -23,6 +23,7 @@ const initialMonitorAccounts: MonitorAccount[] = [
 export default function Home() {
   const [active, setActive] = useState<"create" | "history" | "monitor">("create");
   const [loading, setLoading] = useState(false);
+  const [aiConnected, setAiConnected] = useState(false);
   const [error, setError] = useState("");
   const [history, setHistory] = useState<Script[]>([]);
   const [result, setResult] = useState<Script | null>(null);
@@ -38,13 +39,13 @@ export default function Home() {
   const inputReady = useMemo(() => form.product.trim() && form.sellingPoints.trim(), [form]);
 
   async function loadHistory() {
-    try { const res = await fetch("/api/scripts", { cache: "no-store" }); const data = await res.json(); if (res.ok) setHistory(data.scripts ?? []); }
+    try { const res = await fetch("/api/scripts", { cache: "no-store" }); const data = await res.json(); if (res.ok) { setHistory(data.scripts ?? []); setAiConnected(Boolean(data.aiConnected)); } }
     catch { setError("历史记录暂时加载失败，请稍后再试。"); }
   }
   useEffect(() => {
     fetch("/api/scripts", { cache: "no-store" })
       .then(res => res.json())
-      .then(data => setHistory(data.scripts ?? []))
+      .then(data => { setHistory(data.scripts ?? []); setAiConnected(Boolean(data.aiConnected)); })
       .catch(() => setError("历史记录暂时加载失败，请稍后再试。"));
     fetch("/api/monitor/accounts", { cache: "no-store" })
       .then(res => res.json())
@@ -112,12 +113,12 @@ export default function Home() {
           <label>目标用户<input value={form.audience} onChange={e => update("audience", e.target.value)} /></label>
           <div className="two-cols"><label>目标国家<input value={form.country} onChange={e => update("country", e.target.value)} /></label><label>输出语言<select value={form.language} onChange={e => update("language", e.target.value)}>{languages.map(x => <option key={x}>{x}</option>)}</select></label></div>
           <div className="two-cols"><label>脚本框架<select value={form.framework} onChange={e => update("framework", e.target.value)}>{frameworks.map(x => <option key={x}>{x}</option>)}</select></label><label>表达风格<select value={form.style} onChange={e => update("style", e.target.value)}>{styles.map(x => <option key={x}>{x}</option>)}</select></label></div>
-          <div className="framework-note"><b>{form.framework === "智能随机" ? "每次自动切换不同叙事框架" : `当前固定：${form.framework}`}</b><span>框架决定故事逻辑，表达风格决定语气，二者独立组合。</span></div>
+          <div className={`framework-note ${aiConnected ? "ai-ready" : ""}`}><b>{aiConnected ? "GPT实时创作已连接" : form.framework === "智能随机" ? "本地模式：每次切换叙事框架" : `当前固定：${form.framework}`}</b><span>{aiConnected ? "生成时会读取最近8篇脚本并主动避开重复结构与措辞。" : "配置OpenAI API密钥后，将升级为GPT实时原创。"}</span></div>
           <div className="two-cols"><label>视频时长<select value={form.duration} onChange={e => update("duration", e.target.value)}><option value="30">30秒</option><option value="45">45秒</option><option value="60">60秒</option></select></label><label>促销信息<input value={form.offer} onChange={e => update("offer", e.target.value)} /></label></div>
-          {error && <p className="error">{error}</p>}<button className="generate" disabled={!inputReady || loading} onClick={generate}>{loading ? <><b className="spinner" /> 正在生成脚本…</> : <>{result ? "↻ 换一版不同脚本" : "✦ 生成爆款脚本"}</>}</button>
+          {error && <p className="error">{error}</p>}<button className="generate" disabled={!inputReady || loading} onClick={generate}>{loading ? <><b className="spinner" /> {aiConnected ? "GPT正在原创…" : "正在生成脚本…"}</> : <>{result ? "↻ 换一版不同脚本" : aiConnected ? "✦ GPT生成原创脚本" : "✦ 生成爆款脚本"}</>}</button>
         </section>
         <section className="panel result-panel">{!result ? <div className="empty"><div className="empty-orbit"><span>✦</span></div><h2>你的脚本将在这里生成</h2><p>系统会输出3个钩子、完整口播和逐镜头分镜表，并自动保存到团队历史。</p><div className="empty-tags"><span>3秒钩子</span><span>口播节奏</span><span>拍摄分镜</span><span>转化CTA</span></div></div> : <>
-          <div className="result-head"><div><span className="tag">{result.language}</span><span className="tag">{result.style}</span><h2>{result.title}</h2></div><button onClick={() => exportExcel(result)}>⇩ 导出Excel</button></div>
+          <div className="result-head"><div><span className="tag">{result.language}</span><span className="tag">{result.style}</span>{result.aiGenerated && <span className="tag ai-tag">GPT原创</span>}<h2>{result.title}</h2></div><button onClick={() => exportExcel(result)}>⇩ 导出Excel</button></div>
           <article className="hook-card"><div><span>主钩子 · 前3秒</span><button onClick={() => copyText(result.hook)}>复制</button></div><p>{result.hook}</p></article>
           <div className="alt-hooks">{result.alternateHooks.map((h, i) => <button key={h} onClick={() => copyText(h)}><span>备选 {i + 1}</span>{h}</button>)}</div>
           <article className="narration"><div><h3>完整口播</h3><button onClick={() => copyText(result.narration)}>复制全文</button></div><p>{result.narration}</p></article>
