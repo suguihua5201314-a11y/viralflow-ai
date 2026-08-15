@@ -1,0 +1,3 @@
+import { sql } from "drizzle-orm";
+import { integer, sqliteTable, text } from "drizzle-orm/sqlite-core";
+export const scripts = sqliteTable("scripts", { id: integer("id").primaryKey({ autoIncrement: true }), title: text("title").notNull(), product: text("product").notNull(), language: text("language").notNull(), country: text("country").notNull(), style: text("style").notNull(), hook: text("hook").notNull(), alternateHooks: text("alternate_hooks").notNull(), narration: text("narration").notNull(), scenes: text("scenes").notNull(), createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`) });
