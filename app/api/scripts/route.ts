@@ -75,35 +75,100 @@ function fill(template: string, vars: Record<string,string>) {
 }
 
 function createScript(p: Payload, avoidHook?: string) {
-  const t = words(p); const l = localized(p); const seed = p.nonce ?? Date.now();
+  void words(p);
+  const l = localized(p); const seed = p.nonce ?? Date.now();
   const vars = { x: l.product, points: l.sellingPoints, audience: l.audience, offer: l.offer };
   const choose = (items: string[], offset: number) => fill(items[seededIndex(seed, offset, items.length)], vars);
-  const hookStart = seededIndex(seed, 1, t.hooks.length);
-  let hooks = [0,1,2].map(i => fill(t.hooks[(hookStart + i) % t.hooks.length], vars));
-  if (avoidHook && hooks[0] === avoidHook) hooks = [hooks[1], hooks[2], fill(t.hooks[(hookStart + 3) % t.hooks.length], vars)];
-  const intro = choose(t.intros, 2), proof = choose(t.proofs, 3), demo = choose(t.demos, 4), benefit = choose(t.benefits, 5), cta = choose(t.ctas, 6);
-  const narration = [hooks[0], intro, proof, demo, benefit, cta].join(" ");
-  const visualVariants = [
-    ["开场直接展示失败结果或破坏性测试", "普通款与产品同时入镜做强对比", "近景展示结构，手指指出关键机关", "一镜到底完成核心操作", "移动侧光展示最终效果", "重复一次最强卖点验证", "产品成品特写，指向购物入口"],
-    ["手持产品快速冲进画面，制造突然感", "先展示用户常见翻车场景", "拆开包装并逐层展示核心部件", "俯拍真实操作，保留手部动作", "切换三个角度检查细节", "加入手机壳或日常使用验证", "手持成品口播收尾"],
-    ["极近景只露出神秘装置，不给全貌", "慢慢拉远揭示产品用途", "分屏放大普通款和新品的不同", "快速跳切展示关键步骤", "用反光和边缘特写展示成品", "回放开头悬念并给出答案", "定格产品与优惠字幕"],
-  ][seededIndex(seed, 7, 3)];
-  const editVariants = [
-    ["首帧大字＋撞击音效", "2个快速跳切", "关键词逐个弹出", "保留真实操作声", "前后对比分屏", "慢动作＋局部放大", "库存提示停留2秒"],
-    ["0.3秒推近＋疑问字幕", "失败音效＋红色叉号", "结构线条标注", "速度提升1.2倍", "干净擦屏转场", "重复回放两次", "价格字幕＋箭头引导"],
-    ["悬念音乐立即起", "节奏卡点切换", "微距画面＋旁白压低", "完整动作不切镜", "侧光扫过产品表面", "定格一秒强调结果", "音乐收紧后突然停顿"],
-  ][seededIndex(seed, 8, 3)];
-  const lines = [hooks[0], intro, proof, demo, benefit, l.sellingPoints.split(/[；;]/)[0], cta];
-  const scenes = [
-    { time: "0–3s", visual: visualVariants[0], line: lines[0], edit: editVariants[0] },
-    { time: "3–7s", visual: visualVariants[1], line: lines[1], edit: editVariants[1] },
-    { time: "7–14s", visual: visualVariants[2], line: lines[2], edit: editVariants[2] },
-    { time: "14–24s", visual: visualVariants[3], line: lines[3], edit: editVariants[3] },
-    { time: "24–32s", visual: visualVariants[4], line: lines[4], edit: editVariants[4] },
-    { time: "32–40s", visual: visualVariants[5], line: lines[5], edit: editVariants[5] },
-    { time: `40–${p.duration}s`, visual: visualVariants[6], line: lines[6], edit: editVariants[6] },
-  ];
-  return { title: `${p.product}｜${p.style}脚本`, product: p.product, language: p.language, country: p.country, style: p.style, hook: hooks[0], alternateHooks: hooks.slice(1), narration, scenes };
+  const tools: Record<string, string[]> = {
+    中文: ["一把真正的斧头", "一把铁锤", "一把金属扳手", "一把螺丝刀"],
+    西班牙语: ["un hacha real", "un martillo de acero", "una llave metálica", "un destornillador"],
+    意大利语: ["un'ascia vera", "un martello d'acciaio", "una chiave metallica", "un cacciavite"],
+    德语: ["eine echte Axt", "einen Stahlhammer", "einen Metallschlüssel", "einen Schraubendreher"],
+    英语: ["a real axe", "a steel hammer", "a metal wrench", "a screwdriver"],
+  };
+  const tool = (tools[p.language] ?? tools.中文)[seededIndex(seed, 9, 4)];
+  const scriptsByLanguage: Record<string, string[][]> = {
+    中文: [
+      [`${tool}，对比普通钢化膜、防窥膜和铝制保护片。`, `同一把${tool}，今天测试四种不同的屏幕保护方案。`],
+      [`前三种只是在浪费你的钱，钱直接扔进垃圾桶。`, `普通款看起来都差不多，真正测试时差距马上出现。`],
+      [`但今天我们要测试一款完全不同的${l.product}。`, `最后登场的，是结构完全不同的${l.product}。`],
+      [`等一下我会用同一个工具测试它，先放在这里，我们先看它怎么安装。`, `破坏测试先别急，工具不换，安装完成以后马上继续。`],
+      [`安装比你想得更简单，只需要三步：定位、按下、滑动。自动对齐工具会在贴合时带走灰尘。`, `把手机放进去，对准位置，按下底部再向前滑，整个过程不用用手找位置。`],
+      [`完成以后撕掉安装器，再用附送的布压实四周。你看到的结果是：没有灰尘、没有气泡、没有贴歪，十秒内完成。`, `取下工具看结果，边缘整齐、屏幕干净，一次安装成功，而且兼容大多数手机壳。`],
+      [`它的核心表现包括：${l.sellingPoints}。表面疏水疏油，液体会滑走，也不容易留下指纹。`, `除了${l.sellingPoints}，它还能减少刮痕和日常撞击，贴合后不容易翘边。`],
+      [`现在回到刚才的${tool}，同样的力度，直接落下去。屏幕依然完好。`, `刚才留下的悬念现在揭晓：同一件工具、同一种测试，它扛住了。`],
+      [`这才是你的手机应该得到的保护，也是${l.product}提供的品质。`, `不是看起来高级，而是在安装和测试中都经得住验证。`],
+      [`喜欢的话点击购买链接。${l.offer}，现在下单还可以查看双片装和镜头膜赠品。`, `${l.offer}。需要的话现在点击购物入口，先确认你的手机型号。`],
+    ],
+    西班牙语: [
+      [`${tool} versus vidrio templado convencional, protector de privacidad y una lámina de aluminio.`, `${tool}, cuatro protectores y exactamente la misma prueba.`],
+      [`Esos tres protectores solo están gastando tu dinero, dinero directamente tirado a la basura.`, `Los tres primeros parecen protección, pero cuando llega la prueba solo hacen que pierdas dinero.`],
+      [`Pero hoy vamos a probar un ${l.product} completamente diferente.`, `El último es un ${l.product} con una estructura totalmente distinta.`],
+      [`En un momento lo pruebo con la misma herramienta. La dejo aquí, pero antes mira cómo se instala.`, `No cambio la herramienta y no cambio la prueba; primero vamos a instalarlo y después volvemos al golpe.`],
+      [`Es más sencillo que nunca: solo tres pasos. Colocas el móvil, haces clic aquí abajo y deslizas. La herramienta se autoalinea y elimina el polvo al mismo tiempo.`, `Posicionas el teléfono, presionas la parte inferior y deslizas. No necesitas tocar el cristal ni buscar la posición con los dedos.`],
+      [`Retiramos el aplicador y repasamos las esquinas con el paño incluido. El resultado es impecable: sin polvo, sin burbujas, sin desalineación e instalado en menos de diez segundos.`, `Quitamos la herramienta y mira los bordes: limpio, recto y bien adherido al primer intento, además compatible con la mayoría de las fundas.`],
+      [`Sus puntos clave son ${l.sellingPoints}. La capa hidrofóbica y oleofóbica hace que los líquidos resbalen y evita que las huellas se queden marcadas.`, `Además de ${l.sellingPoints}, resiste rayaduras y golpes cotidianos y se adhiere firmemente sin levantarse con facilidad.`],
+      [`Ahora volvemos al ${tool}. Misma herramienta, misma fuerza y golpe directo. La pantalla sigue intacta.`, `¿Recuerdas la prueba del principio? Aquí está la respuesta: mismo impacto y el protector lo resiste.`],
+      [`Esta es la protección que tu móvil merece y la calidad que ofrece ${l.product}.`, `No es solo una instalación bonita; es protección demostrada delante de la cámara.`],
+      [`Si te gustó, haz clic en el enlace de compra. ${l.offer}. Revisa la oferta de dos protectores y el regalo para la cámara.`, `${l.offer}. Haz clic ahora, elige tu modelo y aprovecha la promoción antes de que cambie.`],
+    ],
+    意大利语: [
+      [`${tool} contro vetro temperato normale, pellicola privacy e protezione in alluminio.`, `${tool}, quattro protezioni e la stessa identica prova.`],
+      [`Le prime tre stanno solo facendo buttare via i tuoi soldi.`, `Sembrano tutte uguali, ma sotto un test reale la differenza si vede subito.`],
+      [`Oggi però proviamo una ${l.product} completamente diversa.`, `L'ultima è una ${l.product} costruita in modo completamente diverso.`],
+      [`Tra poco userò lo stesso strumento; prima però guarda come si installa.`, `Lascio qui lo strumento: dopo l'installazione torniamo subito al test.`],
+      [`Bastano tre passaggi: posiziona, premi e fai scorrere. Lo strumento si allinea ed elimina la polvere.`, `Inserisci il telefono, premi in basso e fai scorrere senza toccare il vetro.`],
+      [`Rimuovi l'applicatore e premi gli angoli con il panno incluso: niente polvere, bolle o disallineamento, in meno di dieci secondi.`, `Tolto lo strumento, il risultato è pulito, dritto e aderente al primo tentativo.`],
+      [`I punti chiave sono ${l.sellingPoints}. Il rivestimento idrofobico e oleofobico fa scivolare liquidi e impronte.`, `Oltre a ${l.sellingPoints}, resiste a graffi e urti quotidiani senza sollevarsi facilmente.`],
+      [`Torniamo al ${tool}: stesso impatto, colpo diretto e lo schermo resta intatto.`, `Ecco la risposta al test iniziale: stesso strumento e protezione superata.`],
+      [`Questa è la protezione che il tuo telefono merita.`, `Non è solo bella da installare: la protezione è dimostrata.`],
+      [`Clicca sul link di acquisto. ${l.offer}.`, `${l.offer}: scegli ora il tuo modello prima che finisca.`],
+    ],
+    德语: [
+      [`${tool} gegen normales Panzerglas, Sichtschutzfolie und Aluminiumschutz.`, `${tool}, vier Schutzfolien und exakt derselbe Test.`],
+      [`Die ersten drei verschwenden nur dein Geld.`, `Sie sehen ähnlich aus, aber im echten Test zeigt sich sofort der Unterschied.`],
+      [`Heute testen wir jedoch einen völlig anderen ${l.product}.`, `Der letzte ${l.product} ist komplett anders aufgebaut.`],
+      [`Gleich teste ich ihn mit demselben Werkzeug. Vorher siehst du die Montage.`, `Das Werkzeug bleibt liegen; nach der Montage geht der Test sofort weiter.`],
+      [`Nur drei Schritte: positionieren, unten drücken und schieben. Das Werkzeug richtet aus und entfernt Staub.`, `Handy einlegen, unten drücken, schieben – ohne das Glas anzufassen.`],
+      [`Applikator abnehmen und die Ecken andrücken: kein Staub, keine Blasen, nicht schief und in unter zehn Sekunden fertig.`, `Nach dem Abnehmen ist alles sauber, gerade und beim ersten Versuch fest angebracht.`],
+      [`Die wichtigsten Vorteile: ${l.sellingPoints}. Die wasser- und ölabweisende Schicht lässt Flüssigkeit und Fingerabdrücke abgleiten.`, `Zusätzlich zu ${l.sellingPoints} schützt er vor Kratzern und alltäglichen Stößen.`],
+      [`Zurück zum ${tool}: gleicher Aufprall, direkter Schlag und das Display bleibt intakt.`, `Jetzt lösen wir den Anfang auf: gleiches Werkzeug, Test bestanden.`],
+      [`Das ist der Schutz, den dein Handy verdient.`, `Nicht nur eine saubere Montage, sondern sichtbar geprüfter Schutz.`],
+      [`Klicke auf den Kauflink. ${l.offer}.`, `${l.offer}. Wähle jetzt dein Modell, bevor es ausverkauft ist.`],
+    ],
+    英语: [
+      [`${tool} versus ordinary tempered glass, a privacy protector and an aluminum sheet.`, `${tool}, four protectors and the exact same test.`],
+      [`The first three are only wasting your money.`, `They look similar, but a real test exposes the difference immediately.`],
+      [`Today we're testing a completely different ${l.product}.`, `The last ${l.product} uses a completely different structure.`],
+      [`I'll test it with the same tool in a moment. First, watch how it installs.`, `The tool stays right here; after installation we go straight back to the impact test.`],
+      [`It takes three steps: position, press and slide. The tool aligns itself and removes dust as it applies.`, `Place the phone inside, press the bottom and slide without touching the glass.`],
+      [`Remove the applicator and press the corners with the included cloth: no dust, bubbles or misalignment, installed in under ten seconds.`, `Lift the tool and the result is clean, straight and fully attached on the first try.`],
+      [`The key benefits are ${l.sellingPoints}. Its hydrophobic and oleophobic coating lets liquid and fingerprints slide away.`, `Beyond ${l.sellingPoints}, it resists everyday scratches and impacts without lifting easily.`],
+      [`Back to the ${tool}: same impact, direct hit, and the screen remains intact.`, `Here's the answer to the opening test: same tool, and the protector takes the hit.`],
+      [`This is the protection your phone deserves.`, `It isn't just satisfying to install; the protection is proven on camera.`],
+      [`Click the purchase link. ${l.offer}. Check the two-pack and camera protector offer.`, `${l.offer}. Choose your model now before the promotion changes.`],
+    ],
+  };
+  const sections = scriptsByLanguage[p.language] ?? scriptsByLanguage.中文;
+  const thirdOpenings: Record<string,string> = {
+    中文: `如果连${tool}都扛不住，这些保护膜就不值得你花钱。`,
+    西班牙语: `Si no resisten ${tool}, estos protectores no merecen ni un euro de tu dinero.`,
+    意大利语: `Se non resistono a ${tool}, queste protezioni non valgono i tuoi soldi.`,
+    德语: `Wenn sie ${tool} nicht aushalten, sind diese Schutzfolien dein Geld nicht wert.`,
+    英语: `If they cannot survive ${tool}, these protectors are not worth your money.`,
+  };
+  const openingPool = [...sections[0], thirdOpenings[p.language] ?? thirdOpenings.中文];
+  const hookStart = seededIndex(seed, 1, openingPool.length);
+  let hooks = [0,1,2].map(i => openingPool[(hookStart + i) % openingPool.length]);
+  if (avoidHook && hooks[0] === avoidHook) hooks = [hooks[1], hooks[2], hooks[0]];
+  const lines = sections.map((variants, index) => choose(variants, 20 + index));
+  lines[0] = hooks[0];
+  const narration = lines.join(" ");
+  const times = ["0–3s","3–6s","6–9s","9–13s","13–22s","22–29s","29–36s","36–41s","41–44s",`44–${p.duration}s`];
+  const visuals = ["破坏工具砸向三种普通保护膜，首帧直接给冲突","三种竞品并排，逐个打叉或扔进垃圾桶","产品和包装从画外快速推入镜头","工具留在画面边缘，镜头转向安装器","俯拍完整展示定位、按下、滑动三步","撕下安装器，用布压实四角并展示干净屏幕","微距展示防窥、疏水、指纹和手机壳兼容测试","回到开头的工具，完成同力度破坏测试","屏幕亮起，展示完好结果和产品特写","双片装、赠品和购物入口同框收尾"];
+  const edits = ["撞击音效＋首帧大字","快速跳切＋红叉","产品登场音效","悬念音乐压低","保留真实操作声","无滤镜近景＋结果字幕","每个卖点1秒快切","慢动作回放＋局部放大","定格1秒突出结果","库存与优惠字幕停留2秒"];
+  const scenes = lines.map((line, index) => ({ time: times[index], visual: visuals[index], line, edit: edits[index] }));
+  return { title: `${p.product}｜破坏测试完整结构`, product: p.product, language: p.language, country: p.country, style: p.style, hook: hooks[0], alternateHooks: hooks.slice(1), narration, scenes };
 }
 function rowToScript(row: typeof scripts.$inferSelect) { return { ...row, alternateHooks: JSON.parse(row.alternateHooks), scenes: JSON.parse(row.scenes) }; }
 async function ensureSchema() {
