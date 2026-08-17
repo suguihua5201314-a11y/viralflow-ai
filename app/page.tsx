@@ -196,7 +196,8 @@ export default function Home() {
     setRaceLoading(true); setError("");
     try {
       const recent = history.slice(0, 12).map(({title,hook,narration}) => ({title,hook,narration}));
-      const requests = Array.from({ length: 5 }, (_, index) => fetch("/api/scripts", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ ...form, referenceScript: active === "replicate" ? referenceScript : undefined, recent, nonce: Date.now() + index * 7919 + Math.random() }) }).then(async res => { const data = await res.json(); if (!res.ok) throw new Error(data.error || "生成失败"); return data.script as Script; }));
+      const raceFrameworks = ["失败救援反转","导演朋友神秘道具","评论区质疑实测","十秒安装挑战","视觉谜题反转"];
+      const requests = Array.from({ length: 5 }, (_, index) => fetch("/api/scripts", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ ...form, framework: form.framework === "智能随机" ? raceFrameworks[index] : form.framework, referenceScript: active === "replicate" ? referenceScript : undefined, recent, nonce: Date.now() + index * 104729 + Math.random() }) }).then(async res => { const data = await res.json(); if (!res.ok) throw new Error(data.error || "生成失败"); return data.script as Script; }));
       const scripts = await Promise.all(requests); const nextHistory = [...scripts, ...history].slice(0, 100);
       setRaceResults(scripts); setResult(scripts[0]); setHistory(nextHistory); localStorage.setItem("viralcraft-history", JSON.stringify(nextHistory)); void syncTeam(currentTeamPayload({ history: nextHistory }));
     } catch (e) { setError(e instanceof Error ? e.message : "赛马稿生成失败"); }

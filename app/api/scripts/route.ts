@@ -74,6 +74,7 @@ function fill(template: string, vars: Record<string,string>) {
 }
 
 const frameworkNames = frameworkCatalog.map(item => item.name);
+const localFrameworkNames = ["失败救援反转","导演朋友神秘道具","价格挑战对比","评论区质疑实测","十秒安装挑战","隐私视角实验","第一视角开箱","生活事故救场","视觉谜题反转"];
 
 function createAlternativeScript(p: Payload, framework: string, seed: number, avoidHooks: string[] = []) {
   const l = localized(p); const x = l.product, points = l.sellingPoints, offer = l.offer;
@@ -178,8 +179,8 @@ type AiOpening = { hook:string; bridge:string; hookVisual?:string; bridgeVisual?
 function createScript(p: Payload, avoidHooks: string[] = [], avoidTitles: string[] = [], aiOpenings: AiOpening[] = []) {
   void words(p);
   const l = localized(p); const seed = p.nonce ?? Date.now();
-  const freshFrameworks = frameworkNames.filter(name => !avoidTitles.some(title => title.endsWith(`｜${name}`)));
-  const availableFrameworks = freshFrameworks.length ? freshFrameworks : frameworkNames;
+  const freshFrameworks = localFrameworkNames.filter(name => !avoidTitles.some(title => title.endsWith(`｜${name}`)));
+  const availableFrameworks = freshFrameworks.length ? freshFrameworks : localFrameworkNames;
   const framework = p.framework && p.framework !== "智能随机" ? p.framework : availableFrameworks[seededIndex(seed, 30, availableFrameworks.length)];
   const vars = { x: l.product, points: l.sellingPoints, audience: l.audience, offer: l.offer };
   const choose = (items: string[], offset: number) => fill(items[seededIndex(seed, offset, items.length)], vars);
@@ -331,6 +332,10 @@ function createScript(p: Payload, avoidHooks: string[] = [], avoidTitles: string
   return { title: `${p.product}｜${framework}`, product: p.product, language: p.language, country: p.country, style: p.style, hook: hooks[0], alternateHooks: hooks.slice(1), narration, scenes };
 }
 
+function similarity(a:string,b:string){const clean=(s:string)=>s.toLowerCase().replace(/[\s\p{P}\p{S}]/gu,"");const x=clean(a),y=clean(b);if(!x||!y)return 0;const grams=(s:string)=>{const set=new Set<string>();for(let i=0;i<Math.max(1,s.length-2);i++)set.add(s.slice(i,i+3));return set};const ax=grams(x),by=grams(y);let same=0;for(const g of ax)if(by.has(g))same++;return same/Math.max(1,Math.min(ax.size,by.size))}
+
+function createDistinctLocalScript(p:Payload,recent:RecentScript[]){let best=createScript(p,recent.map(x=>x.hook),recent.map(x=>x.title),[]),bestScore=1;for(let attempt=0;attempt<12;attempt++){const candidate=createScript({...p,nonce:Number(p.nonce??Date.now())+attempt*104729},recent.map(x=>x.hook),recent.map(x=>x.title),[]);const score=recent.length?Math.max(...recent.map(x=>similarity(candidate.narration,x.narration))):0;if(score<bestScore){best=candidate;bestScore=score}if(score<.48)break}return best}
+
 async function createAiScript(p: Payload, recent: Array<{ title:string; hook:string; narration:string }>) {
   const apiKey = process.env.DEEPSEEK_API_KEY;
   if (!apiKey) return null;
@@ -459,7 +464,7 @@ export async function POST(request: Request) {
     if (p.referenceScript !== undefined && p.referenceScript.trim().length < 30) return Response.json({ error: "请粘贴完整的爆款参考文案，至少30个字。" }, { status: 400 });
     const recent = (p.recent ?? []).slice(0, 8);
     const aiScript = await createAiScript(p, recent).catch(() => null);
-    const generated = aiScript ?? createScript(p, recent.map(item => item.hook), recent.map(item => item.title), []);
+    const generated = aiScript ?? createDistinctLocalScript(p, recent);
     return Response.json({ script: { ...generated, aiGenerated:Boolean(aiScript), id:Date.now(), createdAt:new Date().toISOString() } }, { status: 201 });
   } catch (error) { return Response.json({ error: error instanceof Error ? error.message : "生成失败" }, { status: 500 }); }
 }
