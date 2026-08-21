@@ -1,7 +1,8 @@
 import { frameworkCatalog } from "../../frameworks";
+import { assessDiversity, buildCreativeConcepts, buildStrategyDirectives, normalizeStructuredScript, type CreativeConcept, type StructuredScript } from "../../script-generation";
 
-type RecentScript = { title:string; hook:string; narration:string };
-type Payload = { product: string; sellingPoints: string; audience: string; country: string; language: string; style: string; framework?: string; duration: string; offer: string; referenceScript?: string; nonce?: number; recent?: RecentScript[] };
+type RecentScript = { title:string; hook:string; narration:string; creativeAngle?:string };
+type Payload = { product: string; sellingPoints: string; audience: string; country: string; language: string; style: string; framework?: string; duration: string; offer: string; referenceScript?: string; nonce?: number; recent?: RecentScript[]; platform?:string; additionalRequirements?:string; creationMode?:string; hookStrategy?:string; creativity?:string; outputCount?:number; creativeConcept?:CreativeConcept };
 type Pack = { hooks: string[]; intros: string[]; proofs: string[]; demos: string[]; benefits: string[]; ctas: string[] };
 
 function localized(p: Payload) {
@@ -336,6 +337,45 @@ function similarity(a:string,b:string){const clean=(s:string)=>s.toLowerCase().r
 
 function createDistinctLocalScript(p:Payload,recent:RecentScript[]){let best=createScript(p,recent.map(x=>x.hook),recent.map(x=>x.title),[]),bestScore=1;for(let attempt=0;attempt<12;attempt++){const candidate=createScript({...p,nonce:Number(p.nonce??Date.now())+attempt*104729},recent.map(x=>x.hook),recent.map(x=>x.title),[]);const score=recent.length?Math.max(...recent.map(x=>similarity(candidate.narration,x.narration))):0;if(score<bestScore){best=candidate;bestScore=score}if(score<.48)break}return best}
 
+function localStrategyPayload(p:Payload):Payload {
+  const modeStyle:Record<string,string>={"KOC / UGC":"真实KOC种草",测评:"强冲突测评",强冲突:"强冲突测评",Storytelling:"导演朋友的新玩具",产品演示:"痛点解决"};
+  const hookStyle:Record<string,string>={好奇:"悬念揭秘",冲突:"强冲突测评",结果前置:"痛点解决",反常识:"悬念揭秘",问题:"痛点解决",视觉钩子:"导演朋友的新玩具"};
+  return {...p,style:modeStyle[p.creationMode || ""] || hookStyle[p.hookStrategy || ""] || p.style};
+}
+
+function applyLocalStrategy<T extends {hook:string;alternateHooks:string[];narration:string;scenes:Array<{time:string;visual:string;line:string;edit:string}>}>(script:T,p:Payload):T {
+  const concept=p.creativeConcept;
+  const index=Math.max(0,(concept?.id?.charCodeAt(0) || 65)-65);
+  const spanishHooks:Record<string,string[]>={
+    好奇:["¿Por qué este pequeño paso cambia por completo el resultado?","Esta esquina parece un fallo, pero es justo la pista que faltaba.","He puesto diez segundos en el cronómetro: adivina qué ocurre al final.","Desde este ángulo la pantalla desaparece. La razón no es la que imaginas.","¿Qué está retirando el polvo antes de que el protector toque la pantalla?"],
+    冲突:["El método de siempre falla aquí; este lo resuelve en el primer intento.","Un comentario dijo que era puro marketing. Vamos a probarlo sin cortes.","Diez minutos de burbujas contra diez segundos de instalación limpia.","En público todos ven tu pantalla, hasta que cambias este detalle.","Parece un truco visual, pero el protector normal acaba de perder la prueba."],
+    "结果前置":["Diez segundos, cero burbujas y la pantalla perfectamente alineada.","Este es el resultado final; ahora mira cómo se consiguió sin repetir.","Cronómetro parado: instalación limpia al primer intento.","Desde un lado no se ve nada; de frente, la pantalla sigue nítida.","Así queda la pantalla antes de explicar el mecanismo."],
+    反常识:["El problema no son tus manos: es el paso que haces antes de colocar el protector.","Ir más despacio no evita las burbujas; este mecanismo sí.","No necesitas presionar más, necesitas retirar el polvo en el momento exacto.","La privacidad no depende de bajar el brillo.","La pieza más extraña es la que hace la instalación más sencilla."],
+    问题:["¿Cuántos protectores has tirado por una sola burbuja?","¿Puede una instalación sin cortes quedar limpia al primer intento?","¿Bastan diez segundos para colocarlo recto?","¿Quién puede leer tu pantalla cuando viajas?","¿Qué paso provoca realmente el polvo y la desalineación?"],
+    "视觉钩子":["Mira el polvo desaparecer mientras deslizo una sola vez.","Sin palabras: cronómetro, una pasada y pantalla limpia.","Observa esta gota y después mira la superficie.","Mismo teléfono, dos ángulos y una diferencia imposible de ignorar.","Primer plano: la lámina baja y no queda una sola burbuja."],
+  };
+  const chineseHooks:Record<string,string[]>={
+    好奇:["为什么多这一步，结果就完全不一样？","这个角落看着像失败，其实是关键提示。","计时十秒，猜猜最后会发生什么。","侧面突然看不见屏幕，原因不是调暗亮度。","它到底怎么在贴上前把灰尘带走？"],
+    冲突:["老方法在这里直接翻车，新方法第一次就成功。","评论区说是噱头，那就全程不剪直接测。","十分钟满是气泡，对比十秒干净贴合。","公共场合谁都能看到屏幕，直到换了这个设计。","普通款刚刚输掉了同条件测试。"],
+    "结果前置":["十秒、零气泡、第一次就贴正。","先看最终结果，再看它怎么一次完成。","计时停止：屏幕干净，位置完全对齐。","侧面看不见，正面依然清楚。","成品先给你看，接着拆解这个动作。"],
+  };
+  const hooks=p.language==="西班牙语"?spanishHooks[p.hookStrategy||"好奇"]:chineseHooks[p.hookStrategy||"好奇"];
+  const hook=hooks?.[index%hooks.length] || script.hook;
+  const spanishCtas=["Si también te pasa, revisa tu modelo antes de decidir.","Mira la prueba completa y comprueba si encaja con tu uso.","Si quieres ahorrar intentos, ahora puedes revisar la oferta disponible.","Para usar el móvil en público, comprueba primero la versión compatible.","La respuesta estaba en el primer plano; el enlace tiene los modelos disponibles."];
+  const chineseCtas=["如果你也遇到这个问题，先看看自己的适配型号。","把测试看完，再判断它适不适合你的使用场景。","想少走弯路，可以看看当前可选型号。","经常在公共场合用手机，先确认适配版本。","答案就在开头那个细节里，入口里可以查型号。"];
+  const cta=(p.language==="西班牙语"?spanishCtas:chineseCtas)[index%5];
+  const scenes=script.scenes.map((scene,sceneIndex)=>sceneIndex===0?{...scene,line:hook}:sceneIndex===script.scenes.length-1?{...scene,line:cta}:scene);
+  return {...script,hook,alternateHooks:[...(hooks||[])].filter(item=>item!==hook).slice(0,2),narration:scenes.map(scene=>scene.line).join("\n"),scenes};
+}
+
+async function generateOne(p:Payload,recent:RecentScript[]) {
+  const aiScript=await createAiScript(p,recent).catch(()=>null);
+  const localPayload=localStrategyPayload(p);
+  const localScript=applyLocalStrategy(createDistinctLocalScript(localPayload,recent),p);
+  const generated=aiScript ?? normalizeStructuredScript(localScript,p,p.creativeConcept);
+  return {...generated,aiGenerated:Boolean(aiScript),id:Date.now()+Math.floor(Math.random()*1000),createdAt:new Date().toISOString()};
+}
+
 async function createAiScript(p: Payload, recent: Array<{ title:string; hook:string; narration:string }>) {
   const apiKey = process.env.DEEPSEEK_API_KEY;
   if (!apiKey) return null;
@@ -354,43 +394,46 @@ async function createAiScript(p: Payload, recent: Array<{ title:string; hook:str
     生活事故救场:"手机在真实生活场景遭遇意外首帧→旧保护方式暴露问题→新品登场→安装与针对性验证→回到同类意外复测→结果特写→优惠CTA",
     视觉谜题反转:"一个看不懂但强烈的画面首帧→给一个错误猜测→三秒内揭晓产品用途→安装操作→卖点证据→谜题答案回扣→优惠CTA"
   };
-  const recentText = recent.length ? recent.slice(0,5).map((item,index) => `${index + 1}. ${item.title}｜${item.hook}`).join("\n") : "暂无历史钩子";
+  const recentText = recent.length ? recent.slice(0,8).map((item,index) => `${index + 1}. ${item.title}｜${item.hook}`).join("\n") : "暂无历史钩子";
+  const strategyDirectives = buildStrategyDirectives(p, p.creativeConcept);
   const replicationRules = p.referenceScript?.trim() ? `\n这是“爆款复刻”任务。先在内部拆解参考文案的钩子机制、信息顺序、短句节奏、测试动作、悬念位置和成交方式，再用用户当前产品重新创作。保留的是抽象结构与节奏，不得连续照抄参考文案中的原句，不得保留不属于当前产品的品牌、参数、优惠或测试结论。新脚本必须让人看出是同一种爆款框架，但文案和镜头是新的。` : "";
-  const instructions = `你是Magic John风格的TikTok钢化膜实拍编导。你要写的是一条从头到尾属于同一个创意的完整脚本，不是“随机开头＋固定产品介绍”。不得混合两套框架，不得让开头测试与结尾测试脱节。${replicationRules}
+  const instructions = `你是短视频商业创意编导。你要写一条从头到尾服从同一个创意概念的完整脚本，不是“随机开头＋固定产品介绍”。${replicationRules}
 
-每条脚本输出9到11个镜头，并严格走完这一条主线：
-1. 真实动作钩子：首帧就出现道具、数字、失败结果或强对比，不说空泛广告句。
-2. 冲突升级：普通膜、仿品或旧方法在同一测试中暴露具体问题。
-3. 新品登场：TRANSFORMERS出现，并承诺稍后用开头的同一道具、同一高度或同一条件复测。
-4. 自然转场：用一句真人口语把测试暂停，顺势进入安装，不能像广告旁白硬切。
-5. 安装演示：清洁屏幕→放入/盖上产品→除尘与滑动贴合→取下安装器→抚平边缘。步骤不能漏，但句子必须根据本条剧情重新写，禁止套固定文案。
-6. 成品结果：没有灰尘、没有气泡、不会贴歪、边缘顺滑；用画面检查证明。
-7. 卖点连击：28°防窥、电镀疏水疏油、防指纹、抗刮耐磨、抗冲击、贴合紧密不易翘边。每个卖点必须配一个能拍出来的动作，不得只报参数。
-8. 首尾闭环：回到开头完全相同的测试条件，兑现悬念并给出明确结果。
-9. 促单收尾：只使用用户输入的优惠，短而直接。
+创作优先级从高到低：用户产品事实与合规边界 → 本次 Creative Concept → 创作模式 → Hook Strategy → Framework → Creativity → 平台与时长。不要用旧的固定破坏测试模板覆盖这些设置。
 
 写作硬规则：
-1. 输出语言必须是用户指定语言。西班牙语要像西班牙或拉美TikTok真人说话，短句、自然、有停顿，禁止翻译腔和AI腔。
-2. 模仿Magic John的“动作推动口播”：一个动作一句话，一句话一个镜头；允许重复关键词制造节奏。
-3. 开头不能只是换斧头、锤子名称。测试机制、数字、失败过程、悬念方式和结尾回扣都要服从本次指定框架。
-4. 安装和卖点可以换说法、换顺序、换拍法，但上面列出的必要事实一个都不能少。
-5. 不得出现“兼容98%手机壳”。不得虚构9H等级、认证、防水等级、价格或折扣。
-6. 禁止这些通用AI开头：你不会相信、看到最后、今天我要给大家介绍、这可能是最好的、你还在用吗。
-7. hook必须等于第一个镜头的line；narration必须严格由全部scene.line按顺序组成。
-8. 两个备选钩子必须能无缝接入同一个第二镜头，不能改变后面的测试道具或剧情。
-9. 画面必须能由桌拍或模特实拍完成，visual写具体道具、手部动作、机位和结果；edit只写必要的节奏与音效。
-10. 不解释创作过程，只输出严格有效JSON。`;
+1. 输出语言必须是用户指定语言；使用目标市场真人会说的短句，避免翻译腔、AI腔和广告腔。
+2. 输出6到11个可实拍镜头，一句话一个镜头；镜头数量与所选时长匹配。
+3. 前3秒必须严格体现所选 Hook Strategy；好奇不等于暴力测试，结果前置必须直接展示结果，视觉钩子必须先有可拍动作。
+4. 信息顺序必须严格服从 Framework。不得为了沿用旧模板而把 PAS、AIDA 或 Storytelling 改写成统一的竞品破坏测试。
+5. 创作模式控制整条片子的语气与证据：KOC像真实分享；强冲突才使用明显对撞；产品演示优先动作与结果。
+6. 只使用用户输入的产品事实、卖点和促销；不得虚构等级、认证、折扣、价格或测试结论。
+7. 不得出现“兼容98%手机壳”，不得使用绝对化或无法证明的承诺。
+8. 禁止通用AI开头：你不会相信、看到最后、今天我要给大家介绍、这可能是最好的、你还在用吗。
+9. hook必须等于第一个镜头的line；narration必须严格由全部scene.line按顺序组成。
+10. 两个备选钩子必须服务同一 Creative Concept，并能无缝接入第二镜头。
+11. visual写具体场景、道具、手部/人物动作、机位和结果；edit只写必要节奏与音效。
+12. 不解释创作过程，只输出严格有效JSON。所有策略必须反映在实际内容中，不能只写入字段名。
+
+${strategyDirectives}`;
+  const modeBoundary = p.creationMode === "KOC / UGC" ? "KOC / UGC 禁止使用竞品砸碎、暴力擂台、三款淘汰赛或硬促销作为默认剧情；必须从个人真实经历或日常场景自然分享。" : p.creationMode === "产品演示" ? "产品演示禁止把竞品破坏测试当主线；必须先拍动作与结果，让文案解释画面。" : p.creationMode === "强冲突" ? "强冲突必须在前三秒明确展示两种结果或两方立场的对撞，中段完成反转与证据。" : "";
   const input = `请创作一条全新TikTok带货脚本。
 产品：${p.product}
 核心卖点：${p.sellingPoints}
 目标用户：${p.audience}
 市场：${p.country}
 输出语言：${p.language}
+发布平台：${p.platform || "TikTok"}
 指定框架：${selectedFramework}
-唯一允许的框架逻辑：${selectedCatalogFramework?.blueprint ?? blueprint[selectedFramework] ?? blueprint.破坏测试对比}
+框架逻辑：${selectedCatalogFramework?.blueprint ?? blueprint[selectedFramework] ?? "严格执行本次 Framework 的标准信息顺序"}
 表达风格：${p.style}
 视频时长：${p.duration}秒
 促销信息：${p.offer}
+补充要求：${p.additionalRequirements?.trim() || "无"}
+创作模式：${p.creationMode || "KOC / UGC"}
+Hook Strategy：${p.hookStrategy || "好奇"}
+Creativity：${p.creativity || "平衡"}
+模式边界：${modeBoundary || "按所选模式执行，不套用其它模式的固定剧情。"}
 
 最近使用过的钩子（只需避开原句，不要受它们的结构影响）：
 ${recentText}
@@ -400,13 +443,21 @@ ${p.referenceScript?.trim() ? `需要复刻其结构的爆款参考文案：\n${
     type:"object", additionalProperties:false,
     properties:{
       title:{type:"string"},
+      creativeAngle:{type:"string"},
+      hookType:{type:"string"},
       framework:{type:"string"},
       hook:{type:"string"},
       alternateHooks:{type:"array",items:{type:"string"}},
       narration:{type:"string"},
+      conflict:{type:"string"},
+      productReveal:{type:"string"},
+      proof:{type:"string"},
+      sellingPoints:{type:"string"},
+      cta:{type:"string"},
+      shootingSuggestion:{type:"string"},
       scenes:{type:"array",items:{type:"object",additionalProperties:false,properties:{time:{type:"string"},visual:{type:"string"},line:{type:"string"},edit:{type:"string"}},required:["time","visual","line","edit"]}}
     },
-    required:["title","framework","hook","alternateHooks","narration","scenes"]
+    required:["title","creativeAngle","hookType","framework","hook","alternateHooks","narration","conflict","productReveal","proof","sellingPoints","cta","shootingSuggestion","scenes"]
   };
   const response = await fetch("https://api.deepseek.com/chat/completions", {
     method:"POST",
@@ -416,7 +467,7 @@ ${p.referenceScript?.trim() ? `需要复刻其结构的爆款参考文案：\n${
       messages:[{role:"system",content:`${instructions}\n必须返回严格有效的JSON，结构必须符合：${JSON.stringify(schema)}`},{role:"user",content:input}],
       thinking:{type:"disabled"},
       response_format:{type:"json_object"},
-      temperature:0.82,
+      temperature:p.creativity === "稳定" ? 0.55 : p.creativity === "激进" ? 1.05 : 0.82,
       max_tokens:5000
     })
   });
@@ -424,10 +475,15 @@ ${p.referenceScript?.trim() ? `需要复刻其结构的爆款参考文案：\n${
   if (!response.ok) throw new Error(data.error?.message || "DeepSeek生成失败");
   const outputText = data.choices?.[0]?.message?.content;
   if (!outputText) throw new Error("DeepSeek没有返回有效脚本");
-  const generated = JSON.parse(outputText) as { title:string; framework:string; hook:string; alternateHooks:string[]; narration:string; scenes:Array<{time:string;visual:string;line:string;edit:string}> };
+  const generated = JSON.parse(outputText) as StructuredScript & { alternateHooks:string[]; scenes:Array<{time:string;visual:string;line:string;edit:string}> };
   if (!Array.isArray(generated.scenes) || generated.scenes.length < 8 || !generated.hook || !Array.isArray(generated.alternateHooks)) throw new Error("生成结果结构不完整");
   const narration = generated.scenes.map(scene => scene.line.trim()).filter(Boolean).join("\n");
-  return { title:`${p.product}｜${selectedFramework}`, product:p.product, language:p.language, country:p.country, style:p.style, hook:generated.scenes[0]?.line || generated.hook, alternateHooks:generated.alternateHooks.slice(0,2), narration, scenes:generated.scenes, aiGenerated:true };
+  const normalizedHook=(generated.scenes[0]?.line || generated.hook).toLowerCase();
+  const normalizedBody=narration.toLowerCase();
+  if(p.hookStrategy==="好奇"&&!/[?？]|por qué|adivina|mister|why|guess|为什么|猜|到底/.test(normalizedHook))throw new Error("AI未执行好奇Hook策略");
+  if(p.hookStrategy==="结果前置"&&!/resultado|result|segundo|second|秒|完成|无气泡|sin burbujas|cero/.test(normalizedHook))throw new Error("AI未执行结果前置策略");
+  if((p.creationMode==="KOC / UGC"||p.creationMode==="产品演示")&&/martillo|hacha|golpear|romper|hammer|axe|smash|砸碎|锤子|斧头|三款淘汰/.test(normalizedBody))throw new Error("AI未执行创作模式边界");
+  return normalizeStructuredScript({ ...generated, title:generated.title || `${p.product}｜${selectedFramework}`, product:p.product, language:p.language, country:p.country, style:p.style, hook:generated.scenes[0]?.line || generated.hook, alternateHooks:generated.alternateHooks.slice(0,2), narration, scenes:generated.scenes, aiGenerated:true }, p, p.creativeConcept);
 }
 export async function GET() {
   return Response.json({ scripts: [], aiConnected:Boolean(process.env.DEEPSEEK_API_KEY), provider:"DeepSeek V4 Pro" });
@@ -462,9 +518,22 @@ export async function POST(request: Request) {
     const p = body as Payload;
     if (!p.product?.trim() || !p.sellingPoints?.trim()) return Response.json({ error: "请填写产品名称和核心卖点。" }, { status: 400 });
     if (p.referenceScript !== undefined && p.referenceScript.trim().length < 30) return Response.json({ error: "请粘贴完整的爆款参考文案，至少30个字。" }, { status: 400 });
-    const recent = (p.recent ?? []).slice(0, 8);
-    const aiScript = await createAiScript(p, recent).catch(() => null);
-    const generated = aiScript ?? createDistinctLocalScript(p, recent);
-    return Response.json({ script: { ...generated, aiGenerated:Boolean(aiScript), id:Date.now(), createdAt:new Date().toISOString() } }, { status: 201 });
+    const recent = (p.recent ?? []).slice(0, 12);
+    if (Number(p.outputCount) === 5) {
+      const concepts=buildCreativeConcepts(p,5);
+      const scripts=await Promise.all(concepts.map((concept,index)=>generateOne({...p,creativeConcept:concept,nonce:Number(p.nonce??Date.now())+index*104729},recent)));
+      let diversity=assessDiversity(scripts);
+      let regenerated:number|null=null;
+      if(diversity.duplicateIndex!==null){
+        regenerated=diversity.duplicateIndex;
+        const concept={...concepts[regenerated],hookMechanism:`${concepts[regenerated].hookMechanism}；必须避开其它候选的开头句式与CTA`};
+        scripts[regenerated]=await generateOne({...p,creativeConcept:concept,nonce:Number(p.nonce??Date.now())+regenerated*104729+999983},[...recent,...scripts.filter((_,index)=>index!==regenerated)]);
+        concepts[regenerated]=concept;
+        diversity=assessDiversity(scripts);
+      }
+      return Response.json({scripts,concepts,diversity:{...diversity,regenerated}}, {status:201});
+    }
+    const generated=await generateOne(p,recent);
+    return Response.json({script:generated}, {status:201});
   } catch (error) { return Response.json({ error: error instanceof Error ? error.message : "生成失败" }, { status: 500 }); }
 }

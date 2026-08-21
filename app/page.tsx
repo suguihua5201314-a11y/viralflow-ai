@@ -10,11 +10,11 @@ import VoiceStudio from "./voice-studio";
 import AppShell from "./components/layout/app-shell";
 import Sidebar from "./components/layout/sidebar";
 import TopHeader from "./components/layout/top-header";
-import ScriptStudio from "./script-studio";
+import ScriptStudio, { type GenerationControls } from "./script-studio";
 import type { ActiveView } from "./navigation";
 
 type Scene = { time: string; visual: string; line: string; edit: string };
-type Script = { id?: number; title: string; product: string; language: string; country: string; style: string; hook: string; alternateHooks: string[]; narration: string; scenes: Scene[]; createdAt?: string; aiGenerated?: boolean };
+type Script = { id?: number; title: string; product: string; language: string; country: string; style: string; hook: string; alternateHooks: string[]; narration: string; scenes: Scene[]; createdAt?: string; aiGenerated?: boolean; creativeAngle?:string; hookType?:string; framework?:string; conflict?:string; productReveal?:string; proof?:string; sellingPoints?:string; cta?:string; shootingSuggestion?:string; scenario?:string; proofMechanism?:string; ctaStyle?:string };
 type ImportedHook = { url: string; market: string; hook: string; createdAt: string };
 type MonitorAccount = { id?: number; handle: string; market: string; product: string; url: string };
 type HookItem = { id: number; title: string; language: string; copy: string };
@@ -185,26 +185,27 @@ export default function Home() {
     finally { setAccountSaving(false); }
   }
 
-  async function generate() {
+  async function generate(controls:GenerationControls) {
     if (!inputReady || loading) return;
     setLoading(true); setError("");
     try {
-      const recent = history.filter(item => item.product === form.product && item.language === form.language).slice(0, 8).map(({title,hook,narration}) => ({title,hook,narration}));
-      const res = await fetch("/api/scripts", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ ...form, referenceScript: active === "replicate" ? referenceScript : undefined, recent, nonce: Date.now() + Math.random() }) });
+      const recent = history.filter(item => item.product === form.product && item.language === form.language).slice(0, 8).map(({title,hook,narration,creativeAngle}) => ({title,hook,narration,creativeAngle}));
+      const res = await fetch("/api/scripts", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ ...form, ...controls, outputCount:1, referenceScript: active === "replicate" ? referenceScript : undefined, recent, nonce: Date.now() + Math.random() }) });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "生成失败");
       const nextHistory = [data.script, ...history].slice(0, 100); setResult(data.script); setHistory(nextHistory); localStorage.setItem("viralcraft-history", JSON.stringify(nextHistory)); void syncTeam(currentTeamPayload({ history: nextHistory }));
     } catch (e) { setError(e instanceof Error ? e.message : "生成失败，请重试。"); }
     finally { setLoading(false); }
   }
-  async function generateRace() {
+  async function generateRace(controls:GenerationControls) {
     if (!inputReady || raceLoading) return;
     setRaceLoading(true); setError("");
     try {
-      const recent = history.slice(0, 12).map(({title,hook,narration}) => ({title,hook,narration}));
-      const raceFrameworks = ["失败救援反转","导演朋友神秘道具","评论区质疑实测","十秒安装挑战","视觉谜题反转"];
-      const requests = Array.from({ length: 5 }, (_, index) => fetch("/api/scripts", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ ...form, framework: form.framework === "智能随机" ? raceFrameworks[index] : form.framework, referenceScript: active === "replicate" ? referenceScript : undefined, recent, nonce: Date.now() + index * 104729 + Math.random() }) }).then(async res => { const data = await res.json(); if (!res.ok) throw new Error(data.error || "生成失败"); return data.script as Script; }));
-      const scripts = await Promise.all(requests); const nextHistory = [...scripts, ...history].slice(0, 100);
+      const recent = history.slice(0, 12).map(({title,hook,narration,creativeAngle}) => ({title,hook,narration,creativeAngle}));
+      const res=await fetch("/api/scripts",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({...form,...controls,outputCount:5,referenceScript:active==="replicate"?referenceScript:undefined,recent,nonce:Date.now()+Math.random()})});
+      const data=await res.json(); if(!res.ok)throw new Error(data.error||"生成失败");
+      const scripts=(data.scripts || (data.script?[data.script]:[])) as Script[]; if(scripts.length!==5)throw new Error("赛马生成结果不完整");
+      const nextHistory = [...scripts, ...history].slice(0, 100);
       setRaceResults(scripts); setResult(scripts[0]); setHistory(nextHistory); localStorage.setItem("viralcraft-history", JSON.stringify(nextHistory)); void syncTeam(currentTeamPayload({ history: nextHistory }));
     } catch (e) { setError(e instanceof Error ? e.message : "赛马稿生成失败"); }
     finally { setRaceLoading(false); }
