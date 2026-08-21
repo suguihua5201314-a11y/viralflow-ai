@@ -71,3 +71,49 @@ test("result-first validation accepts semantic result openings and rejects proce
     ],
   }),false);
 });
+
+test("knowledge context keeps facts, reference, compliance and bounded memory separated",async()=>{
+  const {buildKnowledgeContext,findFactViolations,renderKnowledgeContext}=await import(`../app/knowledge-context.ts?knowledge=${Date.now()}`);
+  const context=buildKnowledgeContext({
+    ...base,
+    productKnowledge:{name:base.product,brand:"Transformers",category:"钢化膜",sellingPoints:"10秒自动除尘安装；28°防窥；抗刮耐磨；电镀疏水疏油层",parameters:"左右28°防窥；一盒两片膜",bannedWords:"100%防爆；永不碎",markets:"西班牙、意大利",audience:base.audience,offer:base.offer,notes:"危险测试需在受控环境进行"},
+    sellingPointKnowledge:[{product:base.product,points:"自动对位；无灰尘无气泡"}],
+    referenceScript:"为什么普通钢化膜总有气泡？先展示失败，再连续安装，最后用同机位展示干净结果并自然提醒查看型号。",
+    recent:Array.from({length:10},(_,index)=>({title:`历史${index}`,hook:`这是历史使用过的旧Hook ${index}`,narration:"旧正文",creativeAngle:`角度${index}`,scenario:`场景${index}`,proofMechanism:`证明${index}`,cta:`CTA ${index}`,product:base.product,language:base.language})),
+    creativeConcept:{id:"D",creativeAngle:"生活反差",hookMechanism:"场景反差",scenario:"公共场合",conflict:"隐私暴露",proofMechanism:"侧面复测",sellingPointPriority:"隐私优先",ctaStyle:"场景提醒"},
+  });
+  assert.equal(context.metadata.productKnowledgeUsed,true);
+  assert.equal(context.metadata.viralReferenceUsed,true);
+  assert.equal(context.metadata.historyMemoryCount,6);
+  assert.equal(context.sellingPointPriority.primary,"电镀疏水疏油层");
+  assert.match(renderKnowledgeContext(context),/FACT LAYER \/ KNOWN FACTS/);
+  assert.deepEqual(findFactViolations("它拥有99%认证保护。",context),["使用了未提供的参数:99%"]);
+  assert.ok(findFactViolations("100%防爆，永不碎。",context).length>=2);
+  assert.ok(findFactViolations(context.viralReference.sourceExcerpt,context).includes("直接复制了爆款参考表达"));
+  assert.ok(findFactViolations("这是历史使用过的旧Hook 0，后面继续介绍产品。",context).includes("复用了近期历史Hook"));
+});
+
+test("knowledge engine assigns distinct selling-point priorities to five concepts",async()=>{
+  const {buildKnowledgeContext}=await import(`../app/knowledge-context.ts?priority=${Date.now()}`);
+  const {buildCreativeConcepts}=await import(`../app/script-generation.ts?concepts=${Date.now()}`);
+  const profile={name:base.product,sellingPoints:"10秒自动除尘安装；28°防窥；抗刮耐磨；电镀疏水疏油层；一盒两片膜",parameters:"左右28°防窥",bannedWords:"永不碎",markets:"西班牙",audience:base.audience,offer:base.offer};
+  const concepts=buildCreativeConcepts(base,5);
+  const priorities=concepts.map(creativeConcept=>buildKnowledgeContext({...base,productKnowledge:profile,creativeConcept}).sellingPointPriority.primary);
+  assert.equal(new Set(priorities).size,5);
+});
+
+test("scripts API returns safe knowledge metadata without requiring a knowledge profile",async()=>{
+  const worker=await loadWorker();
+  const withoutKnowledge=await generate(worker,{outputCount:1,nonce:505});
+  assert.equal(withoutKnowledge.knowledge.productKnowledgeUsed,false);
+  assert.equal(withoutKnowledge.knowledge.complianceKnowledgeUsed,true);
+  const withKnowledge=await generate(worker,{
+    outputCount:5,nonce:606,
+    productKnowledge:{name:base.product,sellingPoints:"10秒自动除尘安装；28°防窥；抗刮耐磨；电镀疏水疏油层；一盒两片膜",parameters:"左右28°防窥",bannedWords:"100%防爆；永不碎",markets:"西班牙",audience:base.audience,offer:base.offer},
+    sellingPointKnowledge:[{product:base.product,points:"自动对位；无灰尘无气泡"}],
+  });
+  assert.equal(withKnowledge.knowledge.productKnowledgeUsed,true);
+  assert.equal(withKnowledge.sellingPointPriorities.length,5);
+  assert.equal(new Set(withKnowledge.sellingPointPriorities.map(item=>item.primary)).size,5);
+  assert.equal("apiKey" in withKnowledge.knowledge,false);
+});

@@ -22,3 +22,10 @@ export function checkCompliance(text:string):ComplianceHit[] {
     .filter(term => normalized.includes(term.toLowerCase()))
     .map(term => ({ category:rule.category, riskType:rule.riskType, level:rule.level, term, suggestion:rule.suggestion, replacement:rule.replacement })));
 }
+
+export function getGenerationComplianceKnowledge() {
+  return {
+    highRiskExpressions:[...new Set(rules.filter(rule=>rule.level==="高").flatMap(rule=>rule.terms))],
+    platformConstraints:[...new Set(rules.map(rule=>`${rule.category}：${rule.suggestion}`))],
+  };
+}

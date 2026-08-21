@@ -89,6 +89,7 @@ export default function Home() {
   const [hookLibrary, setHookLibrary] = useState<HookItem[]>(() => { if (typeof window === "undefined") return starterHooks; try { const saved = JSON.parse(localStorage.getItem("susu-hook-library") || "null"); if (!Array.isArray(saved)) return starterHooks; const savedIds = new Set(saved.map((item:HookItem) => item.id)); return [...saved, ...starterHooks.filter(item => !savedIds.has(item.id))]; } catch { return starterHooks; } });
   const [pointLibrary, setPointLibrary] = useState<SellingPointItem[]>(() => { if (typeof window === "undefined") return starterPoints; try { const saved = JSON.parse(localStorage.getItem("susu-point-library") || "null"); return Array.isArray(saved) ? saved : starterPoints; } catch { return starterPoints; } });
   const [productProfiles, setProductProfiles] = useState<ProductProfile[]>(() => { if (typeof window === "undefined") return starterProducts; try { const saved = JSON.parse(localStorage.getItem("susu-product-center") || "null"); return Array.isArray(saved) && saved.length ? saved : starterProducts; } catch { return starterProducts; } });
+  const [selectedProductId,setSelectedProductId] = useState<number|null>(null);
   const emptyProductDraft = { name:"", brand:"", category:"", sellingPoints:"", parameters:"", bannedWords:"", markets:"西班牙", audience:"", price:"", offer:"", notes:"" };
   const [productDraft, setProductDraft] = useState(emptyProductDraft);
   const [editingProductId, setEditingProductId] = useState<number | null>(null);
@@ -168,7 +169,7 @@ export default function Home() {
   function addPointItem() { if (!pointDraft.product.trim() || !pointDraft.points.trim()) return; savePoints([{ id: Date.now(), product: pointDraft.product.trim(), points: pointDraft.points.trim() }, ...pointLibrary]); setPointDraft({ product: "", points: "" }); }
   function saveProductProfile() { if (!productDraft.name.trim() || !productDraft.sellingPoints.trim()) return; const item:ProductProfile = { id:editingProductId ?? Date.now(), ...productDraft, updatedAt:new Date().toISOString() }; saveProducts(editingProductId ? productProfiles.map(x => x.id === editingProductId ? item : x) : [item, ...productProfiles]); setEditingProductId(null); setProductDraft(emptyProductDraft); }
   function editProductProfile(item:ProductProfile) { const { id, updatedAt, ...draft } = item; void updatedAt; setEditingProductId(id); setProductDraft(draft); }
-  function applyProductProfile(item:ProductProfile) { setForm(prev => ({ ...prev, product:item.name, sellingPoints:[item.sellingPoints,item.parameters].filter(Boolean).join("；"), audience:item.audience || prev.audience, country:item.markets.split(/[、,，]/)[0]?.trim() || prev.country, offer:[item.offer,item.price].filter(Boolean).join("；") || prev.offer })); setActive("create"); }
+  function applyProductProfile(item:ProductProfile) { setSelectedProductId(item.id); setForm(prev => ({ ...prev, product:item.name, sellingPoints:[item.sellingPoints,item.parameters].filter(Boolean).join("；"), audience:item.audience || prev.audience, country:item.markets.split(/[、,，]/)[0]?.trim() || prev.country, offer:[item.offer,item.price].filter(Boolean).join("；") || prev.offer })); setActive("create"); }
   function addReviewRecord() { if (!reviewDraft.title.trim() || !reviewDraft.product.trim()) return; const item:ReviewRecord = { id:Date.now(), ...reviewDraft, createdAt:new Date().toISOString() }; saveReviews([item,...reviewRecords]); setReviewDraft(emptyReviewDraft); }
 
   async function addMonitorAccount() {
@@ -189,8 +190,10 @@ export default function Home() {
     if (!inputReady || loading) return;
     setLoading(true); setError("");
     try {
-      const recent = history.filter(item => item.product === form.product && item.language === form.language).slice(0, 8).map(({title,hook,narration,creativeAngle}) => ({title,hook,narration,creativeAngle}));
-      const res = await fetch("/api/scripts", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ ...form, ...controls, outputCount:1, referenceScript: active === "replicate" ? referenceScript : undefined, recent, nonce: Date.now() + Math.random() }) });
+      const recent = history.filter(item => item.product === form.product && item.language === form.language).slice(0, 6).map(({title,hook,narration,creativeAngle,scenario,proofMechanism,cta,product,language}) => ({title,hook,narration,creativeAngle,scenario,proofMechanism,cta,product,language}));
+      const productKnowledge=productProfiles.find(item=>item.id===selectedProductId&&item.name.trim().toLowerCase()===form.product.trim().toLowerCase());
+      const sellingPointKnowledge=pointLibrary.filter(item=>item.product.trim().toLowerCase()===form.product.trim().toLowerCase());
+      const res = await fetch("/api/scripts", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ ...form, ...controls, outputCount:1, productKnowledge, sellingPointKnowledge, referenceScript: active === "replicate" ? referenceScript : undefined, recent, nonce: Date.now() + Math.random() }) });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "生成失败");
       const nextHistory = [data.script, ...history].slice(0, 100); setResult(data.script); setHistory(nextHistory); localStorage.setItem("viralcraft-history", JSON.stringify(nextHistory)); void syncTeam(currentTeamPayload({ history: nextHistory }));
@@ -201,8 +204,10 @@ export default function Home() {
     if (!inputReady || raceLoading) return;
     setRaceLoading(true); setError("");
     try {
-      const recent = history.slice(0, 12).map(({title,hook,narration,creativeAngle}) => ({title,hook,narration,creativeAngle}));
-      const res=await fetch("/api/scripts",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({...form,...controls,outputCount:5,referenceScript:active==="replicate"?referenceScript:undefined,recent,nonce:Date.now()+Math.random()})});
+      const recent = history.filter(item=>item.product===form.product&&item.language===form.language).slice(0,6).map(({title,hook,narration,creativeAngle,scenario,proofMechanism,cta,product,language}) => ({title,hook,narration,creativeAngle,scenario,proofMechanism,cta,product,language}));
+      const productKnowledge=productProfiles.find(item=>item.id===selectedProductId&&item.name.trim().toLowerCase()===form.product.trim().toLowerCase());
+      const sellingPointKnowledge=pointLibrary.filter(item=>item.product.trim().toLowerCase()===form.product.trim().toLowerCase());
+      const res=await fetch("/api/scripts",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({...form,...controls,outputCount:5,productKnowledge,sellingPointKnowledge,referenceScript:active==="replicate"?referenceScript:undefined,recent,nonce:Date.now()+Math.random()})});
       const data=await res.json(); if(!res.ok)throw new Error(data.error||"生成失败");
       const scripts=(data.scripts || (data.script?[data.script]:[])) as Script[]; if(scripts.length!==5)throw new Error("赛马生成结果不完整");
       const nextHistory = [...scripts, ...history].slice(0, 100);
@@ -210,7 +215,7 @@ export default function Home() {
     } catch (e) { setError(e instanceof Error ? e.message : "赛马稿生成失败"); }
     finally { setRaceLoading(false); }
   }
-  function update(key: keyof typeof form, value: string) { setForm(prev => ({ ...prev, [key]: value })); }
+  function update(key: keyof typeof form, value: string) { if(key==="product"&&productProfiles.find(item=>item.id===selectedProductId)?.name!==value)setSelectedProductId(null); setForm(prev => ({ ...prev, [key]: value })); }
   function saveScriptVersion(script: Script) {
     const saved: Script = {
       ...script,

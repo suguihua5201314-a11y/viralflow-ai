@@ -1,15 +1,17 @@
 import { frameworkCatalog } from "../../frameworks";
 import { assessDiversity, buildCreativeConcepts, buildStrategyDirectives, followsResultFirstIntent, normalizeStructuredScript, type CreativeConcept, type StructuredScript } from "../../script-generation";
+import { buildKnowledgeContext, findFactViolations, renderKnowledgeContext, type MemoryScript, type ProductKnowledge, type SellingPointKnowledge } from "../../knowledge-context";
+import { getGenerationComplianceKnowledge } from "../../compliance-rules";
 import { CloudflareStorageUnavailableError } from "../../../db/cloudflare-runtime";
 import { runTeamDataAction } from "../../team-data-adapter";
 
 export const runtime="nodejs";
 
-type RecentScript = { title:string; hook:string; narration:string; creativeAngle?:string };
-type Payload = { product: string; sellingPoints: string; audience: string; country: string; language: string; style: string; framework?: string; duration: string; offer: string; referenceScript?: string; nonce?: number; recent?: RecentScript[]; platform?:string; additionalRequirements?:string; creationMode?:string; hookStrategy?:string; creativity?:string; outputCount?:number; creativeConcept?:CreativeConcept };
+type RecentScript = MemoryScript;
+type Payload = { product: string; sellingPoints: string; audience: string; country: string; language: string; style: string; framework?: string; duration: string; offer: string; referenceScript?: string; nonce?: number; recent?: RecentScript[]; platform?:string; additionalRequirements?:string; creationMode?:string; hookStrategy?:string; creativity?:string; outputCount?:number; creativeConcept?:CreativeConcept; productKnowledge?:ProductKnowledge; sellingPointKnowledge?:SellingPointKnowledge[] };
 type Pack = { hooks: string[]; intros: string[]; proofs: string[]; demos: string[]; benefits: string[]; ctas: string[] };
 
-type ProviderErrorCategory = "provider_http_error"|"json_parse_error"|"schema_validation_error"|"timeout"|"empty_result"|"structured_fields_missing"|"strategy_validation_error";
+type ProviderErrorCategory = "provider_http_error"|"json_parse_error"|"schema_validation_error"|"timeout"|"empty_result"|"structured_fields_missing"|"strategy_validation_error"|"fact_validation_error";
 class ProviderGenerationError extends Error {
   constructor(public category:ProviderErrorCategory,message:string,public status?:number){super(message);this.name="ProviderGenerationError";}
 }
@@ -20,6 +22,9 @@ function providerError(error:unknown) {
 }
 function logProviderFallback(error:ProviderGenerationError,p:Payload,attempt:number) {
   console.warn("[scripts.provider.fallback]",JSON.stringify({category:error.category,status:error.status,attempt,conceptId:p.creativeConcept?.id??null,creationMode:p.creationMode??null,hookStrategy:p.hookStrategy??null,framework:p.framework??null}));
+}
+function buildRequestKnowledge(p:Payload,recent:RecentScript[],creativeConcept=p.creativeConcept) {
+  return buildKnowledgeContext({...p,recent,creativeConcept,complianceKnowledge:getGenerationComplianceKnowledge()});
 }
 
 function localized(p: Payload) {
@@ -352,7 +357,7 @@ function createScript(p: Payload, avoidHooks: string[] = [], avoidTitles: string
 
 function similarity(a:string,b:string){const clean=(s:string)=>s.toLowerCase().replace(/[\s\p{P}\p{S}]/gu,"");const x=clean(a),y=clean(b);if(!x||!y)return 0;const grams=(s:string)=>{const set=new Set<string>();for(let i=0;i<Math.max(1,s.length-2);i++)set.add(s.slice(i,i+3));return set};const ax=grams(x),by=grams(y);let same=0;for(const g of ax)if(by.has(g))same++;return same/Math.max(1,Math.min(ax.size,by.size))}
 
-function createDistinctLocalScript(p:Payload,recent:RecentScript[]){let best=createScript(p,recent.map(x=>x.hook),recent.map(x=>x.title),[]),bestScore=1;for(let attempt=0;attempt<12;attempt++){const candidate=createScript({...p,nonce:Number(p.nonce??Date.now())+attempt*104729},recent.map(x=>x.hook),recent.map(x=>x.title),[]);const score=recent.length?Math.max(...recent.map(x=>similarity(candidate.narration,x.narration))):0;if(score<bestScore){best=candidate;bestScore=score}if(score<.48)break}return best}
+function createDistinctLocalScript(p:Payload,recent:RecentScript[]){let best=createScript(p,recent.map(x=>x.hook),recent.map(x=>x.title),[]),bestScore=1;for(let attempt=0;attempt<12;attempt++){const candidate=createScript({...p,nonce:Number(p.nonce??Date.now())+attempt*104729},recent.map(x=>x.hook),recent.map(x=>x.title),[]);const score=recent.length?Math.max(...recent.map(x=>similarity(candidate.narration,x.narration||""))):0;if(score<bestScore){best=candidate;bestScore=score}if(score<.48)break}return best}
 
 function localStrategyPayload(p:Payload):Payload {
   const modeStyle:Record<string,string>={"KOC / UGC":"真实KOC种草",测评:"强冲突测评",强冲突:"强冲突测评",Storytelling:"导演朋友的新玩具",产品演示:"痛点解决"};
@@ -393,7 +398,7 @@ async function generateOne(p:Payload,recent:RecentScript[]) {
       try{aiScript=await createAiScript(p,recent);break;}
       catch(error){
         const classified=providerError(error); fallbackCategory=classified.category; logProviderFallback(classified,p,attempt);
-        const retryable=classified.category==="provider_http_error"&&(classified.status===429||Boolean(classified.status&&classified.status>=500))||classified.category==="timeout";
+        const retryable=classified.category==="provider_http_error"&&(classified.status===429||Boolean(classified.status&&classified.status>=500))||classified.category==="timeout"||classified.category==="fact_validation_error";
         if(!retryable||attempt===2)break;
         await new Promise(resolve=>setTimeout(resolve,350*attempt));
       }
@@ -405,7 +410,7 @@ async function generateOne(p:Payload,recent:RecentScript[]) {
   return {...generated,aiGenerated:Boolean(aiScript),providerFallbackCategory:aiScript?undefined:fallbackCategory,id:Date.now()+Math.floor(Math.random()*1000),createdAt:new Date().toISOString()};
 }
 
-async function createAiScript(p: Payload, recent: Array<{ title:string; hook:string; narration:string }>) {
+async function createAiScript(p: Payload, recent: RecentScript[]) {
   const apiKey = process.env.DEEPSEEK_API_KEY;
   if (!apiKey) return null;
   const seed = Number(p.nonce ?? Date.now());
@@ -423,7 +428,8 @@ async function createAiScript(p: Payload, recent: Array<{ title:string; hook:str
     生活事故救场:"手机在真实生活场景遭遇意外首帧→旧保护方式暴露问题→新品登场→安装与针对性验证→回到同类意外复测→结果特写→优惠CTA",
     视觉谜题反转:"一个看不懂但强烈的画面首帧→给一个错误猜测→三秒内揭晓产品用途→安装操作→卖点证据→谜题答案回扣→优惠CTA"
   };
-  const recentText = recent.length ? recent.slice(0,8).map((item,index) => `${index + 1}. ${item.title}｜${item.hook}`).join("\n") : "暂无历史钩子";
+  const knowledgeContext=buildRequestKnowledge(p,recent);
+  const knowledgePrompt=renderKnowledgeContext(knowledgeContext);
   const strategyDirectives = buildStrategyDirectives(p, p.creativeConcept);
   const replicationRules = p.referenceScript?.trim() ? `\n这是“爆款复刻”任务。先在内部拆解参考文案的钩子机制、信息顺序、短句节奏、测试动作、悬念位置和成交方式，再用用户当前产品重新创作。保留的是抽象结构与节奏，不得连续照抄参考文案中的原句，不得保留不属于当前产品的品牌、参数、优惠或测试结论。新脚本必须让人看出是同一种爆款框架，但文案和镜头是新的。` : "";
   const instructions = `你是短视频商业创意编导。你要写一条从头到尾服从同一个创意概念的完整脚本，不是“随机开头＋固定产品介绍”。${replicationRules}
@@ -444,7 +450,9 @@ async function createAiScript(p: Payload, recent: Array<{ title:string; hook:str
 11. visual写具体场景、道具、手部/人物动作、机位和结果；edit只写必要节奏与音效。
 12. 不解释创作过程，只输出严格有效JSON。所有策略必须反映在实际内容中，不能只写入字段名。
 
-${strategyDirectives}`;
+${strategyDirectives}
+
+${knowledgePrompt}`;
   const modeBoundary = p.creationMode === "KOC / UGC" ? "KOC / UGC 禁止使用竞品砸碎、暴力擂台、三款淘汰赛或硬促销作为默认剧情；必须从个人真实经历或日常场景自然分享。" : p.creationMode === "产品演示" ? "产品演示禁止把竞品破坏测试当主线；必须先拍动作与结果，让文案解释画面。" : p.creationMode === "强冲突" ? "强冲突必须在前三秒明确展示两种结果或两方立场的对撞，中段完成反转与证据。" : "";
   const input = `请创作一条全新TikTok带货脚本。
 产品：${p.product}
@@ -464,10 +472,7 @@ Hook Strategy：${p.hookStrategy || "好奇"}
 Creativity：${p.creativity || "平衡"}
 模式边界：${modeBoundary || "按所选模式执行，不套用其它模式的固定剧情。"}
 
-最近使用过的钩子（只需避开原句，不要受它们的结构影响）：
-${recentText}
-
-${p.referenceScript?.trim() ? `需要复刻其结构的爆款参考文案：\n${p.referenceScript.trim()}` : "本次没有参考文案，请按指定框架原创。"}`;
+本次知识上下文已经在系统约束中分层提供。严格以 FACT LAYER 为事实边界，以 SELLING POINT PRIORITY 控制本条内容重点。`;
   const schema = {
     type:"object", additionalProperties:false,
     properties:{
@@ -521,6 +526,8 @@ ${p.referenceScript?.trim() ? `需要复刻其结构的爆款参考文案：\n${
   const narration = generated.scenes.map(scene => scene.line.trim()).filter(Boolean).join("\n");
   const normalizedHook=(generated.scenes[0]?.line || generated.hook).toLowerCase();
   const normalizedBody=narration.toLowerCase();
+  const factViolations=findFactViolations(narration,knowledgeContext);
+  if(factViolations.length)throw new ProviderGenerationError("fact_validation_error",`Provider生成了${factViolations.length}项越界事实`);
   if(p.hookStrategy==="好奇"&&!/[?？]|por qué|adivina|mister|why|guess|为什么|猜|到底/.test(normalizedHook))throw new ProviderGenerationError("strategy_validation_error","Provider未执行好奇Hook策略");
   if(p.hookStrategy==="结果前置"&&!followsResultFirstIntent({hook:generated.hook,scenes:generated.scenes}))throw new ProviderGenerationError("strategy_validation_error","Provider未执行结果前置策略");
   if((p.creationMode==="KOC / UGC"||p.creationMode==="产品演示")&&/martillo|hacha|golpear|romper|hammer|axe|smash|砸碎|锤子|斧头|三款淘汰/.test(normalizedBody))throw new ProviderGenerationError("strategy_validation_error","Provider未执行创作模式边界");
@@ -553,23 +560,36 @@ export async function POST(request: Request) {
     const p = body as Payload;
     if (!p.product?.trim() || !p.sellingPoints?.trim()) return Response.json({ error: "请填写产品名称和核心卖点。" }, { status: 400 });
     if (p.referenceScript !== undefined && p.referenceScript.trim().length < 30) return Response.json({ error: "请粘贴完整的爆款参考文案，至少30个字。" }, { status: 400 });
-    const recent = (p.recent ?? []).slice(0, 12);
+    const recent = (p.recent ?? []).slice(0, 6);
     if (Number(p.outputCount) === 5) {
       const concepts=buildCreativeConcepts(p,5);
       const scripts=[];
-      for(let index=0;index<concepts.length;index++)scripts.push(await generateOne({...p,creativeConcept:concepts[index],nonce:Number(p.nonce??Date.now())+index*104729},recent));
+      const priorities=[];
+      for(let index=0;index<concepts.length;index++){
+        const context=buildRequestKnowledge(p,recent,concepts[index]);
+        const priority=context.sellingPointPriority;
+        concepts[index]={...concepts[index],sellingPointPriority:[priority.primary,...priority.secondary].filter(Boolean).join(" → ")};
+        priorities.push({id:concepts[index].id,...priority});
+        scripts.push(await generateOne({...p,sellingPoints:[priority.primary,...priority.secondary].filter(Boolean).join("；")||p.sellingPoints,creativeConcept:concepts[index],nonce:Number(p.nonce??Date.now())+index*104729},recent));
+      }
       let diversity=assessDiversity(scripts);
       let regenerated:number|null=null;
       if(diversity.duplicateIndex!==null){
         regenerated=diversity.duplicateIndex;
         const concept={...concepts[regenerated],creativeAngle:`${concepts[regenerated].creativeAngle} · 差异重写`,scenario:`${concepts[regenerated].scenario}；改用与其它候选不同的地点和道具`,hookMechanism:`${concepts[regenerated].hookMechanism}；避开其它候选的开头句式`,proofMechanism:`${concepts[regenerated].proofMechanism}；必须更换证明动作、镜头顺序与证据组合`,ctaStyle:`${concepts[regenerated].ctaStyle}；不得复用其它候选CTA句式`};
-        scripts[regenerated]=await generateOne({...p,creativeConcept:concept,nonce:Number(p.nonce??Date.now())+regenerated*104729+999983},[...recent,...scripts.filter((_,index)=>index!==regenerated)]);
+        const regeneratedContext=buildRequestKnowledge(p,recent,concept);
+        const regeneratedPriority=regeneratedContext.sellingPointPriority;
+        priorities[regenerated]={id:concept.id,...regeneratedPriority};
+        scripts[regenerated]=await generateOne({...p,sellingPoints:[regeneratedPriority.primary,...regeneratedPriority.secondary].filter(Boolean).join("；")||p.sellingPoints,creativeConcept:concept,nonce:Number(p.nonce??Date.now())+regenerated*104729+999983},[...recent,...scripts.filter((_,index)=>index!==regenerated)]);
         concepts[regenerated]=concept;
         diversity=assessDiversity(scripts);
       }
-      return Response.json({scripts,concepts,diversity:{...diversity,regenerated}}, {status:201});
+      const metadata=buildRequestKnowledge(p,recent).metadata;
+      return Response.json({scripts,concepts,sellingPointPriorities:priorities,knowledge:metadata,diversity:{...diversity,regenerated}}, {status:201});
     }
-    const generated=await generateOne(p,recent);
-    return Response.json({script:generated}, {status:201});
+    const context=buildRequestKnowledge(p,recent);
+    const priority=context.sellingPointPriority;
+    const generated=await generateOne({...p,sellingPoints:[priority.primary,...priority.secondary].filter(Boolean).join("；")||p.sellingPoints},recent);
+    return Response.json({script:generated,knowledge:context.metadata,sellingPointPriority:priority}, {status:201});
   } catch (error) { return Response.json({ error: error instanceof Error ? error.message : "生成失败" }, { status: 500 }); }
 }
