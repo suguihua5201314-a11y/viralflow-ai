@@ -145,17 +145,27 @@ export function findFactViolations(text:string,context:KnowledgeContext) {
   for(const claim of claims)if(!normalizedFacts.includes(normalize(claim)))violations.push(`使用了未提供的参数:${claim}`);
   const wordWindows=(value:string)=>{
     const words=value.toLowerCase().match(/[a-záéíóúüñ0-9]+/gi)||[];
-    return words.length>=9?Array.from({length:words.length-8},(_,index)=>words.slice(index,index+9).join(" ")):[];
+    return words.length>=8?Array.from({length:words.length-7},(_,index)=>words.slice(index,index+8).join(" ")):[];
   };
   if(context.viralReference){
     const source=context.viralReference.sourceExcerpt;
     const copiedWords=wordWindows(source).some(window=>text.toLowerCase().includes(window));
-    const words=(value:string)=>new Set(value.toLowerCase().match(/[a-záéíóúüñ0-9]+/gi)||[]);
+    const tokens=(value:string)=>value.toLowerCase().match(/[a-záéíóúüñ0-9]+/gi)||[];
     const sourceHook=source.split(/(?<=[.!?？。！])|\n/)[0]||source;
     const targetHook=text.split(/\n|(?<=[.!?？。！])/)[0]||text;
-    const sourceHookWords=words(sourceHook),targetHookWords=words(targetHook);
-    let sharedHookWords=0;for(const word of sourceHookWords)if(targetHookWords.has(word))sharedHookWords++;
-    const copiedHook=Math.min(sourceHookWords.size,targetHookWords.size)>=7&&sharedHookWords/Math.min(sourceHookWords.size,targetHookWords.size)>=.82;
+    const sourceHookTokens=tokens(sourceHook),targetHookTokens=tokens(targetHook);
+    const bigrams=(items:string[])=>new Set(items.slice(0,-1).map((word,index)=>`${word} ${items[index+1]}`));
+    const sourceBigrams=bigrams(sourceHookTokens),targetBigrams=bigrams(targetHookTokens);
+    let sharedBigrams=0;for(const pair of sourceBigrams)if(targetBigrams.has(pair))sharedBigrams++;
+    const orderedSimilarity=(2*sharedBigrams)/Math.max(1,sourceBigrams.size+targetBigrams.size);
+    const lengthRatio=Math.min(sourceHookTokens.length,targetHookTokens.length)/Math.max(1,Math.max(sourceHookTokens.length,targetHookTokens.length));
+    const stopWords=new Set(["a","al","de","del","el","en","es","la","las","lo","los","me","mi","por","que","qué","se","si","su","te","tu","un","una","y","the","a","an","is","it","in","on","of","to","you","your","why","what","this","that"]);
+    const contentTokens=(items:string[])=>items.filter(word=>!stopWords.has(word));
+    const sourceContent=contentTokens(sourceHookTokens),targetContent=contentTokens(targetHookTokens);
+    const targetContentSet=new Set(targetContent);
+    const sharedContent=[...new Set(sourceContent)].filter(word=>targetContentSet.has(word)).length;
+    const contentOverlap=sharedContent/Math.max(1,Math.min(new Set(sourceContent).size,new Set(targetContent).size));
+    const copiedHook=Math.min(sourceHookTokens.length,targetHookTokens.length)>=7&&lengthRatio>=.72&&(orderedSimilarity>=.68||(Math.min(sourceContent.length,targetContent.length)>=4&&sharedContent>=3&&contentOverlap>=.5));
     const sourceCompact=normalize(source),targetCompact=normalize(text);
     const copiedChars=/[\u3400-\u9fff]/u.test(source)&&sourceCompact.length>=24&&Array.from({length:sourceCompact.length-23},(_,index)=>sourceCompact.slice(index,index+24)).some(window=>targetCompact.includes(window));
     if(copiedWords||copiedHook||copiedChars)violations.push("直接复制了爆款参考表达");

@@ -1,5 +1,5 @@
 import { frameworkCatalog } from "../../frameworks";
-import { assessDiversity, buildCreativeConcepts, buildStrategyDirectives, followsResultFirstIntent, normalizeStructuredScript, type CreativeConcept, type StructuredScript } from "../../script-generation";
+import { buildCreativeConcepts, buildStrategyDirectives, normalizeStructuredScript, runDiversityRetries, validateStrategyIntent, type CreativeConcept, type StructuredScript } from "../../script-generation";
 import { buildKnowledgeContext, findFactViolations, renderKnowledgeContext, type MemoryScript, type ProductKnowledge, type SellingPointKnowledge } from "../../knowledge-context";
 import { getGenerationComplianceKnowledge } from "../../compliance-rules";
 import { CloudflareStorageUnavailableError } from "../../../db/cloudflare-runtime";
@@ -13,7 +13,7 @@ type Pack = { hooks: string[]; intros: string[]; proofs: string[]; demos: string
 
 type ProviderErrorCategory = "provider_http_error"|"json_parse_error"|"schema_validation_error"|"timeout"|"empty_result"|"structured_fields_missing"|"strategy_validation_error"|"fact_validation_error";
 class ProviderGenerationError extends Error {
-  constructor(public category:ProviderErrorCategory,message:string,public status?:number){super(message);this.name="ProviderGenerationError";}
+  constructor(public category:ProviderErrorCategory,message:string,public status?:number,public safeDetails?:string[]){super(message);this.name="ProviderGenerationError";}
 }
 function providerError(error:unknown) {
   if(error instanceof ProviderGenerationError)return error;
@@ -21,7 +21,7 @@ function providerError(error:unknown) {
   return new ProviderGenerationError("schema_validation_error","Provider返回未通过校验");
 }
 function logProviderFallback(error:ProviderGenerationError,p:Payload,attempt:number) {
-  console.warn("[scripts.provider.fallback]",JSON.stringify({category:error.category,status:error.status,attempt,conceptId:p.creativeConcept?.id??null,creationMode:p.creationMode??null,hookStrategy:p.hookStrategy??null,framework:p.framework??null}));
+  console.warn("[scripts.provider.fallback]",JSON.stringify({category:error.category,status:error.status,details:error.safeDetails,attempt,conceptId:p.creativeConcept?.id??null,creationMode:p.creationMode??null,hookStrategy:p.hookStrategy??null,framework:p.framework??null}));
 }
 function buildRequestKnowledge(p:Payload,recent:RecentScript[],creativeConcept=p.creativeConcept) {
   return buildKnowledgeContext({...p,recent,creativeConcept,complianceKnowledge:getGenerationComplianceKnowledge()});
@@ -395,10 +395,16 @@ async function generateOne(p:Payload,recent:RecentScript[]) {
   let fallbackCategory:ProviderErrorCategory|undefined;
   if(process.env.DEEPSEEK_API_KEY){
     for(let attempt=1;attempt<=2;attempt++){
-      try{aiScript=await createAiScript(p,recent);break;}
+      const retryGuidance=attempt===1?"":fallbackCategory==="fact_validation_error"
+        ?"上一版触发了事实或参考边界。保留参考的信息顺序，但必须更换Hook的核心词、主语、具体问题和首帧画面；不得对参考Hook做近义改写，也不得新增事实。"
+        :fallbackCategory==="strategy_validation_error"
+          ?"上一版没有清晰执行策略。保持产品事实不变，用新的表达明确呈现本次Hook机制和创作模式。"
+          :"上一版未通过结构校验。重新输出完整且严格符合Schema的脚本。";
+      const attemptPayload=retryGuidance?{...p,additionalRequirements:[p.additionalRequirements,retryGuidance].filter(Boolean).join("\n")}:p;
+      try{aiScript=await createAiScript(attemptPayload,recent);break;}
       catch(error){
         const classified=providerError(error); fallbackCategory=classified.category; logProviderFallback(classified,p,attempt);
-        const retryable=classified.category==="provider_http_error"&&(classified.status===429||Boolean(classified.status&&classified.status>=500))||classified.category==="timeout"||classified.category==="fact_validation_error";
+        const retryable=classified.category==="provider_http_error"&&(classified.status===429||Boolean(classified.status&&classified.status>=500))||classified.category==="timeout"||classified.category==="fact_validation_error"||classified.category==="strategy_validation_error";
         if(!retryable||attempt===2)break;
         await new Promise(resolve=>setTimeout(resolve,350*attempt));
       }
@@ -524,13 +530,13 @@ Creativity：${p.creativity || "平衡"}
   if(missingFields.length)throw new ProviderGenerationError("structured_fields_missing",`Provider缺少${missingFields.length}个结构化字段`);
   if(generated.scenes.length<6||generated.scenes.some(scene=>![scene.time,scene.visual,scene.line,scene.edit].every(value=>typeof value==="string"&&value.trim())))throw new ProviderGenerationError("schema_validation_error","Provider镜头结构无效");
   const narration = generated.scenes.map(scene => scene.line.trim()).filter(Boolean).join("\n");
-  const normalizedHook=(generated.scenes[0]?.line || generated.hook).toLowerCase();
-  const normalizedBody=narration.toLowerCase();
   const factViolations=findFactViolations(narration,knowledgeContext);
-  if(factViolations.length)throw new ProviderGenerationError("fact_validation_error",`Provider生成了${factViolations.length}项越界事实`);
-  if(p.hookStrategy==="好奇"&&!/[?？]|por qué|adivina|mister|why|guess|为什么|猜|到底/.test(normalizedHook))throw new ProviderGenerationError("strategy_validation_error","Provider未执行好奇Hook策略");
-  if(p.hookStrategy==="结果前置"&&!followsResultFirstIntent({hook:generated.hook,scenes:generated.scenes}))throw new ProviderGenerationError("strategy_validation_error","Provider未执行结果前置策略");
-  if((p.creationMode==="KOC / UGC"||p.creationMode==="产品演示")&&/martillo|hacha|golpear|romper|hammer|axe|smash|砸碎|锤子|斧头|三款淘汰/.test(normalizedBody))throw new ProviderGenerationError("strategy_validation_error","Provider未执行创作模式边界");
+  if(factViolations.length){
+    const safeDetails=[...new Set(factViolations.map(item=>item.startsWith("直接复制")?"viral_reference_copy":item.startsWith("复用了近期")?"history_hook_reuse":item.startsWith("使用了未提供的参数")?"unsupported_numeric_claim":item.startsWith("使用了未提供的认证")?"unsupported_certification":item.startsWith("命中产品禁用")?"banned_expression":"fact_boundary"))];
+    throw new ProviderGenerationError("fact_validation_error",`Provider生成了${factViolations.length}项越界事实`,undefined,safeDetails);
+  }
+  const strategyViolations=validateStrategyIntent({hook:generated.hook,scenes:generated.scenes,creationMode:p.creationMode,hookStrategy:p.hookStrategy});
+  if(strategyViolations.length)throw new ProviderGenerationError("strategy_validation_error",`Provider未执行策略意图:${strategyViolations.join("；")}`);
   return normalizeStructuredScript({ ...generated, title:generated.title || `${p.product}｜${selectedFramework}`, product:p.product, language:p.language, country:p.country, style:p.style, hook:generated.scenes[0]?.line || generated.hook, alternateHooks:generated.alternateHooks.slice(0,2), narration, scenes:generated.scenes, aiGenerated:true }, p, p.creativeConcept);
 }
 export async function GET() {
@@ -572,20 +578,17 @@ export async function POST(request: Request) {
         priorities.push({id:concepts[index].id,...priority});
         scripts.push(await generateOne({...p,sellingPoints:[priority.primary,...priority.secondary].filter(Boolean).join("；")||p.sellingPoints,creativeConcept:concepts[index],nonce:Number(p.nonce??Date.now())+index*104729},recent));
       }
-      let diversity=assessDiversity(scripts);
-      let regenerated:number|null=null;
-      if(diversity.duplicateIndex!==null){
-        regenerated=diversity.duplicateIndex;
-        const concept={...concepts[regenerated],creativeAngle:`${concepts[regenerated].creativeAngle} · 差异重写`,scenario:`${concepts[regenerated].scenario}；改用与其它候选不同的地点和道具`,hookMechanism:`${concepts[regenerated].hookMechanism}；避开其它候选的开头句式`,proofMechanism:`${concepts[regenerated].proofMechanism}；必须更换证明动作、镜头顺序与证据组合`,ctaStyle:`${concepts[regenerated].ctaStyle}；不得复用其它候选CTA句式`};
+      const retryResult=await runDiversityRetries(scripts,async(regenerated,attempt,currentScripts)=>{
+        const concept={...concepts[regenerated],creativeAngle:`${concepts[regenerated].creativeAngle} · 差异重写${attempt}`,scenario:`${concepts[regenerated].scenario}；第${attempt}次改用与其它候选不同的地点和道具`,hookMechanism:`${concepts[regenerated].hookMechanism}；第${attempt}次避开其它候选的开头句式`,proofMechanism:`${concepts[regenerated].proofMechanism}；第${attempt}次必须更换证明动作、镜头顺序与证据组合`,ctaStyle:`${concepts[regenerated].ctaStyle}；不得复用其它候选CTA句式`};
         const regeneratedContext=buildRequestKnowledge(p,recent,concept);
         const regeneratedPriority=regeneratedContext.sellingPointPriority;
         priorities[regenerated]={id:concept.id,...regeneratedPriority};
-        scripts[regenerated]=await generateOne({...p,sellingPoints:[regeneratedPriority.primary,...regeneratedPriority.secondary].filter(Boolean).join("；")||p.sellingPoints,creativeConcept:concept,nonce:Number(p.nonce??Date.now())+regenerated*104729+999983},[...recent,...scripts.filter((_,index)=>index!==regenerated)]);
+        const replacement=await generateOne({...p,sellingPoints:[regeneratedPriority.primary,...regeneratedPriority.secondary].filter(Boolean).join("；")||p.sellingPoints,creativeConcept:concept,nonce:Number(p.nonce??Date.now())+regenerated*104729+attempt*999983},[...recent,...currentScripts.filter((_,index)=>index!==regenerated)]);
         concepts[regenerated]=concept;
-        diversity=assessDiversity(scripts);
-      }
+        return replacement;
+      },2);
       const metadata=buildRequestKnowledge(p,recent).metadata;
-      return Response.json({scripts,concepts,sellingPointPriorities:priorities,knowledge:metadata,diversity:{...diversity,regenerated}}, {status:201});
+      return Response.json({scripts:retryResult.scripts,concepts,sellingPointPriorities:priorities,knowledge:metadata,diversity:retryResult.diversity}, {status:201});
     }
     const context=buildRequestKnowledge(p,recent);
     const priority=context.sellingPointPriority;

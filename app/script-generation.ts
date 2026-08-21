@@ -49,6 +49,35 @@ export function followsResultFirstIntent(input:{hook?:string;scenes?:StrategySce
   return opensWithResult&&!opensWithProcess&&explainsAfterward;
 }
 
+const curiosityMeaning = /[?？]|por qué|qu[eé]\s+(?:pasa|ocurre|es|hace)|adivina|mister|secreto|pista|why|what\s+(?:happens|is|makes)|guess|mystery|secret|为什么|怎么会|猜|到底|秘密|关键/iu;
+const destructiveMeaning = /martillo|hacha|golpear|romper|destroz|hammer|axe|smash|砸碎|锤子|斧头|暴力测试/giu;
+
+export function validateStrategyIntent(input:{
+  hook?:string;
+  scenes?:StrategyScene[];
+  creationMode?:string;
+  hookStrategy?:string;
+}) {
+  const scenes=input.scenes ?? [];
+  const hook=[input.hook,scenes[0]?.line,scenes[0]?.visual].filter(Boolean).join(" ");
+  const opening=scenes.slice(0,2).flatMap(scene=>[scene.line,scene.visual]).filter(Boolean).join(" ");
+  const body=scenes.flatMap(scene=>[scene.line,scene.visual]).filter(Boolean).join(" ");
+  const violations:string[]=[];
+  const genericIntroduction=/^(?:hoy\s+)?(?:te\s+)?(?:presento|presentamos|voy\s+a\s+(?:presentar|hablar)|today\s+(?:i(?:'m| am)\s+)?(?:introduce|talk)|今天(?:给大家)?(?:介绍|讲)|这(?:是|款)\S*(?:产品|钢化膜))/iu.test((input.hook||scenes[0]?.line||"").trim());
+  const deferredReveal=scenes.length>=2&&!genericIntroduction&&Boolean(scenes[0]?.line?.trim()||scenes[0]?.visual?.trim())&&Boolean(scenes[1]?.line?.trim()||scenes[1]?.visual?.trim());
+  if(input.hookStrategy==="好奇"&&!curiosityMeaning.test(hook)&&!deferredReveal)violations.push("好奇Hook缺少信息缺口或待回答问题");
+  if(input.hookStrategy==="结果前置"&&!followsResultFirstIntent({hook:input.hook,scenes}))violations.push("结果未在过程解释前出现");
+  if(input.creationMode==="KOC / UGC"||input.creationMode==="产品演示"){
+    const openingDestructive=(opening.match(destructiveMeaning)||[]).length;
+    destructiveMeaning.lastIndex=0;
+    const bodyDestructive=(body.match(destructiveMeaning)||[]).length;
+    destructiveMeaning.lastIndex=0;
+    // Later proof actions are allowed; only a destructive opening or a repeated destructive-test mainline breaks these modes.
+    if(openingDestructive>0||bodyDestructive>=3)violations.push("创作模式被破坏测试主线覆盖");
+  }
+  return violations;
+}
+
 const conceptTemplates = [
   { angle:"失败救援", scenario:"真实用户第一次操作的桌面场景", conflict:"旧方法反复返工仍然失败", proof:"同机位一次完成并展示前后结果", priority:"先证明省心，再补充核心性能", cta:"像朋友给建议，不催单" },
   { angle:"质疑实测", scenario:"评论区质疑触发的现场验证", conflict:"观众不相信产品能解决输入痛点", proof:"按质疑条件完成连续无剪辑测试", priority:"先回应最大质疑，再证明其它卖点", cta:"邀请观众自己核对结果" },
@@ -151,6 +180,31 @@ export function assessDiversity(scripts:StructuredScript[]) {
   const duplicateIndex=[...duplicateScores.entries()]
     .sort((a,b)=>b[1].count-a[1].count||b[1].score-a[1].score||b[0]-a[0])[0]?.[0]??null;
   return { passed:duplicateIndex===null, duplicateIndex, pairs };
+}
+
+export async function runDiversityRetries<T extends StructuredScript>(
+  initialScripts:T[],
+  regenerate:(duplicateIndex:number,attempt:number,currentScripts:T[])=>Promise<T>,
+  maxAttempts=2,
+) {
+  const scripts=[...initialScripts];
+  const regeneratedIndices:number[]=[];
+  let diversity=assessDiversity(scripts);
+  for(let attempt=1;attempt<=maxAttempts&&diversity.duplicateIndex!==null;attempt++){
+    const duplicateIndex=diversity.duplicateIndex;
+    regeneratedIndices.push(duplicateIndex);
+    scripts[duplicateIndex]=await regenerate(duplicateIndex,attempt,[...scripts]);
+    diversity=assessDiversity(scripts);
+  }
+  return {
+    scripts,
+    diversity:{
+      ...diversity,
+      regenerated:regeneratedIndices.at(-1)??null,
+      regeneratedIndices,
+      regenerationAttempts:regeneratedIndices.length,
+    },
+  };
 }
 
 export function normalizeStructuredScript<T extends StructuredScript>(script:T,p:StrategyPayload,concept?:CreativeConcept):T {

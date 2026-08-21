@@ -55,7 +55,7 @@ test("diversity guard rejects repeated proof even when hooks and concepts differ
 });
 
 test("result-first validation accepts semantic result openings and rejects process-first openings",async()=>{
-  const {followsResultFirstIntent}=await import(`../app/script-generation.ts?strategy=${Date.now()}`);
+  const {followsResultFirstIntent,validateStrategyIntent}=await import(`../app/script-generation.ts?strategy=${Date.now()}`);
   assert.equal(followsResultFirstIntent({
     hook:"Mira esta pantalla impecable y perfectamente alineada.",
     scenes:[
@@ -70,6 +70,9 @@ test("result-first validation accepts semantic result openings and rejects proce
       {visual:"Resultado final",line:"Así queda limpio y alineado."},
     ],
   }),false);
+  assert.deepEqual(validateStrategyIntent({creationMode:"产品演示",hookStrategy:"好奇",hook:"Hay una pista en esta esquina.",scenes:[{line:"Hay una pista en esta esquina.",visual:"成品特写"},{line:"Ahora muestro el proceso.",visual:"刀片只在后段证明抗刮"}]}),[]);
+  assert.deepEqual(validateStrategyIntent({creationMode:"KOC / UGC",hookStrategy:"好奇",hook:"Esta esquina parecía un fallo.",scenes:[{line:"Esta esquina parecía un fallo.",visual:"只展示异常边角"},{line:"La respuesta aparece al deslizar.",visual:"第二镜头才揭示动作"}]}),[]);
+  assert.ok(validateStrategyIntent({creationMode:"产品演示",hookStrategy:"好奇",hook:"Presentamos el producto.",scenes:[{line:"Golpear con un martillo.",visual:"锤子砸碎竞品"}]}).length>=2);
 });
 
 test("knowledge context keeps facts, reference, compliance and bounded memory separated",async()=>{
@@ -93,6 +96,20 @@ test("knowledge context keeps facts, reference, compliance and bounded memory se
   assert.ok(findFactViolations("这是历史使用过的旧Hook 0，后面继续介绍产品。",context).includes("复用了近期历史Hook"));
   const spanishReference=buildKnowledgeContext({...base,referenceScript:"¿Por qué siempre queda una burbuja justo en el centro? Después muestra el fallo, la instalación y el resultado."});
   assert.ok(findFactViolations("¿Por qué siempre me queda una burbuja justo en el centro?\nAhora cambio el proceso.",spanishReference).includes("直接复制了爆款参考表达"));
+  assert.ok(findFactViolations("¿A ti también te sale siempre una burbuja en el centro?\nDespués enseño una instalación nueva.",spanishReference).includes("直接复制了爆款参考表达"));
+  assert.equal(findFactViolations("¿Por qué este detalle cambia el resultado?\nPrimero enseño el fallo y después una prueba nueva.",spanishReference).includes("直接复制了爆款参考表达"),false);
+});
+
+test("diversity guard retries only the highest duplicate candidate at most twice",async()=>{
+  const {runDiversityRetries}=await import(`../app/script-generation.ts?retry=${Date.now()}`);
+  const duplicate=(id)=>({title:`重复${id}`,creativeAngle:"失败救援",hook:"为什么总有气泡？",narration:"",scenario:"桌面",conflict:"贴膜失败",proofMechanism:"同机位前后对比",proof:"滑动安装器后展示无尘无泡结果",cta:"查看适配型号"});
+  const calls=[];
+  const failed=await runDiversityRetries([duplicate("A"),duplicate("B"),duplicate("C")],async(index,attempt)=>{calls.push({index,attempt});return duplicate(`R${attempt}`)},2);
+  assert.deepEqual(calls.map(item=>item.attempt),[1,2]);
+  assert.equal(failed.diversity.regenerationAttempts,2);
+  assert.equal(failed.diversity.passed,false);
+  assert.equal(failed.diversity.regeneratedIndices.length,2);
+  assert.ok(calls.every(item=>Number.isInteger(item.index)));
 });
 
 test("knowledge engine assigns distinct selling-point priorities to five concepts",async()=>{
@@ -118,4 +135,10 @@ test("scripts API returns safe knowledge metadata without requiring a knowledge 
   assert.equal(withKnowledge.sellingPointPriorities.length,5);
   assert.equal(new Set(withKnowledge.sellingPointPriorities.map(item=>item.primary)).size,5);
   assert.equal("apiKey" in withKnowledge.knowledge,false);
+});
+
+test("provider retry guidance is present without exposing reference or credentials",async()=>{
+  const source=await import("node:fs/promises").then(fs=>fs.readFile(new URL("../app/api/scripts/route.ts",import.meta.url),"utf8"));
+  assert.match(source,/必须更换Hook的核心词、主语、具体问题和首帧画面/);
+  assert.doesNotMatch(source,/Bearer\s+[A-Za-z0-9_-]{20,}/);
 });
