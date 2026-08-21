@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { checkCompliance, type ComplianceHit } from "./compliance-rules";
 
 export type StudioScene = { time: string; visual: string; line: string; edit: string };
@@ -44,6 +44,11 @@ function withBlocks(script:StudioScript, blocks:EditorBlock[]):StudioScript {
   return { ...script, hook:blocks[0]?.text || script.hook, narration:blocks.map(block=>block.text.trim()).filter(Boolean).join(" ") };
 }
 
+function scriptIdentity(script:StudioScript|null) {
+  if (!script) return null;
+  return script.id != null ? `id:${script.id}` : script.createdAt ? `created:${script.createdAt}` : `script:${script.title}:${script.product}`;
+}
+
 function scaleTime(value:number, total:number) { return Math.round(value * total / 30); }
 
 function MarkedCopy({text,hits,onSelect}:{text:string;hits:ComplianceHit[];onSelect:(hit:ComplianceHit)=>void}) {
@@ -72,6 +77,20 @@ export default function ScriptStudio(props:Props) {
   const [selectedRisk,setSelectedRisk] = useState<ComplianceHit|null>(null);
   const [savedNotice,setSavedNotice] = useState(false);
   const script = props.result;
+  const resultIdentity=scriptIdentity(script);
+  const syncedResultIdentity=useRef(resultIdentity);
+
+  useEffect(()=>{
+    if (!script||resultIdentity===syncedResultIdentity.current) return;
+    syncedResultIdentity.current=resultIdentity;
+    const nextBlocks=buildBlocks(script,props.form.sellingPoints);
+    setBlocks(nextBlocks);
+    setVersions([{label:"V1",script,blocks:nextBlocks.map(block=>({...block}))}]);
+    setActiveVersion(0);
+    setLocked({});
+    setEditing(null);
+    setSavedNotice(false);
+  },[resultIdentity,script,props.form.sellingPoints]);
 
   const draftScript = useMemo(()=>script ? withBlocks(script,blocks) : null,[script,blocks]);
   const score = draftScript ? props.scoreScript(draftScript) : null;
@@ -95,6 +114,7 @@ export default function ScriptStudio(props:Props) {
   }
   function openVersion(index:number) {
     const version=versions[index]; if(!version)return;
+    syncedResultIdentity.current=scriptIdentity(version.script);
     setActiveVersion(index); setBlocks(version.blocks.map(block=>({...block}))); props.onDraftChange(version.script);
   }
   function adoptRace(item:StudioScript) {

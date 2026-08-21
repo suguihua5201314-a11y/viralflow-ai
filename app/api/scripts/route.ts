@@ -1,5 +1,5 @@
 import { frameworkCatalog } from "../../frameworks";
-import { assessDiversity, buildCreativeConcepts, buildStrategyDirectives, normalizeStructuredScript, type CreativeConcept, type StructuredScript } from "../../script-generation";
+import { assessDiversity, buildCreativeConcepts, buildStrategyDirectives, followsResultFirstIntent, normalizeStructuredScript, type CreativeConcept, type StructuredScript } from "../../script-generation";
 import { CloudflareStorageUnavailableError } from "../../../db/cloudflare-runtime";
 import { runTeamDataAction } from "../../team-data-adapter";
 
@@ -522,7 +522,7 @@ ${p.referenceScript?.trim() ? `需要复刻其结构的爆款参考文案：\n${
   const normalizedHook=(generated.scenes[0]?.line || generated.hook).toLowerCase();
   const normalizedBody=narration.toLowerCase();
   if(p.hookStrategy==="好奇"&&!/[?？]|por qué|adivina|mister|why|guess|为什么|猜|到底/.test(normalizedHook))throw new ProviderGenerationError("strategy_validation_error","Provider未执行好奇Hook策略");
-  if(p.hookStrategy==="结果前置"&&!/resultado|result|segundo|second|10\s*s|diez|秒|完成|无气泡|sin burbujas|cero|así queda|mira cómo queda|final|listo|antes y después/.test(normalizedHook))throw new ProviderGenerationError("strategy_validation_error","Provider未执行结果前置策略");
+  if(p.hookStrategy==="结果前置"&&!followsResultFirstIntent({hook:generated.hook,scenes:generated.scenes}))throw new ProviderGenerationError("strategy_validation_error","Provider未执行结果前置策略");
   if((p.creationMode==="KOC / UGC"||p.creationMode==="产品演示")&&/martillo|hacha|golpear|romper|hammer|axe|smash|砸碎|锤子|斧头|三款淘汰/.test(normalizedBody))throw new ProviderGenerationError("strategy_validation_error","Provider未执行创作模式边界");
   return normalizeStructuredScript({ ...generated, title:generated.title || `${p.product}｜${selectedFramework}`, product:p.product, language:p.language, country:p.country, style:p.style, hook:generated.scenes[0]?.line || generated.hook, alternateHooks:generated.alternateHooks.slice(0,2), narration, scenes:generated.scenes, aiGenerated:true }, p, p.creativeConcept);
 }

@@ -34,6 +34,21 @@ export type StructuredScript = {
   scenes?: Array<{time:string;visual:string;line:string;edit:string}>;
 };
 
+type StrategyScene = { visual?:string; line?:string };
+
+const resultMeaning = /resultado|beneficio|acabado|terminad[oa]|complet[oa]|perfect[oa]|impecable|limpi[oa]|alinead[oa]|n[ií]tid[oa]|sin\s+(?:una\s+)?(?:sola\s+)?(?:burbuja|polvo|marcas?)|cero\s+(?:burbujas?|polvo)|as[ií]\s+(?:queda|se\s+ve)|mira\s+(?:c[oó]mo\s+queda|el\s+resultado)|antes\s+y\s+despu[eé]s|final|list[oa]|ready|finished|complete|clean|clear|aligned|flawless|bubble[- ]?free|dust[- ]?free|here(?:'s| is) the result|this is the result|最终|成品|效果|完成|干净|清晰|贴正|对齐|无气泡|无灰尘|零气泡|前后对比/iu;
+const processMeaning = /primero|despu[eé]s|ahora\s+(?:te\s+)?(?:muestro|enseño|explico)|c[oó]mo\s+(?:lo\s+)?(?:hice|consegu[ií])|coloc|instal|aplic|desliz|retir|paso|proceso|first|then|now\s+(?:i(?:'ll| will)\s+)?show|how\s+(?:i|we)|install|apply|place|slide|remove|step|process|接着|然后|现在看|怎么做到|如何做到|安装|放上|滑动|撕下|步骤|过程/iu;
+
+export function followsResultFirstIntent(input:{hook?:string;scenes?:StrategyScene[]}) {
+  const scenes=input.scenes ?? [];
+  const opening=[input.hook,scenes[0]?.line,scenes[0]?.visual].filter(Boolean).join(" ");
+  const explanation=scenes.slice(1,4).flatMap(scene=>[scene.line,scene.visual]).filter(Boolean).join(" ");
+  const opensWithResult=resultMeaning.test(opening);
+  const opensWithProcess=processMeaning.test(opening)&&!opensWithResult;
+  const explainsAfterward=processMeaning.test(explanation)||scenes.slice(1).some(scene=>Boolean(scene.line?.trim()||scene.visual?.trim()));
+  return opensWithResult&&!opensWithProcess&&explainsAfterward;
+}
+
 const conceptTemplates = [
   { angle:"失败救援", scenario:"真实用户第一次操作的桌面场景", conflict:"旧方法反复返工仍然失败", proof:"同机位一次完成并展示前后结果", priority:"先证明省心，再补充核心性能", cta:"像朋友给建议，不催单" },
   { angle:"质疑实测", scenario:"评论区质疑触发的现场验证", conflict:"观众不相信产品能解决输入痛点", proof:"按质疑条件完成连续无剪辑测试", priority:"先回应最大质疑，再证明其它卖点", cta:"邀请观众自己核对结果" },

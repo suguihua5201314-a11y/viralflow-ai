@@ -53,3 +53,21 @@ test("diversity guard rejects repeated proof even when hooks and concepts differ
   assert.notEqual(result.duplicateIndex,null);
   assert.ok(result.pairs.some(pair=>pair.reasons.includes("Proof高度相似")));
 });
+
+test("result-first validation accepts semantic result openings and rejects process-first openings",async()=>{
+  const {followsResultFirstIntent}=await import(`../app/script-generation.ts?strategy=${Date.now()}`);
+  assert.equal(followsResultFirstIntent({
+    hook:"Mira esta pantalla impecable y perfectamente alineada.",
+    scenes:[
+      {visual:"Primer plano del acabado limpio",line:"Mira esta pantalla impecable y perfectamente alineada."},
+      {visual:"Se coloca el aplicador",line:"Ahora te enseño cómo lo hice."},
+    ],
+  }),true);
+  assert.equal(followsResultFirstIntent({
+    hook:"Primero coloca el protector sobre la pantalla.",
+    scenes:[
+      {visual:"Manos iniciando la instalación",line:"Primero coloca el protector sobre la pantalla."},
+      {visual:"Resultado final",line:"Así queda limpio y alineado."},
+    ],
+  }),false);
+});
