@@ -1,5 +1,9 @@
 import { frameworkCatalog } from "../../frameworks";
 import { assessDiversity, buildCreativeConcepts, buildStrategyDirectives, normalizeStructuredScript, type CreativeConcept, type StructuredScript } from "../../script-generation";
+import { CloudflareStorageUnavailableError } from "../../../db/cloudflare-runtime";
+import { runTeamDataAction } from "../../team-data-adapter";
+
+export const runtime="nodejs";
 
 type RecentScript = { title:string; hook:string; narration:string; creativeAngle?:string };
 type Payload = { product: string; sellingPoints: string; audience: string; country: string; language: string; style: string; framework?: string; duration: string; offer: string; referenceScript?: string; nonce?: number; recent?: RecentScript[]; platform?:string; additionalRequirements?:string; creationMode?:string; hookStrategy?:string; creativity?:string; outputCount?:number; creativeConcept?:CreativeConcept };
@@ -540,17 +544,11 @@ export async function POST(request: Request) {
     if (isTeamSync) {
       const expectedPassword = process.env.TEAM_PASSWORD;
       if (!expectedPassword || body.password !== expectedPassword) return Response.json({ error: "团队密码不正确" }, { status: 401, headers: teamCorsHeaders });
-      // @ts-expect-error Cloudflare injects this module in the hosted runtime.
-      const { env } = await import("cloudflare:workers");
-      if (!env.DB) return Response.json({ error: "云端数据库未连接" }, { status: 503, headers: teamCorsHeaders });
-      await env.DB.prepare("CREATE TABLE IF NOT EXISTS team_workspace (workspace_key TEXT PRIMARY KEY, payload TEXT NOT NULL, updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)").run();
-      if (body.action === "save") {
-        await env.DB.prepare("INSERT INTO team_workspace (workspace_key,payload,updated_at) VALUES ('main',?,CURRENT_TIMESTAMP) ON CONFLICT(workspace_key) DO UPDATE SET payload=excluded.payload,updated_at=CURRENT_TIMESTAMP")
-          .bind(JSON.stringify(body.payload ?? {})).run();
-        return Response.json({ ok: true }, { headers: teamCorsHeaders });
+      try{return Response.json(await runTeamDataAction(body.action === "save" ? "save" : "load",body.payload),{headers:teamCorsHeaders});}
+      catch(error){
+        if(error instanceof CloudflareStorageUnavailableError)return Response.json({error:error.message},{status:503,headers:teamCorsHeaders});
+        throw error;
       }
-      const row = await env.DB.prepare("SELECT payload,updated_at FROM team_workspace WHERE workspace_key='main'").first() as { payload: string; updated_at: string } | null;
-      return Response.json({ payload: row ? JSON.parse(row.payload) : null, updatedAt: row?.updated_at ?? null }, { headers: teamCorsHeaders });
     }
     const p = body as Payload;
     if (!p.product?.trim() || !p.sellingPoints?.trim()) return Response.json({ error: "请填写产品名称和核心卖点。" }, { status: 400 });
