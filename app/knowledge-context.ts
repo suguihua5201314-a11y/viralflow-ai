@@ -150,9 +150,15 @@ export function findFactViolations(text:string,context:KnowledgeContext) {
   if(context.viralReference){
     const source=context.viralReference.sourceExcerpt;
     const copiedWords=wordWindows(source).some(window=>text.toLowerCase().includes(window));
+    const words=(value:string)=>new Set(value.toLowerCase().match(/[a-záéíóúüñ0-9]+/gi)||[]);
+    const sourceHook=source.split(/(?<=[.!?？。！])|\n/)[0]||source;
+    const targetHook=text.split(/\n|(?<=[.!?？。！])/)[0]||text;
+    const sourceHookWords=words(sourceHook),targetHookWords=words(targetHook);
+    let sharedHookWords=0;for(const word of sourceHookWords)if(targetHookWords.has(word))sharedHookWords++;
+    const copiedHook=Math.min(sourceHookWords.size,targetHookWords.size)>=7&&sharedHookWords/Math.min(sourceHookWords.size,targetHookWords.size)>=.82;
     const sourceCompact=normalize(source),targetCompact=normalize(text);
     const copiedChars=/[\u3400-\u9fff]/u.test(source)&&sourceCompact.length>=24&&Array.from({length:sourceCompact.length-23},(_,index)=>sourceCompact.slice(index,index+24)).some(window=>targetCompact.includes(window));
-    if(copiedWords||copiedChars)violations.push("直接复制了爆款参考表达");
+    if(copiedWords||copiedHook||copiedChars)violations.push("直接复制了爆款参考表达");
   }
   for(const memory of context.recentMemory){
     const oldHook=normalize(memory.hook);

@@ -91,6 +91,8 @@ test("knowledge context keeps facts, reference, compliance and bounded memory se
   assert.ok(findFactViolations("100%防爆，永不碎。",context).length>=2);
   assert.ok(findFactViolations(context.viralReference.sourceExcerpt,context).includes("直接复制了爆款参考表达"));
   assert.ok(findFactViolations("这是历史使用过的旧Hook 0，后面继续介绍产品。",context).includes("复用了近期历史Hook"));
+  const spanishReference=buildKnowledgeContext({...base,referenceScript:"¿Por qué siempre queda una burbuja justo en el centro? Después muestra el fallo, la instalación y el resultado."});
+  assert.ok(findFactViolations("¿Por qué siempre me queda una burbuja justo en el centro?\nAhora cambio el proceso.",spanishReference).includes("直接复制了爆款参考表达"));
 });
 
 test("knowledge engine assigns distinct selling-point priorities to five concepts",async()=>{
