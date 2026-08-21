@@ -210,6 +210,19 @@ export default function Home() {
     finally { setRaceLoading(false); }
   }
   function update(key: keyof typeof form, value: string) { setForm(prev => ({ ...prev, [key]: value })); }
+  function saveScriptVersion(script: Script) {
+    const saved: Script = {
+      ...script,
+      id: Date.now(),
+      createdAt: new Date().toISOString(),
+      title: `${script.title.replace(/ · V\d+$/, "")} · V${history.filter(item => item.title.startsWith(script.title.replace(/ · V\d+$/, ""))).length + 1}`,
+    };
+    const nextHistory = [saved, ...history].slice(0, 100);
+    setHistory(nextHistory);
+    localStorage.setItem("viralcraft-history", JSON.stringify(nextHistory));
+    void syncTeam(currentTeamPayload({ history: nextHistory }));
+    return saved;
+  }
   function copyText(text: string) { navigator.clipboard.writeText(text); }
   function importHook() {
     if (!importForm.url.trim() || !importForm.hook.trim()) {
@@ -242,6 +255,7 @@ export default function Home() {
       {active === "checker" && <section className="risk-grade-panel"><div className="checker-grid"><section className="checker-input"><span className="modal-kicker">RISK LEVEL CHECK</span><h2>粘贴需要检测的文案</h2><p>按高、中、低三级识别平台违规、广告夸大、医疗功效、促销合规和危险演示风险，并提供可直接替换的安全表达。</p><textarea value={checkText} onChange={e => { setCheckText(e.target.value); setHasChecked(false); setRiskFilter("全部"); }} rows={18} placeholder="把完整口播、字幕或商品文案粘贴到这里…" /><div><small>{checkText.length}字</small><button disabled={!checkText.trim()} onClick={() => setHasChecked(true)}>开始分级检测</button></div><aside className="risk-guide"><span><b>高风险</b> 建议发布前删除或重写</span><span><b>中风险</b> 需要证据、条件或免责声明</span><span><b>低风险</b> 可以使用，建议补充依据</span></aside></section><section className="checker-result risk-result">{!hasChecked ? <div className="checker-empty"><span>✓</span><h3>等待分级检测</h3><p>系统会逐项标出风险等级、风险类型、命中词和推荐替换表达。</p></div> : complianceHits.length === 0 ? <div className="checker-clear"><span>✓</span><h3>暂未命中已知风险词</h3><p>这不代表平台一定审核通过，请继续检查画面真实性、测试条件和促销信息。</p></div> : <><div className="risk-overview"><article className="risk-total"><span>综合判断</span><strong>{complianceHits.some(x => x.level === "高") ? "高风险" : complianceHits.some(x => x.level === "中") ? "中风险" : "低风险"}</strong><small>共命中 {complianceHits.length} 处</small></article><button className={riskFilter === "高" ? "selected" : ""} onClick={() => setRiskFilter(riskFilter === "高" ? "全部" : "高")}><span>高风险</span><strong>{complianceHits.filter(x => x.level === "高").length}</strong><small>删除或重写</small></button><button className={riskFilter === "中" ? "selected" : ""} onClick={() => setRiskFilter(riskFilter === "中" ? "全部" : "中")}><span>中风险</span><strong>{complianceHits.filter(x => x.level === "中").length}</strong><small>补充条件</small></button><button className={riskFilter === "低" ? "selected" : ""} onClick={() => setRiskFilter(riskFilter === "低" ? "全部" : "低")}><span>低风险</span><strong>{complianceHits.filter(x => x.level === "低").length}</strong><small>建议核实</small></button></div><div className="risk-type-row">{["平台违规","广告夸大","医疗功效","促销合规","危险演示"].map(type => <span key={type}>{type} {complianceHits.filter(x => x.riskType === type).length}</span>)}</div>{riskFilter !== "全部" && <button className="clear-risk-filter" onClick={() => setRiskFilter("全部")}>显示全部风险 ×</button>}<div className="risk-list graded-list">{visibleComplianceHits.map((hit,index) => <article key={`${hit.category}-${hit.term}-${index}`} className={`risk-${hit.level === "高" ? "high" : hit.level === "中" ? "medium" : "low"}`}><div><span>{hit.level}风险</span><em>{hit.riskType} · {hit.category}</em></div><h3>命中：{hit.term}</h3><p>{hit.suggestion}</p><aside><b>建议替换</b><span>{hit.replacement}</span></aside></article>)}</div></>}</section></div></section>}
       {!["create", "replicate"].includes(active) && <header><div><p className="eyebrow">TIKTOK COMMERCE STUDIO</p><h1>{active === "create" ? "爆款脚本生成器" : active === "breakdown" ? "爆款视频拆解器" : active === "replicate" ? "爆款文案复刻" : active === "checker" ? "文案合规检测" : active === "library" ? "爆款素材库" : active === "monitor" ? "每日爆款开头监控" : "历史脚本库"}</h1><p>{active === "create" ? "把产品卖点，变成能拍、能剪、能转化的多语言脚本。" : active === "breakdown" ? "看清一条视频为什么爆，并提取团队可以重复使用的内容公式。" : active === "replicate" ? "粘贴一条爆款文案，复刻它的结构和节奏，重新创作你的产品脚本。" : active === "checker" ? "发布前检查绝对词、夸大承诺、医疗功效、促销和危险演示风险。" : active === "library" ? "集中保存高表现开头和产品卖点，创作时一键调用。" : active === "monitor" ? "监控竞品新视频，沉淀前3秒钩子并一键改写。" : "团队生成的脚本会保存在这里，可随时复用与导出。"}</p></div><div className="status"><i /> 团队在线版</div></header>}
       {active === "breakdown" ? <section className="breakdown-panel"><div className="breakdown-grid"><section className="breakdown-input"><span className="modal-kicker">VIRAL VIDEO BREAKDOWN</span><h2>粘贴爆款口播或字幕</h2><p>支持中文、西语、意大利语和英语。建议粘贴完整文案，拆解会更准确。</p><textarea value={breakdownText} onChange={e => { setBreakdownText(e.target.value); setBreakdown(null); }} rows={20} placeholder="把爆款视频的完整口播、字幕或转写文案粘贴到这里……" /><div className="breakdown-input-foot"><small>{breakdownText.length}字 · 建议80字以上</small><button disabled={breakdownText.trim().length < 20} onClick={() => setBreakdown(analyzeViralCopy(breakdownText))}>◇ 开始拆解</button></div></section><section className="breakdown-result">{!breakdown ? <div className="breakdown-empty"><span>◇</span><h3>等待爆款文案</h3><p>系统会拆出钩子、情绪、节奏、内容结构、证明方式与转化收口。</p></div> : <><div className="breakdown-score"><div><span>爆款结构评分</span><strong>{breakdown.score}<small>/100</small></strong></div><div><span>钩子类型</span><b>{breakdown.hookType}</b><em>{breakdown.emotion}</em></div></div><article className="breakdown-hook"><span>原文前3秒</span><p>{breakdown.hook}</p></article><div className="breakdown-meta"><article><span>节奏判断</span><p>{breakdown.rhythm}</p></article><article><span>证明方式</span><p>{breakdown.proof}</p></article><article><span>转化收口</span><p>{breakdown.cta}</p></article></div><div className="breakdown-structure"><h3>内容结构拆解</h3>{breakdown.parts.map((part,index) => <article key={part.label}><b>{String(index + 1).padStart(2,"0")}</b><div><span>{part.label}</span><p>{part.purpose}</p><small>原文：{part.evidence}</small></div></article>)}</div><article className="breakdown-formula"><span>可直接复刻的公式</span><strong>{breakdown.formula}</strong><button onClick={() => { setReferenceScript(breakdownText); setActive("replicate"); }}>用这个结构生成新脚本 →</button></article><div className="breakdown-lists"><article><h3>值得保留</h3>{breakdown.strengths.map(x => <p key={x}>✓ {x}</p>)}</article><article><h3>风险提醒</h3>{breakdown.risks.map(x => <p key={x}>! {x}</p>)}</article></div></>}</section></div></section> : (active === "create" || active === "replicate") ? <ScriptStudio
+        key={result ? String(result.id ?? `${result.title}-${result.createdAt ?? ""}`) : "empty-script-studio"}
         mode={active}
         form={form}
         products={productProfiles}
@@ -263,6 +277,8 @@ export default function Home() {
         onGenerate={generate}
         onGenerateRace={generateRace}
         onAdopt={setResult}
+        onDraftChange={setResult}
+        onSaveVersion={saveScriptVersion}
         onCopy={copyText}
         onExport={exportExcel}
         onNavigate={setActive}
