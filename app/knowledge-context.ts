@@ -151,7 +151,7 @@ export function findFactViolations(text:string,context:KnowledgeContext) {
     const source=context.viralReference.sourceExcerpt;
     const copiedWords=wordWindows(source).some(window=>text.toLowerCase().includes(window));
     const sourceCompact=normalize(source),targetCompact=normalize(text);
-    const copiedChars=sourceCompact.length>=24&&Array.from({length:sourceCompact.length-23},(_,index)=>sourceCompact.slice(index,index+24)).some(window=>targetCompact.includes(window));
+    const copiedChars=/[\u3400-\u9fff]/u.test(source)&&sourceCompact.length>=24&&Array.from({length:sourceCompact.length-23},(_,index)=>sourceCompact.slice(index,index+24)).some(window=>targetCompact.includes(window));
     if(copiedWords||copiedChars)violations.push("直接复制了爆款参考表达");
   }
   for(const memory of context.recentMemory){
