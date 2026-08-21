@@ -26,7 +26,7 @@ test("strategy controls produce materially different structured scripts",async()
   for(const result of [a,b,c]) for(const field of ["creativeAngle","conflict","productReveal","proof","sellingPoints","cta","shootingSuggestion"]) assert.equal(typeof result.script[field],"string");
 });
 
-test("five-version race is concept-first and passes diversity guard",async()=>{
+test("five-version race is concept-first and reports repeated fallback proof",async()=>{
   const worker=await loadWorker();
   const result=await generate(worker,{creationMode:"KOC / UGC",hookStrategy:"好奇",framework:"PAS",creativity:"平衡",outputCount:5,nonce:404});
   assert.equal(result.scripts.length,5); assert.equal(result.concepts.length,5);
@@ -35,5 +35,21 @@ test("five-version race is concept-first and passes diversity guard",async()=>{
   assert.equal(new Set(result.scripts.map(item=>item.scenario)).size,5);
   assert.equal(new Set(result.scripts.map(item=>item.proofMechanism)).size,5);
   assert.equal(new Set(result.scripts.map(item=>item.cta)).size,5);
-  assert.equal(result.diversity.passed,true);
+  assert.equal(result.diversity.passed,false);
+  assert.notEqual(result.diversity.regenerated,null);
+  assert.ok(result.diversity.pairs.some(pair=>pair.reasons.includes("Proof高度相似")));
+});
+
+test("diversity guard rejects repeated proof even when hooks and concepts differ",async()=>{
+  const {assessDiversity}=await import(`../app/script-generation.ts?diversity=${Date.now()}`);
+  const scripts=Array.from({length:3},(_,index)=>({
+    title:`版本${index}`,creativeAngle:["失败救援","时间挑战","生活反差"][index],hook:["为什么会这样？","十秒会怎样？","地铁里发生了什么？"][index],narration:"",
+    scenario:["桌面","计时工作台","地铁"][index],conflict:["贴膜失败","速度太慢","隐私暴露"][index],proofMechanism:["前后对比","停表验收","侧面复测"][index],cta:["看看型号","查看优惠","确认版本"][index],
+    proof:"放上保护膜，滑动安装器，撕下薄膜，展示无灰尘无气泡的最终结果。",
+    concept:{id:String.fromCharCode(65+index),creativeAngle:["失败救援","时间挑战","生活反差"][index],hookMechanism:["隐藏信息","倒计时","场景反差"][index],scenario:["桌面","计时工作台","地铁"][index],conflict:["贴膜失败","速度太慢","隐私暴露"][index],proofMechanism:["前后对比","停表验收","侧面复测"][index],sellingPointPriority:["省心优先","效率优先","隐私优先"][index],ctaStyle:["朋友建议","明确选择","场景提醒"][index]},
+  }));
+  const result=assessDiversity(scripts);
+  assert.equal(result.passed,false);
+  assert.notEqual(result.duplicateIndex,null);
+  assert.ok(result.pairs.some(pair=>pair.reasons.includes("Proof高度相似")));
 });

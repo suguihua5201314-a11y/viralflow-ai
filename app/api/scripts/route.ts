@@ -5,6 +5,19 @@ type RecentScript = { title:string; hook:string; narration:string; creativeAngle
 type Payload = { product: string; sellingPoints: string; audience: string; country: string; language: string; style: string; framework?: string; duration: string; offer: string; referenceScript?: string; nonce?: number; recent?: RecentScript[]; platform?:string; additionalRequirements?:string; creationMode?:string; hookStrategy?:string; creativity?:string; outputCount?:number; creativeConcept?:CreativeConcept };
 type Pack = { hooks: string[]; intros: string[]; proofs: string[]; demos: string[]; benefits: string[]; ctas: string[] };
 
+type ProviderErrorCategory = "provider_http_error"|"json_parse_error"|"schema_validation_error"|"timeout"|"empty_result"|"structured_fields_missing"|"strategy_validation_error";
+class ProviderGenerationError extends Error {
+  constructor(public category:ProviderErrorCategory,message:string,public status?:number){super(message);this.name="ProviderGenerationError";}
+}
+function providerError(error:unknown) {
+  if(error instanceof ProviderGenerationError)return error;
+  if(error instanceof Error&&(error.name==="AbortError"||/aborted|timeout/i.test(error.message)))return new ProviderGenerationError("timeout","Provider请求超时");
+  return new ProviderGenerationError("schema_validation_error","Provider返回未通过校验");
+}
+function logProviderFallback(error:ProviderGenerationError,p:Payload,attempt:number) {
+  console.warn("[scripts.provider.fallback]",JSON.stringify({category:error.category,status:error.status,attempt,conceptId:p.creativeConcept?.id??null,creationMode:p.creationMode??null,hookStrategy:p.hookStrategy??null,framework:p.framework??null}));
+}
+
 function localized(p: Payload) {
   const maps: Record<string, Record<string, string>> = {
     西班牙语: { "变形金刚钢化膜":"protector de pantalla Transformers", "钢化膜": "protector de pantalla", "10秒自动除尘安装": "instalación con eliminación automática de polvo en 10 segundos", "无气泡、不歪": "sin burbujas ni desalineación", "28°防窥": "privacidad de 28°", "98%手机壳兼容": "compatible con el 98 % de las fundas", "表层电镀疏水疏油层":"capa electrochapada hidrofóbica y oleofóbica", "抗刮耐磨、抗冲击":"resistente a rayaduras, desgaste e impactos", "贴合紧密、不易翘边":"adhesión firme sin levantarse en los bordes", "库存有限":"stock limitado", "买一份到手两张膜":"dos protectores por el precio de uno", "现在下单加赠镜头保护膜":"compra ahora y recibe un protector de cámara de regalo", "经常自己贴坏钢化膜、在意隐私的手机用户": "quienes suelen instalar mal el protector y valoran su privacidad", "限时折扣，库存有限": "descuento por tiempo limitado y unidades limitadas" },
@@ -369,11 +382,23 @@ function applyLocalStrategy<T extends {hook:string;alternateHooks:string[];narra
 }
 
 async function generateOne(p:Payload,recent:RecentScript[]) {
-  const aiScript=await createAiScript(p,recent).catch(()=>null);
+  let aiScript:StructuredScript|null=null;
+  let fallbackCategory:ProviderErrorCategory|undefined;
+  if(process.env.DEEPSEEK_API_KEY){
+    for(let attempt=1;attempt<=2;attempt++){
+      try{aiScript=await createAiScript(p,recent);break;}
+      catch(error){
+        const classified=providerError(error); fallbackCategory=classified.category; logProviderFallback(classified,p,attempt);
+        const retryable=classified.category==="provider_http_error"&&(classified.status===429||Boolean(classified.status&&classified.status>=500))||classified.category==="timeout";
+        if(!retryable||attempt===2)break;
+        await new Promise(resolve=>setTimeout(resolve,350*attempt));
+      }
+    }
+  }
   const localPayload=localStrategyPayload(p);
   const localScript=applyLocalStrategy(createDistinctLocalScript(localPayload,recent),p);
   const generated=aiScript ?? normalizeStructuredScript(localScript,p,p.creativeConcept);
-  return {...generated,aiGenerated:Boolean(aiScript),id:Date.now()+Math.floor(Math.random()*1000),createdAt:new Date().toISOString()};
+  return {...generated,aiGenerated:Boolean(aiScript),providerFallbackCategory:aiScript?undefined:fallbackCategory,id:Date.now()+Math.floor(Math.random()*1000),createdAt:new Date().toISOString()};
 }
 
 async function createAiScript(p: Payload, recent: Array<{ title:string; hook:string; narration:string }>) {
@@ -459,9 +484,11 @@ ${p.referenceScript?.trim() ? `需要复刻其结构的爆款参考文案：\n${
     },
     required:["title","creativeAngle","hookType","framework","hook","alternateHooks","narration","conflict","productReveal","proof","sellingPoints","cta","shootingSuggestion","scenes"]
   };
-  const response = await fetch("https://api.deepseek.com/chat/completions", {
+  let response:Response;
+  try { response=await fetch("https://api.deepseek.com/chat/completions", {
     method:"POST",
     headers:{"content-type":"application/json",authorization:`Bearer ${apiKey}`},
+    signal:AbortSignal.timeout(45000),
     body:JSON.stringify({
       model:"deepseek-v4-pro",
       messages:[{role:"system",content:`${instructions}\n必须返回严格有效的JSON，结构必须符合：${JSON.stringify(schema)}`},{role:"user",content:input}],
@@ -470,19 +497,29 @@ ${p.referenceScript?.trim() ? `需要复刻其结构的爆款参考文案：\n${
       temperature:p.creativity === "稳定" ? 0.55 : p.creativity === "激进" ? 1.05 : 0.82,
       max_tokens:5000
     })
-  });
-  const data = await response.json() as { error?:{message?:string}; choices?:Array<{message?:{content?:string}}> };
-  if (!response.ok) throw new Error(data.error?.message || "DeepSeek生成失败");
+  }); } catch(error) { throw providerError(error); }
+  const responseText=await response.text();
+  if(!response.ok)throw new ProviderGenerationError("provider_http_error",`Provider HTTP ${response.status}`,response.status);
+  if(!responseText.trim())throw new ProviderGenerationError("empty_result","Provider响应为空",response.status);
+  let data:{ error?:{message?:string}; choices?:Array<{message?:{content?:string}}> };
+  try { data=JSON.parse(responseText) as typeof data; }
+  catch { throw new ProviderGenerationError("json_parse_error","Provider响应不是有效JSON",response.status); }
   const outputText = data.choices?.[0]?.message?.content;
-  if (!outputText) throw new Error("DeepSeek没有返回有效脚本");
-  const generated = JSON.parse(outputText) as StructuredScript & { alternateHooks:string[]; scenes:Array<{time:string;visual:string;line:string;edit:string}> };
-  if (!Array.isArray(generated.scenes) || generated.scenes.length < 8 || !generated.hook || !Array.isArray(generated.alternateHooks)) throw new Error("生成结果结构不完整");
+  if (!outputText?.trim()) throw new ProviderGenerationError("empty_result","Provider没有返回脚本内容");
+  let generated:StructuredScript & { alternateHooks:string[]; scenes:Array<{time:string;visual:string;line:string;edit:string}> };
+  try { generated=JSON.parse(outputText) as typeof generated; }
+  catch { throw new ProviderGenerationError("json_parse_error","Provider脚本不是有效JSON"); }
+  if(!generated||typeof generated!=="object"||!Array.isArray(generated.scenes)||!Array.isArray(generated.alternateHooks))throw new ProviderGenerationError("schema_validation_error","Provider脚本结构无效");
+  const requiredTextFields=["title","creativeAngle","hookType","framework","hook","narration","conflict","productReveal","proof","sellingPoints","cta","shootingSuggestion"] as const;
+  const missingFields=requiredTextFields.filter(field=>typeof generated[field]!=="string"||!generated[field]?.trim());
+  if(missingFields.length)throw new ProviderGenerationError("structured_fields_missing",`Provider缺少${missingFields.length}个结构化字段`);
+  if(generated.scenes.length<6||generated.scenes.some(scene=>![scene.time,scene.visual,scene.line,scene.edit].every(value=>typeof value==="string"&&value.trim())))throw new ProviderGenerationError("schema_validation_error","Provider镜头结构无效");
   const narration = generated.scenes.map(scene => scene.line.trim()).filter(Boolean).join("\n");
   const normalizedHook=(generated.scenes[0]?.line || generated.hook).toLowerCase();
   const normalizedBody=narration.toLowerCase();
-  if(p.hookStrategy==="好奇"&&!/[?？]|por qué|adivina|mister|why|guess|为什么|猜|到底/.test(normalizedHook))throw new Error("AI未执行好奇Hook策略");
-  if(p.hookStrategy==="结果前置"&&!/resultado|result|segundo|second|秒|完成|无气泡|sin burbujas|cero/.test(normalizedHook))throw new Error("AI未执行结果前置策略");
-  if((p.creationMode==="KOC / UGC"||p.creationMode==="产品演示")&&/martillo|hacha|golpear|romper|hammer|axe|smash|砸碎|锤子|斧头|三款淘汰/.test(normalizedBody))throw new Error("AI未执行创作模式边界");
+  if(p.hookStrategy==="好奇"&&!/[?？]|por qué|adivina|mister|why|guess|为什么|猜|到底/.test(normalizedHook))throw new ProviderGenerationError("strategy_validation_error","Provider未执行好奇Hook策略");
+  if(p.hookStrategy==="结果前置"&&!/resultado|result|segundo|second|10\s*s|diez|秒|完成|无气泡|sin burbujas|cero|así queda|mira cómo queda|final|listo|antes y después/.test(normalizedHook))throw new ProviderGenerationError("strategy_validation_error","Provider未执行结果前置策略");
+  if((p.creationMode==="KOC / UGC"||p.creationMode==="产品演示")&&/martillo|hacha|golpear|romper|hammer|axe|smash|砸碎|锤子|斧头|三款淘汰/.test(normalizedBody))throw new ProviderGenerationError("strategy_validation_error","Provider未执行创作模式边界");
   return normalizeStructuredScript({ ...generated, title:generated.title || `${p.product}｜${selectedFramework}`, product:p.product, language:p.language, country:p.country, style:p.style, hook:generated.scenes[0]?.line || generated.hook, alternateHooks:generated.alternateHooks.slice(0,2), narration, scenes:generated.scenes, aiGenerated:true }, p, p.creativeConcept);
 }
 export async function GET() {
@@ -521,12 +558,13 @@ export async function POST(request: Request) {
     const recent = (p.recent ?? []).slice(0, 12);
     if (Number(p.outputCount) === 5) {
       const concepts=buildCreativeConcepts(p,5);
-      const scripts=await Promise.all(concepts.map((concept,index)=>generateOne({...p,creativeConcept:concept,nonce:Number(p.nonce??Date.now())+index*104729},recent)));
+      const scripts=[];
+      for(let index=0;index<concepts.length;index++)scripts.push(await generateOne({...p,creativeConcept:concepts[index],nonce:Number(p.nonce??Date.now())+index*104729},recent));
       let diversity=assessDiversity(scripts);
       let regenerated:number|null=null;
       if(diversity.duplicateIndex!==null){
         regenerated=diversity.duplicateIndex;
-        const concept={...concepts[regenerated],hookMechanism:`${concepts[regenerated].hookMechanism}；必须避开其它候选的开头句式与CTA`};
+        const concept={...concepts[regenerated],creativeAngle:`${concepts[regenerated].creativeAngle} · 差异重写`,scenario:`${concepts[regenerated].scenario}；改用与其它候选不同的地点和道具`,hookMechanism:`${concepts[regenerated].hookMechanism}；避开其它候选的开头句式`,proofMechanism:`${concepts[regenerated].proofMechanism}；必须更换证明动作、镜头顺序与证据组合`,ctaStyle:`${concepts[regenerated].ctaStyle}；不得复用其它候选CTA句式`};
         scripts[regenerated]=await generateOne({...p,creativeConcept:concept,nonce:Number(p.nonce??Date.now())+regenerated*104729+999983},[...recent,...scripts.filter((_,index)=>index!==regenerated)]);
         concepts[regenerated]=concept;
         diversity=assessDiversity(scripts);

@@ -107,17 +107,34 @@ export function textSimilarity(a:string,b:string) {
 export function assessDiversity(scripts:StructuredScript[]) {
   const pairs:Array<{left:number;right:number;score:number;reasons:string[]}>=[];
   for(let left=0;left<scripts.length;left++)for(let right=left+1;right<scripts.length;right++){
-    const a=scripts[left],b=scripts[right]; const reasons:string[]=[];
-    const hook=textSimilarity(a.hook,b.hook);
-    const angle=textSimilarity(a.creativeAngle||a.title,b.creativeAngle||b.title);
-    const scenario=textSimilarity(a.scenario||"",b.scenario||"");
-    const cta=textSimilarity(a.cta||"",b.cta||"");
-    if(hook>.62)reasons.push("Hook高度相似"); if(angle>.7)reasons.push("Creative Angle重复");
-    if(scenario>.72)reasons.push("Scenario重复"); if(cta>.75)reasons.push("CTA重复");
-    const score=Math.max(hook,angle,scenario,cta);
-    if(reasons.length)pairs.push({left,right,score:Number(score.toFixed(3)),reasons});
+    const a=scripts[left],b=scripts[right];
+    const dimensions = [
+      ["Creative Angle",a.creativeAngle||a.title,b.creativeAngle||b.title,.72],
+      ["Hook",a.hook,b.hook,.64],
+      ["Hook Mechanism",a.concept?.hookMechanism||"",b.concept?.hookMechanism||"",.76],
+      ["Scenario",a.scenario||a.concept?.scenario||"",b.scenario||b.concept?.scenario||"",.76],
+      ["Conflict",a.conflict||"",b.conflict||"",.76],
+      ["Proof Mechanism",a.proofMechanism||a.concept?.proofMechanism||"",b.proofMechanism||b.concept?.proofMechanism||"",.74],
+      ["Proof",a.proof||"",b.proof||"",.68],
+      ["Selling Point Priority",a.concept?.sellingPointPriority||"",b.concept?.sellingPointPriority||"",.78],
+      ["CTA",a.cta||"",b.cta||"",.72],
+    ] as const;
+    const matches=dimensions.map(([name,aValue,bValue,threshold])=>({name,score:textSimilarity(aValue,bValue),threshold}));
+    const repeated=matches.filter(item=>item.score>=item.threshold);
+    const critical=matches.filter(item=>["Proof","Scenario","Creative Angle"].includes(item.name)&&item.score>=.88);
+    if(repeated.length>=3||critical.length){
+      const reasons=[...new Set([...repeated,...critical].map(item=>`${item.name}高度相似`))];
+      const score=Math.max(...matches.map(item=>item.score));
+      pairs.push({left,right,score:Number(score.toFixed(3)),reasons});
+    }
   }
-  const duplicateIndex=pairs.sort((a,b)=>b.score-a.score)[0]?.right ?? null;
+  const duplicateScores=new Map<number,{count:number;score:number}>();
+  for(const pair of pairs)for(const index of [pair.left,pair.right]){
+    const current=duplicateScores.get(index)??{count:0,score:0};
+    duplicateScores.set(index,{count:current.count+1,score:current.score+pair.score});
+  }
+  const duplicateIndex=[...duplicateScores.entries()]
+    .sort((a,b)=>b[1].count-a[1].count||b[1].score-a[1].score||b[0]-a[0])[0]?.[0]??null;
   return { passed:duplicateIndex===null, duplicateIndex, pairs };
 }
 
