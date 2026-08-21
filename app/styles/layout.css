@@ -1,0 +1,48 @@
+html { background: var(--vf-workspace); }
+body { min-width: 320px; background: var(--vf-workspace); color: var(--vf-text); }
+body .vf-app-shell { min-height: 100vh; display: flex; background: var(--vf-workspace); }
+body .vf-sidebar { position: fixed; inset: 0 auto 0 0; width: var(--vf-sidebar-width); height: 100vh; display: flex; flex-direction: column; padding: 22px 16px 18px; background: radial-gradient(circle at 20% 0%, #192552 0, transparent 31%), var(--vf-sidebar); border-right: 1px solid rgba(255,255,255,.06); color: #fff; z-index: 40; }
+body .vf-brand { gap: 11px; padding: 0 8px 20px; }
+body .vf-brand-mark { width: 40px; height: 40px; border-radius: 12px; background: var(--vf-ai-gradient); color: white; transform: none; box-shadow: 0 8px 24px rgba(105,82,246,.36); font-family: Inter,sans-serif; }
+body .vf-brand strong { color: #fff; font-size: 16px; letter-spacing: -.01em; }
+body .vf-brand small { color: #838ca9; font-size: 9px; letter-spacing: .08em; text-transform: uppercase; }
+.vf-new-project { width: 100%; height: 44px; display: flex; align-items: center; justify-content: center; gap: 8px; border: 0; border-radius: 11px; background: var(--vf-ai-gradient); color: white; font-weight: 800; cursor: pointer; box-shadow: 0 10px 24px rgba(92,73,235,.28); }
+.vf-new-project span { font-size: 19px; font-weight: 400; }
+.vf-sidebar-scroll { flex: 1; overflow-y: auto; margin: 18px -4px 14px 0; padding-right: 4px; scrollbar-width: thin; scrollbar-color: #313954 transparent; }
+.vf-nav-group { margin: 0 0 17px; }
+.vf-nav-group > p { margin: 0 10px 7px; color: #626c89; font-size: 9px; font-weight: 800; letter-spacing: .12em; }
+body .vf-nav-group nav { display: grid; gap: 3px; }
+body .vf-nav-group nav button { min-height: 39px; padding: 8px 10px; color: #aeb6cb; border-radius: 9px; gap: 10px; font-size: 12px; transition: background .18s,color .18s,transform .18s; }
+body .vf-nav-group nav button:hover { color: #fff; background: rgba(255,255,255,.055); transform: translateX(1px); }
+body .vf-nav-group nav button > span { width: 24px; height: 24px; display: grid; place-items: center; border-radius: 7px; background: rgba(255,255,255,.055); color: #9da9c8; font-size: 13px; }
+body .vf-nav-group nav button > b { font-weight: 650; }
+body .vf-nav-group nav button > em { margin-left: auto; padding: 2px 7px; color: #aab4cf; background: rgba(255,255,255,.07); font-size: 8px; }
+body .vf-nav-group nav button.nav-active { color: #fff; background: linear-gradient(90deg,rgba(112,75,244,.94),rgba(73,91,238,.88)); box-shadow: 0 8px 20px rgba(69,61,190,.22); }
+body .vf-nav-group nav button.nav-active > span { color: #fff; background: rgba(255,255,255,.16); }
+body .vf-nav-group nav button.nav-active > em { color: #fff; background: rgba(255,255,255,.17); }
+body .vf-team-card { margin-top: 0; padding: 13px; border-color: rgba(150,157,194,.18); background: rgba(255,255,255,.035); border-radius: 12px; }
+body .vf-team-card span { color: #b6c1df; font-size: 9px; letter-spacing: .08em; }
+body .vf-team-card.connected span { color: #70e4b0; }
+body .vf-team-card p { margin: 6px 0 10px; color: #77819e; font-size: 9px; line-height: 1.55; }
+body .vf-team-card button { width: 100%; padding: 8px; border: 1px solid rgba(152,164,199,.18); border-radius: 8px; background: rgba(255,255,255,.05); color: #c5cce0; font-size: 9px; cursor: pointer; }
+.vf-app-main { min-width: 0; width: calc(100% - var(--vf-sidebar-width)); min-height: 100vh; margin-left: var(--vf-sidebar-width); }
+.vf-top-header { position: sticky; top: 0; z-index: 30; min-height: var(--vf-header-height); display: flex; align-items: center; justify-content: space-between; gap: 20px; padding: 10px 28px; border-bottom: 1px solid var(--vf-border); background: rgba(255,255,255,.94); backdrop-filter: blur(14px); }
+.vf-header-title { min-width: 0; display: flex; align-items: center; gap: 15px; }
+.vf-header-title > span { display: none; }
+.vf-header-title h1 { margin: 0; color: var(--vf-text); font-size: 18px; line-height: 1.2; letter-spacing: -.02em; }
+.vf-header-title p { margin: 4px 0 0; color: var(--vf-text-muted); font-size: 10px; }
+.vf-header-actions { display: flex; align-items: center; gap: 10px; }
+.vf-service-state,.vf-team-state { display: flex; align-items: center; gap: 7px; padding: 7px 10px; border: 1px solid var(--vf-border); border-radius: 999px; background: var(--vf-surface-soft); color: var(--vf-text-secondary); font-size: 9px; white-space: nowrap; }
+.vf-service-state i { width: 6px; height: 6px; border-radius: 50%; background: var(--vf-warning); }
+.vf-service-state.is-online i,.vf-team-state.is-online:before { background: var(--vf-success); }
+.vf-team-state:before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: #a7adbb; }
+.vf-icon-button { width: 32px; height: 32px; border: 1px solid var(--vf-border); border-radius: 50%; background: white; color: var(--vf-text-secondary); cursor: default; }
+.vf-user { display: flex; align-items: center; gap: 8px; padding-left: 4px; }
+.vf-user > span { width: 32px; height: 32px; display: grid; place-items: center; border-radius: 10px; background: var(--vf-ai-gradient); color: #fff; font-size: 10px; font-weight: 900; }
+.vf-user b,.vf-user small { display: block; }
+.vf-user b { font-size: 10px; color: var(--vf-text); }
+.vf-user small { margin-top: 2px; font-size: 8px; color: var(--vf-text-muted); }
+body .vf-workspace { width: 100%; min-height: calc(100vh - var(--vf-header-height)); margin-left: 0; padding: 24px 28px 46px; background: var(--vf-workspace); }
+body .vf-workspace > header,body .vf-workspace .creator-grid,body .vf-workspace .history-panel,body .vf-workspace .review-panel,body .vf-workspace .product-center-panel { max-width: 1600px; }
+@media (max-width:1050px) { :root { --vf-sidebar-width:216px; } .vf-header-actions .vf-team-state,.vf-user div { display:none; } body .vf-workspace { padding:20px; } }
+@media (max-width:760px) { :root { --vf-sidebar-width:76px; } body .vf-sidebar { padding-inline:10px; } body .vf-brand { justify-content:center;padding-inline:0; } body .vf-brand > div,.vf-new-project:not(:focus) { font-size:0; } .vf-new-project { width:44px;margin:auto; } .vf-nav-group > p,body .vf-nav-group nav button > b,body .vf-nav-group nav button > em,body .vf-team-card { display:none; } body .vf-nav-group nav button { justify-content:center;padding:7px; } body .vf-nav-group nav button > span { width:32px;height:32px; } .vf-top-header { padding:10px 16px; } .vf-header-title p,.vf-header-actions .vf-service-state { display:none; } body .vf-workspace { padding:16px 12px 36px; } }
