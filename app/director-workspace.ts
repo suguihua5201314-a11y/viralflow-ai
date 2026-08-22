@@ -2,10 +2,10 @@ import type {DirectorPlan,DirectorShot} from "./director-core";
 
 export type ShotStatus="Draft"|"Confirmed"|"Shot"|"Retake";
 export type WorkspaceShot=DirectorShot&{locked:boolean;status:ShotStatus};
-export type IntegrityIssue={code:"hook_missing"|"reveal_missing"|"selling_point_unsupported"|"proof_missing"|"cta_missing"|"duration_mismatch"|"timeline_invalid"|"continuity_warning";message:string;severity:"warning"|"error"};
+export type IntegrityIssue={code:"hook_missing"|"reveal_missing"|"selling_point_unsupported"|"proof_missing"|"cta_missing"|"duration_mismatch"|"timeline_invalid"|"continuity_warning"|"source_block_invalid"|"context_integrity";message:string;severity:"warning"|"error"};
 export type IntegrityResult={status:"Complete"|"Needs Attention";issues:IntegrityIssue[]};
 export type RebalanceSummary={shots:WorkspaceShot[];beforePlanned:number;afterPlanned:number;target:number;delta:number};
-export type DirectorVersion={id:string;label:string;createdAt:string;status:"Draft"|"Confirmed";directorPlan:DirectorPlan;shots:WorkspaceShot[]};
+export type DirectorVersion={id:string;label:string;createdAt:string;status:"Draft"|"Confirmed";contextId:string;directorPlan:DirectorPlan;shots:WorkspaceShot[]};
 
 const round10=(value:number)=>Math.round(value*10)/10;
 const minimumDuration=(shot:WorkspaceShot)=>/HOOK/i.test(shot.stage)?2.5:shot.proofRequirement||/PROOF/i.test(shot.stage)?3:/CTA/i.test(shot.stage)?1.2:.8;
@@ -23,7 +23,7 @@ export function autoRebalance(shots:WorkspaceShot[],target:number):RebalanceSumm
  else if(remaining>0){const candidates=next.map(x=>x).filter(x=>!x.locked).sort((a,b)=>Number(Boolean(b.proofRequirement))-Number(Boolean(a.proofRequirement))||({Critical:2,High:1,Normal:0}[b.priority]-{Critical:2,High:1,Normal:0}[a.priority]));let cursor=0;while(remaining>.01&&candidates.length){const change=Math.min(.5,remaining);candidates[cursor%candidates.length].duration=round10(candidates[cursor%candidates.length].duration+change);remaining=round10(remaining-change);cursor++;}}
  const balanced=recalculateTimeline(next),afterPlanned=plannedDuration(balanced);return{shots:balanced,beforePlanned,afterPlanned,target,delta:round10(afterPlanned-target)};
 }
-export function checkDirectorIntegrity(shots:WorkspaceShot[],target:number,sellingPoints=""):IntegrityResult{
+export function checkDirectorIntegrity(shots:WorkspaceShot[],target:number,sellingPoints="",validSourceBlockIds:string[]=[],contextIssues:string[]=[]):IntegrityResult{
  const issues:IntegrityIssue[]=[];const surface=shots.map(x=>`${x.stage} ${x.purpose} ${x.visualDescription} ${x.productAction} ${x.proofRequirement}`).join("\n");
  if(!shots.some(x=>/HOOK|Attention/i.test(`${x.stage} ${x.purpose}`)))issues.push({code:"hook_missing",message:"Hook 镜头缺失",severity:"error"});
  if(!shots.some(x=>/REVEAL/i.test(`${x.stage} ${x.purpose} ${x.shotType}`)))issues.push({code:"reveal_missing",message:"Product Reveal 镜头缺失",severity:"warning"});
@@ -33,7 +33,9 @@ export function checkDirectorIntegrity(shots:WorkspaceShot[],target:number,selli
  if(!shots.some(x=>/CTA|Close \/ Action/i.test(`${x.stage} ${x.purpose}`)))issues.push({code:"cta_missing",message:"CTA 镜头缺失",severity:"warning"});
  const planned=plannedDuration(shots);if(Math.abs(planned-target)>.5)issues.push({code:"duration_mismatch",message:`Planned ${planned}s 与 Target ${target}s 相差 ${round10(planned-target)}s`,severity:"warning"});
  if(shots.some((x,i)=>x.order!==i+1||x.endTime<=x.startTime||(i>0&&x.startTime!==shots[i-1].endTime)))issues.push({code:"timeline_invalid",message:"Shot order 或时间轴不连续",severity:"error"});
+ const validIds=new Set(validSourceBlockIds);for(const shot of shots)if(validIds.size&&!validIds.has(shot.sourceBlockId)&&!shot.sourceBlockId.startsWith("manual:"))issues.push({code:"source_block_invalid",message:`${shot.shotId} 引用了当前脚本不存在的 ${shot.sourceBlockId}`,severity:"error"});
+ for(const message of contextIssues)issues.push({code:"context_integrity",message,severity:"error"});
  const sourceOrder=shots.map(x=>Number(x.sourceBlockId.match(/(\d+)$/)?.[1]||0));if(sourceOrder.some((x,i)=>i>0&&x&&sourceOrder[i-1]&&x<sourceOrder[i-1]))issues.push({code:"continuity_warning",message:"镜头顺序与 Script Block 顺序不一致，请检查连续性",severity:"warning"});
  return{status:issues.length?"Needs Attention":"Complete",issues};
 }
-export function createDirectorVersion(versions:DirectorVersion[],directorPlan:DirectorPlan,shots:WorkspaceShot[],status:"Draft"|"Confirmed"):DirectorVersion{return{id:`director-v${versions.length+1}-${Date.now().toString(36)}`,label:`Director V${versions.length+1}`,createdAt:new Date().toISOString(),status,directorPlan:structuredClone(directorPlan),shots:structuredClone(shots)};}
+export function createDirectorVersion(versions:DirectorVersion[],contextId:string,directorPlan:DirectorPlan,shots:WorkspaceShot[],status:"Draft"|"Confirmed"):DirectorVersion{return{id:`director-v${versions.length+1}-${Date.now().toString(36)}`,label:`Director V${versions.length+1}`,createdAt:new Date().toISOString(),status,contextId,directorPlan:structuredClone(directorPlan),shots:structuredClone(shots)};}
