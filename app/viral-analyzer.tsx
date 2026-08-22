@@ -1,13 +1,15 @@
 "use client";
 import {useState} from "react";
 import type {AnalysisInput,ViralAnalysisResult,ViralCase} from "./viral-analysis";
+import WorkspaceState from "./components/ui/workspace-state";
+import {notifyWorkspace} from "./components/ui/workspace-feedback";
 
 type Props={cases:ViralCase[];onSave:(item:ViralCase)=>void;onReplicate:(item:ViralCase)=>void;product?:string;market?:string;language?:string};
 const empty=(product="",market="",language=""):AnalysisInput=>({sourceText:"",inputType:"transcript",platform:"TikTok",market,language,product,category:"",durationSeconds:undefined,views:"",likes:"",comments:"",shares:"",saves:"",gmv:"",sourceUrl:"",notes:"",visualNotes:""});
 export default function ViralAnalyzer({cases,onSave,onReplicate,product="",market="",language=""}:Props){
  const [input,setInput]=useState(()=>empty(product,market,language));const [result,setResult]=useState<ViralAnalysisResult|null>(null);const [busy,setBusy]=useState(false);const [error,setError]=useState("");
  const patch=(value:Partial<AnalysisInput>)=>{setInput(prev=>({...prev,...value}));setResult(null)};
- async function analyze(){setBusy(true);setError("");try{const res=await fetch("/api/analyze",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify(input)});const data=await res.json();if(!res.ok)throw new Error(data.error||"分析失败");setResult(data.analysis);}catch(e){setError(e instanceof Error?e.message:"分析失败");}finally{setBusy(false)}}
+ async function analyze(){setBusy(true);setError("");try{const res=await fetch("/api/analyze",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify(input)});const data=await res.json();if(!res.ok)throw new Error(data.error||"分析失败");setResult(data.analysis);notifyWorkspace("爆款结构分析完成",{detail:"结果已使用当前输入的真实内容生成"});}catch(e){setError(e instanceof Error?e.message:"分析失败");}finally{setBusy(false)}}
  const currentCase=()=>result?{id:`viral-${Date.now()}`,title:`${input.product||input.category||"爆款内容"}｜${result.hook.type}`,createdAt:new Date().toISOString(),source:input,analysis:result}:null;
  return <section className="va-shell">
   <aside className="va-source"><span className="modal-kicker">来源输入 · 已提供信息</span><h2>输入爆款内容</h2><p>文案与口播文本是本阶段真实分析依据。没有提供的数据不会被补写。</p>
@@ -19,7 +21,7 @@ export default function ViralAnalyzer({cases,onSave,onReplicate,product="",marke
    {error&&<p className="va-error">{error}</p>}<button className="va-analyze" disabled={busy||input.sourceText.trim().length<20} onClick={analyze}>{busy?"DeepSeek 正在拆解…":"✦ 开始结构化拆解"}</button>
    <div className="va-legacy"><b>视频资产保留</b><span>历史上传与播放器仍在项目中；当前DeepSeek只分析Transcript，不声称看过视频画面。</span></div>
   </aside>
-  <main className="va-analysis">{!result?<div className="va-empty"><span>◇</span><h2>等待内容分析</h2><p>结果将分离已提供信息、AI 分析与复刻建议。</p>{cases.length>0&&<small>案例库已有 {cases.length} 条兼容案例</small>}</div>:<>
+  <main className="va-analysis">{busy?<WorkspaceState kind="loading" eyebrow="AI 爆款分析中心" title="正在理解内容结构" description="正在拆解开场、结构、节奏、卖点、证明与转化逻辑。" detail="不会补写未提供的播放量、GMV 或画面证据。" />:error?<WorkspaceState kind="error" icon="!" title="分析暂时中断" description={error} primary={{label:"重新分析",onClick:analyze}} secondary={{label:"修改输入",onClick:()=>document.querySelector<HTMLTextAreaElement>(".va-source textarea")?.focus()}} />:!result?<WorkspaceState eyebrow="AI 爆款分析中心" icon="◇" title="拆解一条爆款内容" description="粘贴完整口播或文案，AI 将拆解 Hook、结构、节奏、卖点、证明和转化逻辑。" primary={{label:"开始分析",onClick:analyze,disabled:input.sourceText.trim().length<20}} detail={cases.length>0?`案例库已有 ${cases.length} 条真实保存案例`:"分析结果可继续生成复刻方案或脚本"} />:<>
    <div className="va-head"><div><span>AI 分析 · DeepSeek</span><h2>{result.summary}</h2></div><b>{result.score.total}<small>/100</small></b></div>
    <article className="va-hook"><span>开场钩子深度分析</span><blockquote>{result.hook.original}</blockquote><div className="va-chips"><b>{result.hook.type}</b><b>{result.hook.mechanism}</b></div><p><strong>注意力机制</strong>{result.hook.whyItWorks}</p><p><strong>承诺 → 兑现</strong>{result.hook.promise} → {result.hook.payoff}</p></article>
    <section className="va-card"><h3>内容结构</h3>{result.structure.map((x,i)=><article className="va-stage" key={`${x.stage}-${i}`}><b>{i+1}</b><div><strong>{x.stage}</strong><p>{x.content}</p><small>{x.purpose} · {x.viewerPsychology}</small></div></article>)}</section>
@@ -32,7 +34,7 @@ export default function ViralAnalyzer({cases,onSave,onReplicate,product="",marke
    <h3>可复刻公式</h3><section className="va-formula">{result.reusableFormula.map((x,i)=><div key={i}><b>{i+1}</b><span>{x}</span></div>)}</section>
    <h3>复刻建议</h3><section className="va-card"><b>画面</b>{result.replicationNotes.visualSuggestions.map((x,i)=><p key={i}>{x}</p>)}<b>文案</b>{result.replicationNotes.copySuggestions.map((x,i)=><p key={i}>{x}</p>)}<b>剪辑</b>{result.replicationNotes.editingSuggestions.map((x,i)=><p key={i}>{x}</p>)}</section>
    {result.risks.length>0&&<section className="va-risks"><b>风险</b>{result.risks.map((x,i)=><p key={i}>! {x}</p>)}</section>}
-   <div className="va-actions"><button disabled={!result} onClick={()=>{const item=currentCase();if(item)onSave(item)}}>保存到爆款案例库</button><button disabled={!result} onClick={()=>{const item=currentCase();if(item)onReplicate(item)}}>基于此案例复刻 →</button></div>
+   <div className="va-actions"><button disabled={!result} onClick={()=>{const item=currentCase();if(item){onSave(item);notifyWorkspace("已保存到爆款案例库")}}}>保存到爆款案例库</button><button disabled={!result} onClick={()=>{const item=currentCase();if(item)onReplicate(item)}}>生成复刻方案 →</button></div>
   </>}</aside>
  </section>;
 }

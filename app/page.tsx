@@ -22,6 +22,7 @@ import type { ReplicationSetup } from "./replication-core";
 import type {ProviderId,ProviderRunMetadata,ProviderStatus} from "./provider-types";
 import { viewMeta, type ActiveView } from "./navigation";
 import type {DirectorRequest,DirectorSourceType} from "./director-core";
+import {notifyWorkspace} from "./components/ui/workspace-feedback";
 
 type Scene = { time: string; visual: string; line: string; edit: string };
 type Script = { id?: number; title: string; product: string; language: string; country: string; style: string; hook: string; alternateHooks: string[]; narration: string; scenes: Scene[]; createdAt?: string; aiGenerated?: boolean; creativeAngle?:string; hookType?:string; framework?:string; conflict?:string; productReveal?:string; proof?:string; sellingPoints?:string; cta?:string; shootingSuggestion?:string; scenario?:string; proofMechanism?:string; ctaStyle?:string };
@@ -256,7 +257,7 @@ export default function Home() {
     void syncTeam(currentTeamPayload({ history: nextHistory }));
     return saved;
   }
-  function copyText(text: string) { navigator.clipboard.writeText(text); }
+  function copyText(text: string) { void navigator.clipboard.writeText(text).then(()=>notifyWorkspace("内容已复制")).catch(()=>notifyWorkspace("复制失败",{tone:"error",detail:"请检查浏览器剪贴板权限"})); }
   function importHook() {
     if (!importForm.url.trim() || !importForm.hook.trim()) {
       setError("请填写视频链接和前3–5秒开头文案。");
@@ -271,7 +272,7 @@ export default function Home() {
     const esc = (v: string) => v.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
     const xml = `<?xml version="1.0"?><Workbook xmlns="urn:schemas-microsoft-com:office:spreadsheet" xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet"><Worksheet ss:Name="爆款脚本"><Table>${rows.map(r => `<Row>${r.map(c => `<Cell><Data ss:Type="String">${esc(c)}</Data></Cell>`).join("")}</Row>`).join("")}</Table></Worksheet></Workbook>`;
     const blob = new Blob([xml], { type: "application/vnd.ms-excel;charset=utf-8" }); const a = document.createElement("a");
-    a.href = URL.createObjectURL(blob); a.download = `${script.product}-${script.language}-脚本.xls`; a.click(); URL.revokeObjectURL(a.href);
+    a.href = URL.createObjectURL(blob); a.download = `${script.product}-${script.language}-脚本.xls`; a.click(); URL.revokeObjectURL(a.href); notifyWorkspace("脚本导出已开始",{detail:"文件使用当前真实脚本内容生成"});
   }
 
   const directorProduct=productProfiles.find(item=>item.name.trim().toLowerCase()===(result?.product||form.product).trim().toLowerCase());

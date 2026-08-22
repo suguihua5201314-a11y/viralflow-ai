@@ -1,5 +1,6 @@
 import type { ActiveView } from "./navigation";
 import type { DashboardMetrics } from "./dashboard-metrics";
+import WorkspaceState from "./components/ui/workspace-state";
 
 export type RecentWorkItem = {
   key: string;
@@ -66,7 +67,7 @@ export default function Dashboard({ metrics, recent, onNavigate, onOpenRecent }:
 
       <section className="vf-dashboard-section vf-recent-section">
         <header><div><span>最近创作</span><h2>继续你的内容工作</h2></div><button type="button" onClick={() => onNavigate("history")}>查看全部创作资产 →</button></header>
-        {recent.length === 0 ? <div className="vf-recent-empty"><span><i>✦</i></span><h3>还没有最近创作</h3><p>从 AI 创作工作台、爆款洞察或创意复刻开始第一个项目。</p><button type="button" onClick={() => onNavigate("create")}>开始创作 <i>→</i></button></div> : <div className="vf-recent-list">{recent.map(item => <article key={item.key}>
+        {recent.length === 0 ? <WorkspaceState compact eyebrow="最近创作" title="还没有创作项目" description="从一个真实产品开始第一个 AI 创作流程，生成后可继续进入导演和配音。" primary={{label:"开始第一个创作",onClick:()=>onNavigate("create")}} secondary={{label:"先看爆款洞察",onClick:()=>onNavigate("breakdown")}} /> : <div className="vf-recent-list">{recent.map(item => <article key={item.key}>
           <div className="vf-recent-mark">{item.product.trim().slice(0, 1) || "创"}</div>
           <div className="vf-recent-main"><div><span>{item.current ? "当前采用" : "脚本"}</span><small>{formatTime(item.updatedAt)}</small></div><h3>{item.title}</h3><p>{item.product} · {item.market || "未设置市场"}</p></div>
           <div className="vf-recent-meta"><span>{item.language || "未设置语言"}</span><span>{item.platform}</span><span>{item.duration}s</span></div>
@@ -75,7 +76,7 @@ export default function Dashboard({ metrics, recent, onNavigate, onOpenRecent }:
       </section>
 
       <section className="vf-dashboard-section vf-trend-section"><header><div><span>创作趋势</span><h2>近 7 天真实活动</h2></div><p>{metrics.periods.available ? `今日 ${metrics.periods.today} · 本周 ${metrics.periods.week} · 本月 ${metrics.periods.month}` : "暂无历史统计"}</p></header>
-        {metrics.trend.some(item => item.count > 0) ? <div className="vf-trend-chart">{metrics.trend.map(item => <div className="vf-trend-day" key={item.label}><span className="vf-trend-bar" style={{ height: `${Math.max(8, item.count / trendMax * 100)}%` }}><b>{item.count}</b></span><span>{item.label}</span></div>)}</div> : <div className="vf-trend-empty">暂无趋势数据；产生带时间记录的脚本、案例或产品更新后显示。</div>}
+        {metrics.trend.some(item => item.count > 0) ? <div className="vf-trend-chart">{metrics.trend.map(item => <div className="vf-trend-day" key={item.label}><span className="vf-trend-bar" style={{ height: `${Math.max(8, item.count / trendMax * 100)}%` }}><b>{item.count}</b></span><span>{item.label}</span></div>)}</div> : <WorkspaceState compact kind="unavailable" icon="↗" title="暂无趋势数据" description="产生带可靠时间记录的脚本、案例或产品更新后，这里才会显示真实趋势。" />}
       </section>
       <section className="vf-pipeline"><span>创意生产路径</span>{["爆款洞察", "脚本", "创意复刻", "导演", "配音"].map((label, index) => <div key={label}><b>{index + 1}</b>{label}{index < 4 && <i>→</i>}</div>)}</section>
     </main>
