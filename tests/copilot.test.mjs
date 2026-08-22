@@ -32,6 +32,6 @@ test("D fact and compliance guard rejects invented parameter, certification and 
 
 test("E/F/G source preserves preview accept undo versions and existing studio capabilities",async()=>{
   const source=await import("node:fs/promises").then(fs=>fs.readFile(new URL("../app/script-studio.tsx",import.meta.url),"utf8"));
-  for(const marker of ["BEFORE","AFTER","放弃，不修改","接受并替换","undoLastRewrite","saveVersion","V${versions.length+1}","onGenerateRace","adoptRace","compareOpen","checkCompliance","scoreScript"])assert.ok(source.includes(marker),`missing ${marker}`);
+  for(const marker of ["修改前","修改后","放弃，不修改","接受并替换","undoLastRewrite","saveVersion","V${versions.length+1}","onGenerateRace","adoptRace","compareOpen","checkCompliance","scoreScript"])assert.ok(source.includes(marker),`missing ${marker}`);
   assert.doesNotMatch(source,/key=\{(?:resultIdentity|scriptIdentity|creationMode|hookStrategy)/);
 });

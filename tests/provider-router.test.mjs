@@ -19,6 +19,6 @@ test("router isolates provider I/O while Studio keeps selector in React session"
  const [router,route,studio,page]=await Promise.all([readFile(new URL("../app/provider-router.ts",import.meta.url),"utf8"),readFile(new URL("../app/api/scripts/route.ts",import.meta.url),"utf8"),readFile(new URL("../app/script-studio.tsx",import.meta.url),"utf8"),readFile(new URL("../app/page.tsx",import.meta.url),"utf8")]);
  for(const marker of ["ARK_API_KEY","ARK_MODEL_ID","ARK_ENDPOINT_ID","ARK_BASE_URL","unauthorized","invalid_model_or_endpoint","rate_limit","timeout"])assert.ok(router.includes(marker),marker);
  assert.ok(route.includes("callProvider"));assert.ok(route.includes("providerRequested:p.provider||\"deepseek\""));
- for(const marker of ["AI Model","provider-warning","selectedProviderStatus","onProviderChange"])assert.ok(studio.includes(marker),marker);
+ for(const marker of ["AI 模型","provider-warning","selectedProviderStatus","onProviderChange"])assert.ok(studio.includes(marker),marker);
  for(const marker of ["DeepSeek","豆包","GPT",'useState<ProviderId>("deepseek")',"setLastProviderRun"])assert.ok(page.includes(marker),marker);
 });
