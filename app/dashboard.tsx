@@ -19,14 +19,21 @@ type DashboardProps = {
   onOpenRecent: (key: string, destination: "script" | "director") => void;
 };
 
-const quickStarts: Array<{ view: ActiveView; icon: string; title: string; description: string }> = [
-  { view: "create", icon: "✦", title: "AI 创作工作台", description: "根据产品与创作参数，生成多条短视频脚本。" },
-  { view: "breakdown", icon: "◇", title: "爆款洞察", description: "拆解爆款内容的开场、结构、节奏与证明机制。" },
-  { view: "replicate", icon: "◎", title: "创意复刻", description: "保留爆款机制，结合目标产品生成原创方向。" },
-  { view: "director", icon: "◉", title: "AI 导演工作台", description: "把脚本转成可执行镜头、动作与拍摄方案。" },
-  { view: "voice", icon: "♫", title: "AI 语音工作台", description: "生成多语言口播，为后续视频制作准备音轨。" },
-  { view: "checker", icon: "✓", title: "内容合规", description: "检查脚本中的违规、绝对化与高风险表达。" },
+const quickStarts: Array<{ view: ActiveView; icon: string; title: string; description: string; tone: string }> = [
+  { view: "create", icon: "✦", title: "AI 创作工作台", description: "根据产品与创作参数，生成多条短视频脚本。", tone: "violet" },
+  { view: "breakdown", icon: "◇", title: "爆款洞察", description: "拆解爆款内容的开场、结构、节奏与证明机制。", tone: "blue" },
+  { view: "replicate", icon: "◎", title: "创意复刻", description: "保留爆款机制，结合目标产品生成原创方向。", tone: "indigo" },
+  { view: "director", icon: "◉", title: "AI 导演工作台", description: "把脚本转成可执行镜头、动作与拍摄方案。", tone: "cyan" },
+  { view: "voice", icon: "♫", title: "AI 语音工作台", description: "生成多语言口播，为后续视频制作准备音轨。", tone: "pink" },
+  { view: "checker", icon: "✓", title: "内容合规", description: "检查脚本中的违规、绝对化与高风险表达。", tone: "green" },
 ];
+
+const statCards = [
+  { key: "products", label: "产品数量", context: "产品知识库", icon: "▣" },
+  { key: "cases", label: "创意案例", context: "已保存爆款案例", icon: "▦" },
+  { key: "scripts", label: "历史脚本", context: "创作资产", icon: "◷" },
+  { key: "recent", label: "最近创作", context: "当前可继续处理", icon: "↗" },
+] as const;
 
 const formatTime = (value?: string) => {
   if (!value) return "暂无更新时间";
@@ -37,30 +44,25 @@ const formatTime = (value?: string) => {
 export default function Dashboard({ counts, recent, onNavigate, onOpenRecent }: DashboardProps) {
   return <section className="vf-dashboard" data-testid="dashboard-home">
     <section className="vf-dashboard-hero">
-      <div><span>ViralFlow AI · 智能创意工作台</span><h2>欢迎回来，苏苏团队</h2><p>从爆款洞察到脚本、导演与成片，在一个工作台完成。</p></div>
-      <button type="button" onClick={() => onNavigate("create")}><span>＋</span> 开始新创作</button>
+      <div className="vf-hero-copy"><span><i /> ViralFlow AI · 智能创意工作台</span><h2>欢迎回来，苏苏团队</h2><p>从爆款洞察到脚本、导演与成片，在一个工作台完成。</p></div>
+      <div className="vf-hero-actions"><small>创意生产中枢</small><button type="button" onClick={() => onNavigate("create")}><span>＋</span> 开始新创作 <i>→</i></button></div>
     </section>
 
     <section className="vf-dashboard-section">
       <header><div><span>快速开始</span><h2>选择下一步工作</h2></div><p>所有入口均连接现有真实功能</p></header>
-      <div className="vf-quick-grid">{quickStarts.map(item => <button type="button" key={item.view} onClick={() => onNavigate(item.view)}><span>{item.icon}</span><div><h3>{item.title}</h3><p>{item.description}</p></div><i>↗</i></button>)}</div>
+      <div className="vf-quick-grid">{quickStarts.map(item => <button type="button" key={item.view} data-tone={item.tone} onClick={() => onNavigate(item.view)}><span>{item.icon}</span><div><h3>{item.title}</h3><p>{item.description}</p></div><i>↗</i></button>)}</div>
     </section>
 
     <section className="vf-dashboard-section">
       <header><div><span>数据概览</span><h2>真实资产总览</h2></div><p>仅统计当前系统中可读取的数据</p></header>
-      <div className="vf-metric-grid">
-        <article><span>产品数量</span><strong>{counts.products}</strong><small>产品知识库</small></article>
-        <article><span>创意案例</span><strong>{counts.cases}</strong><small>已保存爆款案例</small></article>
-        <article><span>历史脚本</span><strong>{counts.scripts}</strong><small>创作资产</small></article>
-        <article><span>最近创作</span><strong>{counts.recent}</strong><small>当前可继续处理</small></article>
-      </div>
+      <div className="vf-metric-grid">{statCards.map(item => <article key={item.key}><div><span>{item.label}</span><i>{item.icon}</i></div><strong>{counts[item.key]}</strong><small><b>{counts[item.key] === 0 ? "暂无数据" : "数据已同步"}</b>{item.context}</small></article>)}</div>
     </section>
 
     <section className="vf-dashboard-section vf-recent-section">
       <header><div><span>最近创作</span><h2>继续你的内容工作</h2></div><button type="button" onClick={() => onNavigate("history")}>查看全部创作资产 →</button></header>
-      {recent.length === 0 ? <div className="vf-recent-empty"><span>◷</span><h3>还没有创作记录</h3><p>生成并采用第一条脚本后，会在这里显示真实创作。</p><button type="button" onClick={() => onNavigate("create")}>进入 AI 创作工作台</button></div> : <div className="vf-recent-list">{recent.map(item => <article key={item.key}>
+      {recent.length === 0 ? <div className="vf-recent-empty"><span><i>✦</i></span><h3>还没有最近创作</h3><p>从 AI 创作工作台、爆款洞察或创意复刻开始第一个项目。</p><button type="button" onClick={() => onNavigate("create")}>开始创作 <i>→</i></button></div> : <div className="vf-recent-list">{recent.map(item => <article key={item.key}>
         <div className="vf-recent-mark">{item.product.trim().slice(0, 1) || "创"}</div>
-        <div className="vf-recent-main"><div><span>{item.current ? "当前采用脚本" : "脚本"}</span><small>{formatTime(item.updatedAt)}</small></div><h3>{item.title}</h3><p>{item.product} · {item.market || "未设置市场"}</p></div>
+        <div className="vf-recent-main"><div><span>{item.current ? "当前采用" : "脚本"}</span><small>{formatTime(item.updatedAt)}</small></div><h3>{item.title}</h3><p>{item.product} · {item.market || "未设置市场"}</p></div>
         <div className="vf-recent-meta"><span>{item.language || "未设置语言"}</span><span>{item.platform}</span><span>{item.duration}s</span></div>
         <div className="vf-recent-actions"><button type="button" onClick={() => onOpenRecent(item.key, "script")}>查看脚本</button><button type="button" onClick={() => onOpenRecent(item.key, "director")}>进入导演</button></div>
       </article>)}</div>}

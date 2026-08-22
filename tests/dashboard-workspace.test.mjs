@@ -34,6 +34,12 @@ test("E-G recent work, metrics and global search use existing state sources", ()
 test("K-L layout has desktop and compact breakpoints without decorative dead controls", () => {
   assert.match(styles, /@media\(max-width:1280px\)/);
   assert.match(styles, /@media\(max-width:800px\)/);
+  assert.match(styles, /@media\(min-width:1680px\)/);
+  assert.match(styles, /--vf-app-bg:#070b14/);
+  assert.match(styles, /--vf-surface-1:#0d1320/);
+  assert.match(styles, /prefers-reduced-motion/);
   assert.doesNotMatch(header, /aria-label="帮助"/);
   assert.match(header, /role="listbox"/);
+  assert.match(header, /event\.metaKey \|\| event\.ctrlKey/);
+  assert.match(header, /<kbd>⌘ K<\/kbd>/);
 });
