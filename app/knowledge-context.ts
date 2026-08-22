@@ -66,22 +66,24 @@ export function prioritizeSellingPoints(points:string[],concept?:CreativeConcept
 }
 
 export function analyzeViralReference(reference:string) {
+  const labeled=(label:string)=>reference.match(new RegExp(`^${label}:\\s*(.+)$`,`mi`))?.[1]?.trim();
   const lines=reference.replace(/\r/g,"").split(/(?<=[。！？!?；;])|\n+/).map(line=>line.trim()).filter(Boolean);
-  const first=lines[0]||"";
+  const sourceTranscript=reference.split("[Source Transcript]")[1]?.trim();
+  const first=(sourceTranscript||lines[0]||"").split(/(?<=[。！？!?])|\n/)[0]||"";
   const hookMechanism=/[?？]|por qué|why|猜|adivina/i.test(first)?"提问/理解缺口":/对比|versus|contra|浪费|失败|别买|no compres/i.test(first)?"冲突/对照":/结果|秒|完成|final|resultado|segund/i.test(first)?"结果前置":"场景/新奇信息";
   const indexOf=(pattern:RegExp)=>lines.findIndex(line=>pattern.test(line));
   const conflict=indexOf(/失败|普通|问题|浪费|fail|problema|normal|dinero/i);
   const proof=indexOf(/测试|结果|安装|对比|test|prueba|resultado|instal/i);
   const cta=indexOf(/买|下单|库存|优惠|buy|compra|stock|oferta/i);
   return {
-    hookMechanism,
-    creativeAngle:conflict>=0?"痛点或对照推动":"场景或结果推动",
-    pacing:lines.length>=8?"短句快节奏":lines.length>=4?"中快节奏":"精简结构",
-    informationOrder:["Hook",conflict>=0?"Conflict":null,proof>=0?"Proof":null,cta>=0?"CTA":null].filter(Boolean).join(" → "),
-    conflictMechanism:conflict>=0?clip(lines[conflict],120):"未明显使用冲突",
-    proofMechanism:proof>=0?clip(lines[proof],120):"未明显提供证明",
-    ctaStyle:cta>=0?clip(lines[cta],120):"自然收口",
-    sourceExcerpt:clip(reference,2400),
+    hookMechanism:labeled("Hook Mechanism")||hookMechanism,
+    creativeAngle:labeled("Creative Angle")||(conflict>=0?"痛点或对照推动":"场景或结果推动"),
+    pacing:labeled("Pacing")||(lines.length>=8?"短句快节奏":lines.length>=4?"中快节奏":"精简结构"),
+    informationOrder:labeled("Information Order")||["Hook",conflict>=0?"Conflict":null,proof>=0?"Proof":null,cta>=0?"CTA":null].filter(Boolean).join(" → "),
+    conflictMechanism:labeled("Conflict")||(conflict>=0?clip(lines[conflict],120):"未明显使用冲突"),
+    proofMechanism:labeled("Proof")||(proof>=0?clip(lines[proof],120):"未明显提供证明"),
+    ctaStyle:labeled("CTA Style")||(cta>=0?clip(lines[cta],120):"自然收口"),
+    sourceExcerpt:clip(sourceTranscript||reference,2400),
   };
 }
 
