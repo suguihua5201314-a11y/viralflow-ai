@@ -9,39 +9,40 @@ type SidebarProps = {
   onTeamToggle: () => void;
 };
 
-const groups: Array<{ label: string; items: Array<{ id: ActiveView; icon: string; label: string; badge?: string }> }> = [
-  { label: "创作", items: [
-    { id: "create", icon: "✦", label: "AI脚本生成" },
-    { id: "breakdown", icon: "◇", label: "爆款拆解" },
-    { id: "replicate", icon: "◎", label: "爆款复刻" },
-    { id: "checker", icon: "✓", label: "违规风险检测" },
+const groups: Array<{ label: string; items: Array<{ id: ActiveView; icon: string; label: string }> }> = [
+  { label: "总览", items: [{ id: "dashboard", icon: "⌂", label: "工作台首页" }] },
+  { label: "创意策划", items: [
+    { id: "create", icon: "✦", label: "AI 创作工作台" },
+    { id: "breakdown", icon: "◇", label: "爆款洞察" },
+    { id: "replicate", icon: "◎", label: "创意复刻" },
+    { id: "checker", icon: "✓", label: "内容合规" },
   ] },
-  { label: "制作", items: [
-    { id: "video", icon: "▶", label: "爆款视频拆解", badge: "AI" },
-    { id: "director", icon: "◉", label: "AI拍摄导演", badge: "NEW" },
-    { id: "voice", icon: "♫", label: "AI配音" },
+  { label: "内容制作", items: [
+    { id: "video", icon: "▶", label: "视频洞察" },
+    { id: "director", icon: "◉", label: "AI 导演工作台" },
+    { id: "voice", icon: "♫", label: "AI 语音工作台" },
   ] },
-  { label: "资产与增长", items: [
+  { label: "知识与资产", items: [
     { id: "products", icon: "▣", label: "产品知识库" },
-    { id: "library", icon: "▦", label: "爆款案例库" },
-    { id: "monitor", icon: "⌁", label: "爆款监控" },
-    { id: "history", icon: "◷", label: "历史脚本" },
-    { id: "reviews", icon: "▥", label: "数据分析" },
+    { id: "library", icon: "▦", label: "创意案例库" },
+    { id: "monitor", icon: "⌁", label: "内容监测" },
+    { id: "history", icon: "◷", label: "创作资产" },
+    { id: "reviews", icon: "▥", label: "数据中心" },
   ] },
 ];
 
 export default function Sidebar({ active, onNavigate, onHistory, counts, teamConnected, onTeamToggle }: SidebarProps) {
   const countFor = (id: ActiveView) => id === "library" ? counts.library : id === "monitor" ? counts.monitor : id === "history" ? counts.history : id === "products" ? counts.products : id === "reviews" ? counts.reviews : undefined;
   return <aside className="sidebar vf-sidebar">
-    <div className="brand vf-brand"><span className="brand-mark vf-brand-mark">V</span><div><strong>ViralFlow AI</strong><small>AI Creative Pipeline</small></div></div>
-    <button className="vf-new-project" onClick={() => onNavigate("create")}><span>＋</span> 新建创作</button>
+    <button className="brand vf-brand" type="button" onClick={() => onNavigate("dashboard")} aria-label="返回工作台首页"><span className="brand-mark vf-brand-mark">V</span><div><strong>ViralFlow AI</strong><small>智能创意工作台</small></div></button>
+    <button className="vf-new-project" onClick={() => onNavigate("create")}><span>＋</span> 新建项目</button>
     <div className="vf-sidebar-scroll">
       {groups.map(group => <section className="vf-nav-group" key={group.label}>
         <p>{group.label}</p>
         <nav>{group.items.map(item => {
           const count = countFor(item.id);
-          return <button key={item.id} className={active === item.id ? "nav-active" : ""} onClick={() => item.id === "history" ? onHistory() : onNavigate(item.id)}>
-            <span>{item.icon}</span><b>{item.label}</b>{item.badge ? <em>{item.badge}</em> : count !== undefined ? <em>{count}</em> : null}
+          return <button key={item.id} title={item.label} aria-current={active === item.id ? "page" : undefined} className={active === item.id ? "nav-active" : ""} onClick={() => item.id === "history" ? onHistory() : onNavigate(item.id)}>
+            <span>{item.icon}</span><b>{item.label}</b>{count !== undefined ? <em>{count}</em> : null}
           </button>;
         })}</nav>
       </section>)}
