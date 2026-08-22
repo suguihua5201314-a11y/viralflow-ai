@@ -519,7 +519,13 @@ Creativity：${p.creativity || "平衡"}
   const narration = generated.scenes.map(scene => scene.line.trim()).filter(Boolean).join("\n");
   const languageValidation=validateScriptLanguage({...generated,narration},p.language);
   if(!languageValidation.passed)throw new ProviderGenerationError("language_validation_error",`Provider输出语言与${p.language}不一致`,undefined,[...languageValidation.reasons,...languageValidation.offendingFields.map(field=>`field:${field}`)]);
-  const factViolations=findFactViolations(narration,knowledgeContext);
+  const factSurface=[
+    generated.title,generated.creativeAngle,generated.hook,generated.conflict,
+    generated.productReveal,generated.proof,generated.sellingPoints,generated.cta,
+    generated.shootingSuggestion,...generated.alternateHooks,
+    ...generated.scenes.flatMap(scene=>[scene.visual,scene.line,scene.edit]),
+  ].join("\n");
+  const factViolations=findFactViolations(factSurface,knowledgeContext);
   if(factViolations.length){
     const safeDetails=[...new Set(factViolations.map(item=>item.startsWith("直接复制")?"viral_reference_copy":item.startsWith("复用了近期")?"history_hook_reuse":item.startsWith("使用了未提供的参数")?"unsupported_numeric_claim":item.startsWith("使用了未提供的认证")?"unsupported_certification":item.startsWith("命中产品禁用")?"banned_expression":"fact_boundary"))];
     throw new ProviderGenerationError("fact_validation_error",`Provider生成了${factViolations.length}项越界事实`,undefined,safeDetails);

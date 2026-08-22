@@ -13,7 +13,7 @@ export type ReplicationStrategy={
 };
 export type ReplicationConcept=CreativeConcept&{direction:"Faithful Mechanism"|"Product Native"|"Creative Mutation";sourceMechanismRetained:string[];originalElementsIntroduced:string[];whyThisAdaptation:string};
 export type SimilarityResult={sourceSimilarityChecked:true;phraseOverlap:number;hookExpressionOverlap:number;hookMechanismSimilarity:number;structureSimilarity:number;ctaExpressionOverlap:number;distinctivePhraseFound:boolean;sourceLeakage:string[];originalityPassed:boolean;regenerated:boolean;reasons:string[]};
-export type ReplicationCandidate={id:string;concept:ReplicationConcept;script:StructuredScript;similarity:SimilarityResult;regenerationAttempts:number};
+export type ReplicationCandidate={id:string;concept:ReplicationConcept;script:StructuredScript;similarity:SimilarityResult&{factViolations?:string[]};regenerationAttempts:number};
 
 const normalize=(value:string)=>value.toLowerCase().replace(/[\s\p{P}\p{S}]/gu,"");
 function allowedPoint(value:string|undefined,allowed:string[]){const key=normalize(value||"");return key?allowed.find(point=>{const candidate=normalize(point);return candidate===key||candidate.includes(key)||key.includes(candidate)}):undefined;}
