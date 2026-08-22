@@ -12,6 +12,7 @@ import Sidebar from "./components/layout/sidebar";
 import TopHeader from "./components/layout/top-header";
 import type { GlobalSearchItem } from "./components/layout/top-header";
 import Dashboard, { type RecentWorkItem } from "./dashboard";
+import { buildDashboardMetrics } from "./dashboard-metrics";
 import ScriptStudio, { type GenerationControls } from "./script-studio";
 import ViralAnalyzer from "./viral-analyzer";
 import ViralReplication from "./viral-replication";
@@ -295,12 +296,13 @@ export default function Home() {
     ...viralCases.map(item=>({id:`case-${item.id}`,type:"案例" as const,title:item.title,subtitle:[item.source.platform,item.source.market,item.source.product].filter(Boolean).join(" · ")||"创意案例库",keywords:`${item.analysis.summary} ${item.analysis.creativeAngle}`,onSelect:()=>{setLibraryType("cases");setLibrarySearch(item.title);setActive("library");}})),
     ...history.map((item,index)=>({id:`script-${item.id??index}`,type:"脚本" as const,title:item.title,subtitle:`${item.product} · ${item.language}`,keywords:`${item.hook} ${item.country}`,onSelect:()=>{adoptCurrentScript(item,{duration:inferredScriptDuration(item),offer:""});setActive("create");}})),
   ];
+  const dashboardMetrics=buildDashboardMetrics({products:productProfiles,cases:viralCases,scripts:history,currentScript:result,recentCount:recentWork.length,providers:providerStatuses});
 
   return <AppShell
     sidebar={<Sidebar active={active} onNavigate={setActive} onHistory={() => { setActive("history"); void loadHistory(); }} counts={{ library: hookLibrary.length + pointLibrary.length, monitor: monitorAccounts.length, history: history.length, products: productProfiles.length, reviews: reviewRecords.length }} teamConnected={teamConnected} onTeamToggle={() => { if (teamConnected) { setTeamConnected(false); setTeamPassword(""); } else setShowTeamLogin(true); }} />}
     header={<TopHeader active={active} aiConnected={aiConnected} teamConnected={teamConnected} searchItems={searchItems} />}
   >
-      {active === "dashboard" && <Dashboard counts={{products:productProfiles.length,cases:viralCases.length,scripts:history.length,recent:recentWork.length}} recent={recentWork} onNavigate={setActive} onOpenRecent={openRecent} />}
+      {active === "dashboard" && <Dashboard metrics={dashboardMetrics} recent={recentWork} onNavigate={setActive} onOpenRecent={openRecent} />}
       {active === "video" && <VideoAnalyzer products={productProfiles.map(x=>x.name)} />}
       {active === "director" && <ShootingDirector input={directorInput} onNavigate={view=>setActive(view)} />}
       {active === "voice" && <VoiceStudio initialText={result?.narration ?? ""} />}

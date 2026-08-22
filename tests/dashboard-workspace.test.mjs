@@ -8,6 +8,8 @@ const sidebar = readFileSync(new URL("../app/components/layout/sidebar.tsx", imp
 const header = readFileSync(new URL("../app/components/layout/top-header.tsx", import.meta.url), "utf8");
 const navigation = readFileSync(new URL("../app/navigation.ts", import.meta.url), "utf8");
 const styles = readFileSync(new URL("../app/styles/dashboard.css", import.meta.url), "utf8");
+const metrics = readFileSync(new URL("../app/dashboard-metrics.ts", import.meta.url), "utf8");
+const darkWorkspaces = readFileSync(new URL("../app/styles/dark-workspaces.css", import.meta.url), "utf8");
 
 test("A-D Dashboard is the default and every renamed entry keeps a real ActiveView", () => {
   assert.match(page, /useState<ActiveView>\("dashboard"\)/);
@@ -21,9 +23,15 @@ test("A-D Dashboard is the default and every renamed entry keeps a real ActiveVi
 });
 
 test("E-G recent work, metrics and global search use existing state sources", () => {
-  assert.match(page, /products:productProfiles\.length/);
-  assert.match(page, /cases:viralCases\.length/);
-  assert.match(page, /scripts:history\.length/);
+  assert.match(page, /buildDashboardMetrics/);
+  assert.match(page, /products:productProfiles/);
+  assert.match(page, /cases:viralCases/);
+  assert.match(page, /scripts:history/);
+  assert.match(page, /currentScript:result/);
+  assert.match(page, /providers:providerStatuses/);
+  assert.match(metrics, /director: null/);
+  assert.match(metrics, /date\.getTime\(\) <= 0/);
+  assert.match(metrics, /activities\.sort/);
   assert.match(page, /\.\.\.productProfiles\.map/);
   assert.match(page, /\.\.\.viralCases\.map/);
   assert.match(page, /\.\.\.history\.map/);
@@ -38,6 +46,12 @@ test("K-L layout has desktop and compact breakpoints without decorative dead con
   assert.match(styles, /--vf-app-bg:#070b14/);
   assert.match(styles, /--vf-surface-1:#0d1320/);
   assert.match(styles, /prefers-reduced-motion/);
+  assert.match(styles, /vf-intelligence-rail/);
+  assert.match(darkWorkspaces, /shared dark application workspace surfaces/);
+  assert.match(darkWorkspaces, /\.script-studio/);
+  assert.match(darkWorkspaces, /\.va-shell/);
+  assert.match(darkWorkspaces, /\.vr-shell/);
+  assert.match(darkWorkspaces, /\.director-studio/);
   assert.doesNotMatch(header, /aria-label="帮助"/);
   assert.match(header, /role="listbox"/);
   assert.match(header, /event\.metaKey \|\| event\.ctrlKey/);
