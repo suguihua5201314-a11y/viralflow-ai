@@ -1,12 +1,11 @@
 import {normalizeAnalysis,type AnalysisInput} from "../../viral-analysis";
+import {callProvider,getProviderStatuses} from "../../provider-router";
 
 export const runtime="nodejs";
 function valid(value:unknown):value is AnalysisInput{return Boolean(value&&typeof value==="object"&&typeof (value as AnalysisInput).sourceText==="string"&&(value as AnalysisInput).sourceText.trim().length>=20&&["copy","transcript"].includes((value as AnalysisInput).inputType));}
 async function callDeepSeek(input:AnalysisInput,prompt:string){
   if(process.env.ANALYZE_TEST_MODE==="1"&&process.env.ANALYZE_TEST_RESPONSE)return JSON.parse(process.env.ANALYZE_TEST_RESPONSE);
-  const key=process.env.DEEPSEEK_API_KEY;if(!key)throw new Error("provider_unavailable");
-  const response=await fetch("https://api.deepseek.com/chat/completions",{method:"POST",signal:AbortSignal.timeout(60000),headers:{"content-type":"application/json",authorization:`Bearer ${key}`},body:JSON.stringify({model:"deepseek-v4-pro",messages:[{role:"system",content:prompt},{role:"user",content:`分析以下${input.inputType==="transcript"?"Transcript":"文案"}：\n\n${input.sourceText}`}],thinking:{type:"disabled"},response_format:{type:"json_object"},temperature:.3,max_tokens:6000})});
-  const raw=await response.text();if(!response.ok)throw new Error(`provider_http_${response.status}`);const envelope=JSON.parse(raw) as {choices?:Array<{message?:{content?:string}}>};const content=envelope.choices?.[0]?.message?.content;if(!content)throw new Error("provider_empty");return JSON.parse(content);
+  if(!getProviderStatuses().deepseek.configured)throw new Error("provider_unavailable");const result=await callProvider({provider:"deepseek",messages:[{role:"system",content:prompt},{role:"user",content:`分析以下${input.inputType==="transcript"?"Transcript":"文案"}：\n\n${input.sourceText}`}],temperature:.3,maxTokens:6000,timeoutMs:60000});return JSON.parse(result.content);
 }
 export async function POST(request:Request){try{const body=await request.json();if(!valid(body))return Response.json({error:"请提供至少20字的文案或Transcript"},{status:400});
   const visual=Boolean(body.visualNotes?.trim());

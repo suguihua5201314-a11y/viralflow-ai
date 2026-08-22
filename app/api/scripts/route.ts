@@ -4,24 +4,26 @@ import { buildKnowledgeContext, findFactViolations, renderKnowledgeContext, type
 import { getGenerationComplianceKnowledge } from "../../compliance-rules";
 import { CloudflareStorageUnavailableError } from "../../../db/cloudflare-runtime";
 import { runTeamDataAction } from "../../team-data-adapter";
+import {callProvider,getProviderStatuses,ProviderCallError} from "../../provider-router";
+import type {ProviderErrorType,ProviderId,ProviderRunMetadata} from "../../provider-types";
 
 export const runtime="nodejs";
 
 type RecentScript = MemoryScript;
-type Payload = { product: string; sellingPoints: string; audience: string; country: string; language: string; style: string; framework?: string; duration: string; offer: string; referenceScript?: string; nonce?: number; recent?: RecentScript[]; platform?:string; additionalRequirements?:string; creationMode?:string; hookStrategy?:string; creativity?:string; outputCount?:number; creativeConcept?:CreativeConcept; productKnowledge?:ProductKnowledge; sellingPointKnowledge?:SellingPointKnowledge[] };
+type Payload = { product: string; sellingPoints: string; audience: string; country: string; language: string; style: string; framework?: string; duration: string; offer: string; referenceScript?: string; nonce?: number; recent?: RecentScript[]; platform?:string; additionalRequirements?:string; creationMode?:string; hookStrategy?:string; creativity?:string; outputCount?:number; creativeConcept?:CreativeConcept; productKnowledge?:ProductKnowledge; sellingPointKnowledge?:SellingPointKnowledge[]; provider?:ProviderId };
 type Pack = { hooks: string[]; intros: string[]; proofs: string[]; demos: string[]; benefits: string[]; ctas: string[] };
 
-type ProviderErrorCategory = "provider_http_error"|"json_parse_error"|"schema_validation_error"|"timeout"|"empty_result"|"structured_fields_missing"|"strategy_validation_error"|"fact_validation_error";
 class ProviderGenerationError extends Error {
-  constructor(public category:ProviderErrorCategory,message:string,public status?:number,public safeDetails?:string[]){super(message);this.name="ProviderGenerationError";}
+  constructor(public category:ProviderErrorType,message:string,public status?:number,public safeDetails?:string[]){super(message);this.name="ProviderGenerationError";}
 }
 function providerError(error:unknown) {
   if(error instanceof ProviderGenerationError)return error;
+  if(error instanceof ProviderCallError)return new ProviderGenerationError(error.category,error.message,error.status);
   if(error instanceof Error&&(error.name==="AbortError"||/aborted|timeout/i.test(error.message)))return new ProviderGenerationError("timeout","Provider请求超时");
   return new ProviderGenerationError("schema_validation_error","Provider返回未通过校验");
 }
 function logProviderFallback(error:ProviderGenerationError,p:Payload,attempt:number) {
-  console.warn("[scripts.provider.fallback]",JSON.stringify({category:error.category,status:error.status,details:error.safeDetails,attempt,conceptId:p.creativeConcept?.id??null,creationMode:p.creationMode??null,hookStrategy:p.hookStrategy??null,framework:p.framework??null}));
+  console.warn("[scripts.provider.fallback]",JSON.stringify({providerRequested:p.provider||"deepseek",category:error.category,status:error.status,details:error.safeDetails,attempt,conceptId:p.creativeConcept?.id??null,creationMode:p.creationMode??null,hookStrategy:p.hookStrategy??null,framework:p.framework??null}));
 }
 function buildRequestKnowledge(p:Payload,recent:RecentScript[],creativeConcept=p.creativeConcept) {
   return buildKnowledgeContext({...p,recent,creativeConcept,complianceKnowledge:getGenerationComplianceKnowledge()});
@@ -391,9 +393,10 @@ function applyLocalStrategy<T extends {hook:string;alternateHooks:string[];narra
 }
 
 async function generateOne(p:Payload,recent:RecentScript[]) {
-  let aiScript:StructuredScript|null=null;
-  let fallbackCategory:ProviderErrorCategory|undefined;
-  if(process.env.DEEPSEEK_API_KEY){
+  const providerRequested=p.provider||"deepseek";const providerStatus=getProviderStatuses()[providerRequested];
+  let aiScript:StructuredScript|null=null;let responseTimeMs:number|null=null;
+  let fallbackCategory:ProviderErrorType|undefined;
+  if(providerStatus.configured){
     for(let attempt=1;attempt<=2;attempt++){
       const retryGuidance=attempt===1?"":fallbackCategory==="fact_validation_error"
         ?"上一版触发了事实或参考边界。保留参考的信息顺序，但必须更换Hook的核心词、主语、具体问题和首帧画面；不得对参考Hook做近义改写，也不得新增事实。"
@@ -401,7 +404,7 @@ async function generateOne(p:Payload,recent:RecentScript[]) {
           ?"上一版没有清晰执行策略。保持产品事实不变，用新的表达明确呈现本次Hook机制和创作模式。"
           :"上一版未通过结构校验。重新输出完整且严格符合Schema的脚本。";
       const attemptPayload=retryGuidance?{...p,additionalRequirements:[p.additionalRequirements,retryGuidance].filter(Boolean).join("\n")}:p;
-      try{aiScript=await createAiScript(attemptPayload,recent);break;}
+      try{const result=await createAiScript(attemptPayload,recent,providerRequested);aiScript=result.script;responseTimeMs=result.responseTimeMs;break;}
       catch(error){
         const classified=providerError(error); fallbackCategory=classified.category; logProviderFallback(classified,p,attempt);
         const retryable=classified.category==="provider_http_error"&&(classified.status===429||Boolean(classified.status&&classified.status>=500))||classified.category==="timeout"||classified.category==="fact_validation_error"||classified.category==="strategy_validation_error";
@@ -409,16 +412,15 @@ async function generateOne(p:Payload,recent:RecentScript[]) {
         await new Promise(resolve=>setTimeout(resolve,350*attempt));
       }
     }
-  }
+  }else fallbackCategory="missing_field";
   const localPayload=localStrategyPayload(p);
   const localScript=applyLocalStrategy(createDistinctLocalScript(localPayload,recent),p);
   const generated=aiScript ?? normalizeStructuredScript(localScript,p,p.creativeConcept);
-  return {...generated,aiGenerated:Boolean(aiScript),providerFallbackCategory:aiScript?undefined:fallbackCategory,id:Date.now()+Math.floor(Math.random()*1000),createdAt:new Date().toISOString()};
+  const run:ProviderRunMetadata={providerRequested,providerUsed:aiScript?providerRequested:"local",aiGenerated:Boolean(aiScript),fallbackUsed:!aiScript,providerErrorType:aiScript?null:fallbackCategory||"missing_field",responseTimeMs};
+  return {...generated,...run,providerFallbackCategory:aiScript?undefined:fallbackCategory,id:Date.now()+Math.floor(Math.random()*1000),createdAt:new Date().toISOString()};
 }
 
-async function createAiScript(p: Payload, recent: RecentScript[]) {
-  const apiKey = process.env.DEEPSEEK_API_KEY;
-  if (!apiKey) return null;
+async function createAiScript(p: Payload, recent: RecentScript[],provider:ProviderId) {
   const seed = Number(p.nonce ?? Date.now());
   const selectedFramework = p.framework && p.framework !== "智能随机" ? p.framework : frameworkNames[seededIndex(seed, 73, frameworkNames.length)];
   const selectedCatalogFramework = frameworkCatalog.find(item => item.name === selectedFramework);
@@ -499,28 +501,9 @@ Creativity：${p.creativity || "平衡"}
     },
     required:["title","creativeAngle","hookType","framework","hook","alternateHooks","narration","conflict","productReveal","proof","sellingPoints","cta","shootingSuggestion","scenes"]
   };
-  let response:Response;
-  try { response=await fetch("https://api.deepseek.com/chat/completions", {
-    method:"POST",
-    headers:{"content-type":"application/json",authorization:`Bearer ${apiKey}`},
-    signal:AbortSignal.timeout(45000),
-    body:JSON.stringify({
-      model:"deepseek-v4-pro",
-      messages:[{role:"system",content:`${instructions}\n必须返回严格有效的JSON，结构必须符合：${JSON.stringify(schema)}`},{role:"user",content:input}],
-      thinking:{type:"disabled"},
-      response_format:{type:"json_object"},
-      temperature:p.creativity === "稳定" ? 0.55 : p.creativity === "激进" ? 1.05 : 0.82,
-      max_tokens:5000
-    })
-  }); } catch(error) { throw providerError(error); }
-  const responseText=await response.text();
-  if(!response.ok)throw new ProviderGenerationError("provider_http_error",`Provider HTTP ${response.status}`,response.status);
-  if(!responseText.trim())throw new ProviderGenerationError("empty_result","Provider响应为空",response.status);
-  let data:{ error?:{message?:string}; choices?:Array<{message?:{content?:string}}> };
-  try { data=JSON.parse(responseText) as typeof data; }
-  catch { throw new ProviderGenerationError("json_parse_error","Provider响应不是有效JSON",response.status); }
-  const outputText = data.choices?.[0]?.message?.content;
-  if (!outputText?.trim()) throw new ProviderGenerationError("empty_result","Provider没有返回脚本内容");
+  let providerResult:{content:string;responseTimeMs:number};
+  try{providerResult=await callProvider({provider,messages:[{role:"system",content:`${instructions}\n必须返回严格有效的JSON，结构必须符合：${JSON.stringify(schema)}`},{role:"user",content:input}],temperature:p.creativity === "稳定" ? 0.55 : p.creativity === "激进" ? 1.05 : 0.82,maxTokens:5000});}catch(error){throw providerError(error);}
+  const outputText=providerResult.content;
   let generated:StructuredScript & { alternateHooks:string[]; scenes:Array<{time:string;visual:string;line:string;edit:string}> };
   try { generated=JSON.parse(outputText) as typeof generated; }
   catch { throw new ProviderGenerationError("json_parse_error","Provider脚本不是有效JSON"); }
@@ -537,10 +520,10 @@ Creativity：${p.creativity || "平衡"}
   }
   const strategyViolations=validateStrategyIntent({hook:generated.hook,scenes:generated.scenes,creationMode:p.creationMode,hookStrategy:p.hookStrategy});
   if(strategyViolations.length)throw new ProviderGenerationError("strategy_validation_error",`Provider未执行策略意图:${strategyViolations.join("；")}`);
-  return normalizeStructuredScript({ ...generated, title:generated.title || `${p.product}｜${selectedFramework}`, product:p.product, language:p.language, country:p.country, style:p.style, hook:generated.scenes[0]?.line || generated.hook, alternateHooks:generated.alternateHooks.slice(0,2), narration, scenes:generated.scenes, aiGenerated:true }, p, p.creativeConcept);
+  return {script:normalizeStructuredScript({ ...generated, title:generated.title || `${p.product}｜${selectedFramework}`, product:p.product, language:p.language, country:p.country, style:p.style, hook:generated.scenes[0]?.line || generated.hook, alternateHooks:generated.alternateHooks.slice(0,2), narration, scenes:generated.scenes, aiGenerated:true }, p, p.creativeConcept),responseTimeMs:providerResult.responseTimeMs};
 }
 export async function GET() {
-  return Response.json({ scripts: [], aiConnected:Boolean(process.env.DEEPSEEK_API_KEY), provider:"DeepSeek V4 Pro" });
+  const providers=getProviderStatuses();return Response.json({scripts:[],aiConnected:providers.deepseek.configured,provider:"DeepSeek V4 Pro",providers,defaultProvider:"deepseek"});
 }
 const teamCorsHeaders = {
   "access-control-allow-origin": "https://viralcraft-ai-eight.vercel.app",
@@ -564,6 +547,8 @@ export async function POST(request: Request) {
       }
     }
     const p = body as Payload;
+    if(p.provider&&!(["deepseek","doubao","openai"] as const).includes(p.provider))return Response.json({error:"未知 Provider"},{status:400});
+    if(p.provider==="openai")return Response.json({error:"GPT 未配置，本阶段不会发送 OpenAI 请求。",provider:{providerRequested:"openai",providerUsed:"local",aiGenerated:false,fallbackUsed:false,providerErrorType:"missing_field",responseTimeMs:null}},{status:503});
     if (!p.product?.trim() || !p.sellingPoints?.trim()) return Response.json({ error: "请填写产品名称和核心卖点。" }, { status: 400 });
     if (p.referenceScript !== undefined && p.referenceScript.trim().length < 30) return Response.json({ error: "请粘贴完整的爆款参考文案，至少30个字。" }, { status: 400 });
     const recent = (p.recent ?? []).slice(0, 6);
@@ -588,11 +573,12 @@ export async function POST(request: Request) {
         return replacement;
       },2);
       const metadata=buildRequestKnowledge(p,recent).metadata;
-      return Response.json({scripts:retryResult.scripts,concepts,sellingPointPriorities:priorities,knowledge:metadata,diversity:retryResult.diversity}, {status:201});
+      return Response.json({scripts:retryResult.scripts,concepts,sellingPointPriorities:priorities,knowledge:metadata,diversity:retryResult.diversity,providerRuns:retryResult.scripts.map(({providerRequested,providerUsed,aiGenerated,fallbackUsed,providerErrorType,responseTimeMs})=>({providerRequested,providerUsed,aiGenerated,fallbackUsed,providerErrorType,responseTimeMs}))}, {status:201});
     }
     const context=buildRequestKnowledge(p,recent);
     const priority=context.sellingPointPriority;
     const generated=await generateOne({...p,sellingPoints:[priority.primary,...priority.secondary].filter(Boolean).join("；")||p.sellingPoints},recent);
-    return Response.json({script:generated,knowledge:context.metadata,sellingPointPriority:priority}, {status:201});
+    const provider={providerRequested:generated.providerRequested,providerUsed:generated.providerUsed,aiGenerated:generated.aiGenerated,fallbackUsed:generated.fallbackUsed,providerErrorType:generated.providerErrorType,responseTimeMs:generated.responseTimeMs};
+    return Response.json({script:generated,knowledge:context.metadata,sellingPointPriority:priority,provider}, {status:201});
   } catch (error) { return Response.json({ error: error instanceof Error ? error.message : "生成失败" }, { status: 500 }); }
 }

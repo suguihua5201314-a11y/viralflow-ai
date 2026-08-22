@@ -1,6 +1,7 @@
 import { buildKnowledgeContext, renderKnowledgeContext, type ProductKnowledge, type SellingPointKnowledge } from "../../knowledge-context";
 import { getGenerationComplianceKnowledge } from "../../compliance-rules";
 import { isCopilotBlockKey, requestedCopilotKeys, validateCopilotCandidate, type CopilotBlock, type CopilotBlockKey, type CopilotMode } from "../../copilot-core";
+import {callProvider,getProviderStatuses} from "../../provider-router";
 
 export const runtime="nodejs";
 
@@ -39,18 +40,7 @@ function providerTemperature(creativity?:string){return creativity==="稳定"?0.
 
 async function callDeepSeek(payload:Payload,prompt:string):Promise<ProviderResult> {
   if(process.env.COPILOT_TEST_MODE==="1"&&process.env.COPILOT_TEST_RESPONSE)return JSON.parse(process.env.COPILOT_TEST_RESPONSE) as ProviderResult;
-  const apiKey=process.env.DEEPSEEK_API_KEY;
-  if(!apiKey)throw new Error("provider_unavailable");
-  const response=await fetch("https://api.deepseek.com/chat/completions",{
-    method:"POST",signal:AbortSignal.timeout(45000),headers:{"content-type":"application/json",authorization:`Bearer ${apiKey}`},
-    body:JSON.stringify({model:"deepseek-v4-pro",messages:[{role:"system",content:prompt},{role:"user",content:"返回本次局部精修候选。"}],thinking:{type:"disabled"},response_format:{type:"json_object"},temperature:providerTemperature(payload.creativity),max_tokens:2200}),
-  });
-  const raw=await response.text();
-  if(!response.ok)throw new Error(`provider_http_${response.status}`);
-  const envelope=JSON.parse(raw) as {choices?:Array<{message?:{content?:string}}>};
-  const content=envelope.choices?.[0]?.message?.content;
-  if(!content)throw new Error("provider_empty");
-  return JSON.parse(content) as ProviderResult;
+  if(!getProviderStatuses().deepseek.configured)throw new Error("provider_unavailable");const result=await callProvider({provider:"deepseek",messages:[{role:"system",content:prompt},{role:"user",content:"返回本次局部精修候选。"}],temperature:providerTemperature(payload.creativity),maxTokens:2200});return JSON.parse(result.content) as ProviderResult;
 }
 
 export async function POST(request:Request) {

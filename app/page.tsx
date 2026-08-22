@@ -16,6 +16,7 @@ import ViralReplication from "./viral-replication";
 import { adaptLegacyCases, viralCaseReference, type ViralCase } from "./viral-analysis";
 import type { StructuredScript } from "./script-generation";
 import type { ReplicationSetup } from "./replication-core";
+import type {ProviderId,ProviderRunMetadata,ProviderStatus} from "./provider-types";
 import type { ActiveView } from "./navigation";
 
 type Scene = { time: string; visual: string; line: string; edit: string };
@@ -29,6 +30,7 @@ type ReviewRecord = { id:number; title:string; product:string; scriptTitle:strin
 type BreakdownPart = { label: string; purpose: string; evidence: string };
 type Breakdown = { score: number; hookType: string; hook: string; emotion: string; rhythm: string; proof: string; cta: string; strengths: string[]; risks: string[]; parts: BreakdownPart[]; formula: string };
 type TeamPayload = { hooks?: HookItem[]; points?: SellingPointItem[]; products?: ProductProfile[]; reviews?: ReviewRecord[]; history?: Script[]; viralCases?:ViralCase[] };
+const initialProviderStatuses:Record<ProviderId,ProviderStatus>={deepseek:{id:"deepseek",label:"DeepSeek",configured:false,state:"unconfigured",model:null,baseUrl:null,missingFields:["正在检查"]},doubao:{id:"doubao",label:"豆包",configured:false,state:"unconfigured",model:null,baseUrl:null,missingFields:["正在检查"]},openai:{id:"openai",label:"GPT",configured:false,state:"unconfigured",model:null,baseUrl:null,missingFields:["OpenAIProvider 尚未实现"]}};
 const teamApi = "/api/team-data";
 const languages = ["中文", "西班牙语", "意大利语", "德语", "英语"];
 const styles = ["强冲突测评", "真实KOC种草", "悬念揭秘", "导演朋友的新玩具", "痛点解决"];
@@ -82,6 +84,9 @@ export default function Home() {
   const [active, setActive] = useState<ActiveView>("create");
   const [loading, setLoading] = useState(false);
   const [aiConnected, setAiConnected] = useState(false);
+  const [providerStatuses,setProviderStatuses]=useState(initialProviderStatuses);
+  const [selectedProvider,setSelectedProvider]=useState<ProviderId>("deepseek");
+  const [lastProviderRun,setLastProviderRun]=useState<ProviderRunMetadata|null>(null);
   const [error, setError] = useState("");
   const [history, setHistory] = useState<Script[]>([]);
   const [result, setResult] = useState<Script | null>(null);
@@ -131,13 +136,13 @@ export default function Home() {
   const reviewStats = useMemo(() => { const count = reviewRecords.length || 1; return { views:reviewRecords.reduce((sum,x)=>sum+metric(x.views),0), orders:reviewRecords.reduce((sum,x)=>sum+metric(x.orders),0), gmv:reviewRecords.reduce((sum,x)=>sum+metric(x.gmv),0), retention:reviewRecords.reduce((sum,x)=>sum+metric(x.retention3s),0)/count, completion:reviewRecords.reduce((sum,x)=>sum+metric(x.completion),0)/count, ctr:reviewRecords.reduce((sum,x)=>sum+metric(x.ctr),0)/count, cvr:reviewRecords.reduce((sum,x)=>sum+metric(x.cvr),0)/count }; }, [reviewRecords]);
 
   async function loadHistory() {
-    try { const saved = JSON.parse(localStorage.getItem("viralcraft-history") || "[]"); setHistory(saved); const res = await fetch("/api/scripts", { cache: "no-store" }); const data = await res.json(); if (res.ok) setAiConnected(Boolean(data.aiConnected)); }
+    try { const saved = JSON.parse(localStorage.getItem("viralcraft-history") || "[]"); setHistory(saved); const res = await fetch("/api/scripts", { cache: "no-store" }); const data = await res.json(); if (res.ok){setAiConnected(Boolean(data.aiConnected));if(data.providers)setProviderStatuses(data.providers);} }
     catch { setError("历史记录暂时加载失败，请稍后再试。"); }
   }
   useEffect(() => {
     fetch("/api/scripts", { cache: "no-store" })
       .then(res => res.json())
-      .then(data => { setHistory(JSON.parse(localStorage.getItem("viralcraft-history") || "[]")); setAiConnected(Boolean(data.aiConnected)); })
+      .then(data => { setHistory(JSON.parse(localStorage.getItem("viralcraft-history") || "[]")); setAiConnected(Boolean(data.aiConnected));if(data.providers)setProviderStatuses(data.providers); })
       .catch(() => setError("历史记录暂时加载失败，请稍后再试。"));
     fetch("/api/monitor/accounts", { cache: "no-store" })
       .then(res => res.json())
@@ -204,9 +209,10 @@ export default function Home() {
       const recent = history.filter(item => item.product === form.product && item.language === form.language).slice(0, 6).map(({title,hook,narration,creativeAngle,scenario,proofMechanism,cta,product,language}) => ({title,hook,narration,creativeAngle,scenario,proofMechanism,cta,product,language}));
       const productKnowledge=productProfiles.find(item=>item.id===selectedProductId&&item.name.trim().toLowerCase()===form.product.trim().toLowerCase());
       const sellingPointKnowledge=pointLibrary.filter(item=>item.product.trim().toLowerCase()===form.product.trim().toLowerCase());
-      const res = await fetch("/api/scripts", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ ...form, ...controls, outputCount:1, productKnowledge, sellingPointKnowledge, referenceScript: active === "replicate" ? referenceScript : undefined, recent, nonce: Date.now() + Math.random() }) });
+      const res = await fetch("/api/scripts", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ ...form, ...controls, outputCount:1, productKnowledge, sellingPointKnowledge, referenceScript: referenceScript || undefined, recent, nonce: Date.now() + Math.random() }) });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "生成失败");
+      if(data.provider)setLastProviderRun(data.provider);
       const nextHistory = [data.script, ...history].slice(0, 100); setResult(data.script); setHistory(nextHistory); localStorage.setItem("viralcraft-history", JSON.stringify(nextHistory)); void syncTeam(currentTeamPayload({ history: nextHistory }));
     } catch (e) { setError(e instanceof Error ? e.message : "生成失败，请重试。"); }
     finally { setLoading(false); }
@@ -218,8 +224,9 @@ export default function Home() {
       const recent = history.filter(item=>item.product===form.product&&item.language===form.language).slice(0,6).map(({title,hook,narration,creativeAngle,scenario,proofMechanism,cta,product,language}) => ({title,hook,narration,creativeAngle,scenario,proofMechanism,cta,product,language}));
       const productKnowledge=productProfiles.find(item=>item.id===selectedProductId&&item.name.trim().toLowerCase()===form.product.trim().toLowerCase());
       const sellingPointKnowledge=pointLibrary.filter(item=>item.product.trim().toLowerCase()===form.product.trim().toLowerCase());
-      const res=await fetch("/api/scripts",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({...form,...controls,outputCount:5,productKnowledge,sellingPointKnowledge,referenceScript:active==="replicate"?referenceScript:undefined,recent,nonce:Date.now()+Math.random()})});
+      const res=await fetch("/api/scripts",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({...form,...controls,outputCount:5,productKnowledge,sellingPointKnowledge,referenceScript:referenceScript||undefined,recent,nonce:Date.now()+Math.random()})});
       const data=await res.json(); if(!res.ok)throw new Error(data.error||"生成失败");
+      if(data.providerRuns?.[0])setLastProviderRun(data.providerRuns[0]);
       const scripts=(data.scripts || (data.script?[data.script]:[])) as Script[]; if(scripts.length!==5)throw new Error("赛马生成结果不完整");
       const nextHistory = [...scripts, ...history].slice(0, 100);
       setRaceResults(scripts); setResult(scripts[0]); setHistory(nextHistory); localStorage.setItem("viralcraft-history", JSON.stringify(nextHistory)); void syncTeam(currentTeamPayload({ history: nextHistory }));
@@ -286,6 +293,10 @@ export default function Home() {
         inputReady={inputReady}
         error={error}
         aiConnected={aiConnected}
+        providerStatuses={providerStatuses}
+        selectedProvider={selectedProvider}
+        lastProviderRun={lastProviderRun}
+        onProviderChange={provider=>{setSelectedProvider(provider);setLastProviderRun(null);setError("");}}
         historyCount={history.length}
         sellingPointKnowledge={pointLibrary}
         onUpdate={update}
