@@ -16,6 +16,20 @@ export type SimilarityResult={sourceSimilarityChecked:true;phraseOverlap:number;
 export type ReplicationCandidate={id:string;concept:ReplicationConcept;script:StructuredScript;similarity:SimilarityResult;regenerationAttempts:number};
 
 const normalize=(value:string)=>value.toLowerCase().replace(/[\s\p{P}\p{S}]/gu,"");
+function allowedPoint(value:string|undefined,allowed:string[]){const key=normalize(value||"");return key?allowed.find(point=>{const candidate=normalize(point);return candidate===key||candidate.includes(key)||key.includes(candidate)}):undefined;}
+export function alignReplicationSellingPoints(concepts:ReplicationConcept[],strategy:ReplicationStrategy,allowed:string[],productPrimary:string){
+  const points=[...new Set(allowed.map(point=>point.trim()).filter(Boolean))];
+  const primary=allowedPoint(productPrimary,points)??points[0]??"";
+  const mapped=strategy.sellingPointMapping.map(item=>allowedPoint(item.targetSellingPoint,points)).find(Boolean);
+  const used=new Set<string>();
+  return concepts.map(concept=>{
+    const providerChoice=allowedPoint(concept.sellingPointPriority,points);
+    let selected=concept.direction==="Faithful Mechanism"?(mapped??providerChoice??primary):concept.direction==="Product Native"?(primary||providerChoice||mapped||""):(providerChoice&&!used.has(providerChoice)?providerChoice:points.find(point=>!used.has(point))??primary);
+    selected=allowedPoint(selected,points)??primary;
+    if(selected)used.add(selected);
+    return {...concept,sellingPointPriority:selected};
+  });
+}
 const words=(value:string)=>value.toLowerCase().match(/[a-záéíóúüñ0-9]+|[\u3400-\u9fff]/giu)||[];
 function phraseOverlap(source:string,target:string){const a=words(source),b=words(target);if(!a.length||!b.length)return 0;const n=/[\u3400-\u9fff]/u.test(source)?8:5;const set=new Set(Array.from({length:Math.max(0,a.length-n+1)},(_,i)=>a.slice(i,i+n).join(" ")));if(!set.size)return 0;let same=0;for(let i=0;i<=b.length-n;i++)if(set.has(b.slice(i,i+n).join(" ")))same++;return Math.min(1,same/Math.max(1,Math.floor(b.length/n)));}
 function sourceLeakage(source:string,target:string,knowledge?:ProductKnowledge){

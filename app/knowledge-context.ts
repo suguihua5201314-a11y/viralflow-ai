@@ -55,10 +55,12 @@ const pointThemes:Array<RegExp>=[
 export function prioritizeSellingPoints(points:string[],concept?:CreativeConcept):SellingPointPriority {
   const available=unique(points);
   if(!available.length)return {primary:"",secondary:[],optional:[]};
+  const requested=concept?.sellingPointPriority?.split(/[→；;\n]+/).map(item=>item.trim()).filter(Boolean)??[];
+  const requestedPrimary=requested.map(item=>available.find(point=>{const a=normalize(point),b=normalize(item);return a===b||a.includes(b)||b.includes(a)})).find(Boolean);
   const conceptIndex=Math.max(0,(concept?.id?.charCodeAt(0)??65)-65);
   const theme=pointThemes[conceptIndex%pointThemes.length];
   const themed=available.filter(point=>theme.test(point));
-  const primary=themed[0]??available[conceptIndex%available.length];
+  const primary=requestedPrimary??themed[0]??available[conceptIndex%available.length];
   const remaining=available.filter(point=>point!==primary);
   const offset=remaining.length?conceptIndex%remaining.length:0;
   const rotated=[...remaining.slice(offset),...remaining.slice(0,offset)];
@@ -141,6 +143,9 @@ export function findFactViolations(text:string,context:KnowledgeContext) {
   const violations:string[]=[];
   for(const expression of context.compliance.enforcedBannedExpressions)if(expression.length>=3&&normalized.includes(expression.toLowerCase()))violations.push(`命中产品禁用表达:${expression}`);
   const factText=Object.values(context.facts).join(" ")+" "+context.sellingPoints.join(" ");
+  const offerProvided=Boolean(context.facts.offer?.trim());
+  if(!offerProvided&&/(?:quedan\s+poc[oa]s|[uú]ltimas?\s+unidades?|stock\s+limitado|limited\s+stock|only\s+\d+\s+left|库存有限|仅剩|最后\d+件|regalo|gratis|free\s+gift|赠送|赠品|descuento|rebaja|discount|\d+%\s+off|折扣|优惠|买\S*送)/iu.test(text))violations.push("使用了未提供的促销、赠品或库存信息");
+  if(!context.facts.price?.trim()&&/(?:[$€£]\s*\d|\d+(?:[.,]\d+)?\s*[$€£]|por\s+solo\s+\d|only\s+[$€£]?\d|仅需\s*\d|只要\s*\d)/iu.test(text))violations.push("使用了未提供的价格信息");
   if(/platform certified|officially approved|doctor recommended|国家认证|平台认证|官方指定|aprobado oficialmente|recomendado por médicos/i.test(text)&&!/认证|certif|aprobado|recommended/i.test(factText))violations.push("使用了未提供的认证或背书");
   const claims=[...text.matchAll(/(\d+(?:[.,]\d+)?)\s*(%|°|mm|cm|mah|w)/gi)].map(match=>`${match[1]}${match[2].toLowerCase()}`);
   const normalizedFacts=normalize(factText);

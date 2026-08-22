@@ -92,6 +92,9 @@ test("knowledge context keeps facts, reference, compliance and bounded memory se
   assert.match(renderKnowledgeContext(context),/FACT LAYER \/ KNOWN FACTS/);
   assert.deepEqual(findFactViolations("它拥有99%认证保护。",context),["使用了未提供的参数:99%"]);
   assert.ok(findFactViolations("100%防爆，永不碎。",context).length>=2);
+  const noOfferContext=buildKnowledgeContext({...base,offer:"",productKnowledge:{name:base.product,sellingPoints:base.sellingPoints},complianceKnowledge:{highRiskExpressions:[],platformConstraints:[]}});
+  assert.ok(findFactViolations("Quedan pocas unidades. Recibe un protector de cámara de regalo.",noOfferContext).includes("使用了未提供的促销、赠品或库存信息"));
+  assert.ok(findFactViolations("Hoy cuesta solo €19.",noOfferContext).includes("使用了未提供的价格信息"));
   assert.ok(findFactViolations(context.viralReference.sourceExcerpt,context).includes("直接复制了爆款参考表达"));
   assert.ok(findFactViolations("这是历史使用过的旧Hook 0，后面继续介绍产品。",context).includes("复用了近期历史Hook"));
   const spanishReference=buildKnowledgeContext({...base,referenceScript:"¿Por qué siempre queda una burbuja justo en el centro? Después muestra el fallo, la instalación y el resultado."});
