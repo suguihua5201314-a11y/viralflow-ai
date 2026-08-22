@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { checkCompliance, type ComplianceHit } from "./compliance-rules";
+import { mergeCopilotBlocks, type CopilotBlock, type CopilotBlockKey } from "./copilot-core";
 
 export type StudioScene = { time: string; visual: string; line: string; edit: string };
 export type StudioScript = { id?: number; title: string; product: string; language: string; country: string; style: string; hook: string; alternateHooks: string[]; narration: string; scenes: StudioScene[]; createdAt?: string; aiGenerated?: boolean; creativeAngle?:string; hookType?:string; framework?:string; conflict?:string; productReveal?:string; proof?:string; sellingPoints?:string; cta?:string; shootingSuggestion?:string; scenario?:string; proofMechanism?:string; ctaStyle?:string };
@@ -12,6 +13,7 @@ export type GenerationControls = { platform:string; additionalRequirements:strin
 
 type Props = {
   mode:"create"|"replicate"; form:StudioForm; products:StudioProduct[]; languages:string[]; styles:string[];
+  sellingPointKnowledge:Array<{product?:string;points?:string}>;
   frameworks:Array<{name:string;group:string}>; referenceScript:string; result:StudioScript|null; raceResults:StudioScript[];
   loading:boolean; raceLoading:boolean; inputReady:boolean; error:string; aiConnected:boolean;
   historyCount:number; onUpdate:(key:keyof StudioForm,value:string)=>void; onUseProduct:(product:StudioProduct)=>void;
@@ -21,8 +23,10 @@ type Props = {
   scoreScript:(script:StudioScript)=>StudioScore;
 };
 
-type EditorBlock = { key:string; label:string; type:string; duration:string; text:string };
+type EditorBlock = CopilotBlock & { duration:string };
 type SavedVersion = { label:string; script:StudioScript; blocks:EditorBlock[] };
+type RewritePreview = { before:EditorBlock[]; after:EditorBlock[]; keys:CopilotBlockKey[]; action:string };
+type UndoRewrite = { blocks:EditorBlock[]; label:string };
 const letters = ["A","B","C","D","E"];
 const creationModes = ["KOC / UGC","测评","强冲突","Storytelling","产品演示"];
 const hookStrategies = ["好奇","冲突","结果前置","反常识","问题","视觉钩子"];
@@ -41,7 +45,8 @@ function buildBlocks(script:StudioScript, sellingPoints:string):EditorBlock[] {
 }
 
 function withBlocks(script:StudioScript, blocks:EditorBlock[]):StudioScript {
-  return { ...script, hook:blocks[0]?.text || script.hook, narration:blocks.map(block=>block.text.trim()).filter(Boolean).join(" ") };
+  const byKey=new Map(blocks.map(block=>[block.key,block.text.trim()]));
+  return { ...script, hook:byKey.get("hook")||script.hook, conflict:byKey.get("conflict")||script.conflict, productReveal:byKey.get("product")||script.productReveal, proof:byKey.get("proof")||script.proof, sellingPoints:byKey.get("points")||script.sellingPoints, cta:byKey.get("cta")||script.cta, narration:blocks.map(block=>block.text.trim()).filter(Boolean).join(" ") };
 }
 
 function scriptIdentity(script:StudioScript|null) {
@@ -76,6 +81,12 @@ export default function ScriptStudio(props:Props) {
   const [compareOpen,setCompareOpen] = useState(false);
   const [selectedRisk,setSelectedRisk] = useState<ComplianceHit|null>(null);
   const [savedNotice,setSavedNotice] = useState(false);
+  const [rewriteOpen,setRewriteOpen] = useState<string|null>(null);
+  const [rewriteInstruction,setRewriteInstruction] = useState("");
+  const [rewriteBusy,setRewriteBusy] = useState(false);
+  const [rewriteError,setRewriteError] = useState("");
+  const [rewritePreview,setRewritePreview] = useState<RewritePreview|null>(null);
+  const [undoRewrite,setUndoRewrite] = useState<UndoRewrite|null>(null);
   const script = props.result;
   const resultIdentity=scriptIdentity(script);
   const syncedResultIdentity=useRef(resultIdentity);
@@ -89,6 +100,7 @@ export default function ScriptStudio(props:Props) {
     setActiveVersion(0);
     setLocked({});
     setEditing(null);
+    setRewriteOpen(null); setRewriteInstruction(""); setRewritePreview(null); setUndoRewrite(null); setRewriteError("");
     setSavedNotice(false);
   },[resultIdentity,script,props.form.sellingPoints]);
 
@@ -104,6 +116,29 @@ export default function ScriptStudio(props:Props) {
   function updateBlock(key:string,text:string) {
     const next=blocks.map(block=>block.key===key?{...block,text}:block);
     setBlocks(next); if (script) props.onDraftChange(withBlocks(script,next));
+  }
+  async function requestRewrite(mode:"single"|"unlocked",targetKey?:string,action?:string,instruction?:string) {
+    if(!draftScript||rewriteBusy)return;
+    setRewriteBusy(true);setRewriteError("");
+    try{
+      const productKnowledge=props.products.find(item=>item.name.trim().toLowerCase()===props.form.product.trim().toLowerCase());
+      const response=await fetch("/api/copilot",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({mode,targetKey,action,instruction,blocks,lockedKeys:Object.keys(locked).filter(key=>locked[key]),script:draftScript,product:props.form.product,sellingPoints:props.form.sellingPoints,audience:props.form.audience,country:props.form.country,language:props.form.language,offer:props.form.offer,platform,creationMode,hookStrategy,framework:props.form.framework,creativity,productKnowledge,sellingPointKnowledge:props.sellingPointKnowledge})});
+      const data=await response.json();if(!response.ok)throw new Error(data.details?.join("；")||data.error||"AI局部精修失败");
+      const candidate=(data.candidate.blocks||[]) as CopilotBlock[];const keys=data.candidate.keys as CopilotBlockKey[];
+      const next=mergeCopilotBlocks(blocks,candidate,keys) as EditorBlock[];
+      setRewritePreview({before:blocks.map(block=>({...block})),after:next,keys,action:instruction?.trim()||action||"重写未锁定部分"});
+      setRewriteOpen(null);setRewriteInstruction("");
+    }catch(error){setRewriteError(error instanceof Error?error.message:"AI局部精修失败");}
+    finally{setRewriteBusy(false);}
+  }
+  function acceptRewrite(){
+    if(!rewritePreview||!script)return;
+    setUndoRewrite({blocks:rewritePreview.before.map(block=>({...block})),label:rewritePreview.action});
+    setBlocks(rewritePreview.after.map(block=>({...block})));props.onDraftChange(withBlocks(script,rewritePreview.after));setRewritePreview(null);
+  }
+  function undoLastRewrite(){
+    if(!undoRewrite||!script)return;
+    const previous=undoRewrite.blocks.map(block=>({...block}));setBlocks(previous);props.onDraftChange(withBlocks(script,previous));setUndoRewrite(null);
   }
   function saveVersion() {
     if (!draftScript) return;
@@ -138,11 +173,12 @@ export default function ScriptStudio(props:Props) {
       </aside>
 
       <main className="studio-center">
-        <div className="studio-editor-head"><div><span>AI SCRIPT EDITOR</span><h2>{draftScript?.title || "Script Editor"}</h2></div><div className="version-tabs"><span>版本</span>{versions.map((version,index)=><button className={activeVersion===index?"active":""} key={version.label} onClick={()=>openVersion(index)}>{version.label}</button>)}<button onClick={()=>props.onNavigate("history")}>历史版本</button></div><div className="editor-actions"><button disabled={!draftScript} onClick={()=>draftScript&&props.onCopy(draftScript.narration)}>复制全文</button><button disabled={!draftScript} onClick={()=>draftScript&&props.onExport(draftScript)}>导出</button></div></div>
+        <div className="studio-editor-head"><div><span>AI SCRIPT EDITOR</span><h2>{draftScript?.title || "Script Editor"}</h2></div><div className="version-tabs"><span>版本</span>{versions.map((version,index)=><button className={activeVersion===index?"active":""} key={version.label} onClick={()=>openVersion(index)}>{version.label}</button>)}<button onClick={()=>props.onNavigate("history")}>历史版本</button></div><div className="editor-actions"><button disabled={!draftScript||rewriteBusy||blocks.every(block=>locked[block.key])} onClick={()=>void requestRewrite("unlocked")}>{rewriteBusy?"AI 精修中…":"✦ 重写未锁定"}</button>{undoRewrite&&<button onClick={undoLastRewrite}>撤回精修</button>}<button disabled={!draftScript} onClick={()=>draftScript&&props.onCopy(draftScript.narration)}>复制全文</button><button disabled={!draftScript} onClick={()=>draftScript&&props.onExport(draftScript)}>导出</button></div></div>
         {!draftScript?<div className="studio-empty"><div className="empty-orb">✦</div><span>AI CREATIVE WORKSPACE</span><h2>准备创作下一条爆款</h2><p>选择产品并设置创作方向，ViralFlow AI 将生成多个差异化脚本方案。</p><div className="empty-shortcuts"><button onClick={()=>props.onNavigate("products")}>从产品知识库开始</button><button onClick={()=>props.onNavigate("library")}>参考爆款案例</button><button onClick={()=>document.querySelector<HTMLInputElement>(".studio-brief input")?.focus()}>直接填写 Brief</button></div><button className="empty-primary" disabled={!props.inputReady||props.loading||props.raceLoading} onClick={()=>props.onGenerate(controls(1))}>{props.loading?"正在生成…":"✦ 生成第一条脚本"}</button></div>:<>
           <section className="pacing-card"><header><div><span>SCRIPT PACING</span><b>{totalDuration}s 节奏时间轴</b></div><small>随视频时长动态适配</small></header><div className="pacing-bar">{pacing.map(([label,start,end,color])=><div key={label} style={{width:`${(end-start)/30*100}%`,background:color}}><b>{scaleTime(start,totalDuration)}–{scaleTime(end,totalDuration)}s</b><span>{label}</span></div>)}</div></section>
           <section className="editor-status"><div><span>{draftScript.language}</span><span>{draftScript.style}</span><span>{draftScript.country}</span>{draftScript.aiGenerated&&<span className="ai-badge">AI Provider</span>}</div><div className={hits.length?"compliance-state warning":"compliance-state clear"}><i/>{hits.length?`发现 ${hits.length} 项风险`:"合规：通过"}</div><strong>综合 {score?.total}</strong></section>
-          <div className="script-blocks">{blocks.map((block,index)=>{const blockHits=checkCompliance(block.text);return <article key={block.key} className={`${locked[block.key]?"locked":""} ${editing===block.key?"editing":""}`}><aside><b>{String(index+1).padStart(2,"0")}</b><i/></aside><div className="block-main"><header><div><span>{block.label}</span><em>{block.type}</em><small>{block.duration}</small></div><div><button onClick={()=>setEditing(editing===block.key?null:block.key)}>{editing===block.key?"完成":"编辑"}</button><button onClick={()=>props.onCopy(block.text)}>复制</button><button className={locked[block.key]?"active":""} onClick={()=>setLocked(value=>({...value,[block.key]:!value[block.key]}))}>{locked[block.key]?"已锁定":"锁定"}</button><button disabled title="局部重写接口待接入">重写</button></div></header>{editing===block.key&&!locked[block.key]?<textarea aria-label={`编辑 ${block.label}`} value={block.text} onChange={e=>updateBlock(block.key,e.target.value)}/>:<p><MarkedCopy text={block.text} hits={blockHits} onSelect={setSelectedRisk}/></p>}<footer><span>快捷 AI</span>{["Hook 更强","更自然","更像 KOC","缩短","加强冲突","换一种表达"].map(action=><button key={action} disabled title="当前 AI Provider 尚未支持局部重写">{action}</button>)}<em>待接入</em></footer>{blockHits.length>0&&<div className="block-risk-row">{blockHits.map((hit,hitIndex)=><button key={`${hit.term}-${hitIndex}`} onClick={()=>setSelectedRisk(hit)}><i className={`level-${hit.level}`}/>{hit.level}风险 · {hit.term}</button>)}</div>}</div></article>})}</div>
+          <div className="script-blocks">{blocks.map((block,index)=>{const blockHits=checkCompliance(block.text);const actions=block.key==="hook"?["更吸睛","更自然","更 KOC / UGC","更简短","更口语","加强冲突"]:block.key==="proof"?["加强 Proof / 证明","更自然","更简短","更口语"]:block.key==="cta"?["更强转化","更自然","更 KOC / UGC","更简短"]:["更自然","更 KOC / UGC","加强冲突","更简短","更口语"];return <article key={block.key} className={`${locked[block.key]?"locked":""} ${editing===block.key?"editing":""}`}><aside><b>{String(index+1).padStart(2,"0")}</b><i/></aside><div className="block-main"><header><div><span>{block.label}</span><em>{block.type}</em><small>{block.duration}</small></div><div><button onClick={()=>setEditing(editing===block.key?null:block.key)}>{editing===block.key?"完成":"编辑"}</button><button onClick={()=>props.onCopy(block.text)}>复制</button><button className={locked[block.key]?"active":""} onClick={()=>setLocked(value=>({...value,[block.key]:!value[block.key]}))}>{locked[block.key]?"🔒 已锁定":"锁定"}</button><button disabled={Boolean(locked[block.key])||rewriteBusy} onClick={()=>setRewriteOpen(rewriteOpen===block.key?null:block.key)}>✦ AI 精修</button></div></header>{editing===block.key&&!locked[block.key]?<textarea aria-label={`编辑 ${block.label}`} value={block.text} onChange={e=>updateBlock(block.key,e.target.value)}/>:<p><MarkedCopy text={block.text} hits={blockHits} onSelect={setSelectedRisk}/></p>}<footer><span>快捷 AI</span>{actions.map(action=><button key={action} disabled={Boolean(locked[block.key])||rewriteBusy} onClick={()=>void requestRewrite("single",block.key,action)}>{action}</button>)}</footer>{rewriteOpen===block.key&&!locked[block.key]&&<div className="copilot-custom"><label>自定义 AI 指令<textarea rows={2} value={rewriteInstruction} onChange={event=>setRewriteInstruction(event.target.value)} placeholder="例如：改成西班牙普通女生聊天的感觉，但保留悬念。"/></label><div><button onClick={()=>{setRewriteOpen(null);setRewriteInstruction("")}}>取消</button><button disabled={!rewriteInstruction.trim()||rewriteBusy} onClick={()=>void requestRewrite("single",block.key,undefined,rewriteInstruction)}>{rewriteBusy?"生成中…":"生成候选"}</button></div></div>}{blockHits.length>0&&<div className="block-risk-row">{blockHits.map((hit,hitIndex)=><button key={`${hit.term}-${hitIndex}`} onClick={()=>setSelectedRisk(hit)}><i className={`level-${hit.level}`}/>{hit.level}风险 · {hit.term}</button>)}</div>}</div></article>})}</div>
+          {rewriteError&&<p className="copilot-error">Copilot：{rewriteError}<button onClick={()=>setRewriteError("")}>×</button></p>}
           <section className="insight-grid"><article className="score-panel"><header><div><span>REAL SCORING</span><h3>脚本评分</h3></div><strong>{score?.total}<small>/100</small></strong></header><div className="score-metrics"><div><span>Hook</span><i><b style={{width:`${(score?.hook||0)/25*100}%`}}/></i><em>{score?.hook}/25</em></div><div><span>结构 / 节奏</span><i><b style={{width:`${(score?.structure||0)/25*100}%`}}/></i><em>{score?.structure}/25</em></div><div><span>证明力</span><i><b style={{width:`${(score?.proof||0)/22*100}%`}}/></i><em>{score?.proof}/22</em></div><div><span>转化引导</span><i><b style={{width:`${(score?.conversion||0)/20*100}%`}}/></i><em>{score?.conversion}/20</em></div></div><div className="score-diagnosis"><p><b>优势</b>{(score?.hook||0)>=22?"Hook 进入快，开场信息明确":"现有结构完整，可继续强化开场"}</p><p><b>建议</b>{(score?.conversion||0)>=18?"转化路径明确，注意保持自然表达":"补充真实购买理由，让 CTA 更自然"}</p></div><div className="pending-metrics">留存 · 自然度 · 卖点清晰度 <em>待接入</em></div></article><article className="compliance-panel"><header><div><span>COMPLIANCE</span><h3>合规检测</h3></div><b className={hits.length?"warning":"clear"}>{hits.length?`${hits.length} 项风险`:"通过"}</b></header>{hits.length===0?<div className="compliance-clear"><i>✓</i><div><b>未命中已知风险词</b><p>仍需人工检查画面、测试条件和促销真实性。</p></div></div>:<div className="compliance-list">{hits.slice(0,4).map((hit,index)=><button key={`${hit.term}-${index}`} onClick={()=>setSelectedRisk(hit)}><i className={`level-${hit.level}`}/><div><b>{hit.level}风险 · {hit.term}</b><span>{hit.category} · {hit.riskType}</span></div><em>查看 →</em></button>)}</div>}</article></section>
         </>}
 
@@ -154,6 +190,7 @@ export default function ScriptStudio(props:Props) {
     </div>
 
     {selectedRisk&&<div className="risk-popover" role="dialog" aria-modal="true" aria-label="合规风险详情"><button className="risk-backdrop" aria-label="关闭" onClick={()=>setSelectedRisk(null)}/><article><header><div><span className={`risk-label risk-${selectedRisk.level}`}>{selectedRisk.level}风险</span><small>{selectedRisk.riskType}</small></div><button onClick={()=>setSelectedRisk(null)}>×</button></header><h3>{selectedRisk.term}</h3><dl><div><dt>原表达</dt><dd>{selectedRisk.term}</dd></div><div><dt>风险原因</dt><dd>{selectedRisk.suggestion}</dd></div><div><dt>推荐安全表达</dt><dd>{selectedRisk.replacement}</dd></div></dl><button onClick={()=>{props.onCopy(selectedRisk.replacement);setSelectedRisk(null)}}>复制安全表达</button></article></div>}
+    {rewritePreview&&<div className="copilot-preview" role="dialog" aria-modal="true" aria-label="AI精修前后对比"><button className="copilot-preview-backdrop" aria-label="放弃候选" onClick={()=>setRewritePreview(null)}/><article><header><div><span>SCRIPT COPILOT</span><h2>接受前检查修改</h2><p>{rewritePreview.action} · 仅修改 {rewritePreview.keys.length} 个未锁定 Block</p></div><button onClick={()=>setRewritePreview(null)}>×</button></header><div className="copilot-diff">{rewritePreview.keys.map(key=>{const before=rewritePreview.before.find(block=>block.key===key)!;const after=rewritePreview.after.find(block=>block.key===key)!;return <section key={key}><h3>{before.label}</h3><div><article><span>BEFORE</span><p>{before.text}</p></article><article className="after"><span>AFTER</span><p>{after.text}</p></article></div></section>})}</div><footer><button onClick={()=>setRewritePreview(null)}>放弃，不修改</button><button className="accept" onClick={acceptRewrite}>接受并替换</button></footer></article></div>}
     {compareOpen&&compareItems.length===2&&<div className="compare-modal" role="dialog" aria-modal="true" aria-label="赛马版本对比"><button className="compare-backdrop" aria-label="关闭" onClick={()=>setCompareOpen(false)}/><article><header><div><span>COMPARE MODE</span><h2>{letters[compareItems[0].index]} vs {letters[compareItems[1].index]}</h2><p>并排比较真实脚本内容与现有评分。</p></div><button onClick={()=>setCompareOpen(false)}>×</button></header><div className="compare-columns">{compareItems.map(({index,script:item})=>{const itemScore=props.scoreScript(item);const itemHits=checkCompliance(item.narration);const itemBlocks=buildBlocks(item,props.form.sellingPoints);return <section key={index}><div className="compare-version"><b>{letters[index]}</b><div><h3>{item.title}</h3><span>{item.style} · {props.form.framework}</span></div><strong>{itemScore.total}</strong></div>{[["Hook",item.hook],["创意角度",item.title],["内容结构",itemBlocks.map(block=>block.label).join(" → ")],["视频节奏",pacing.map(([label,start,end])=>`${scaleTime(start,totalDuration)}–${scaleTime(end,totalDuration)}s ${label}`).join(" · ")],["核心卖点",itemBlocks.find(block=>block.key==="points")?.text||props.form.sellingPoints],["CTA",itemBlocks.find(block=>block.key==="cta")?.text||""]].map(([label,value])=><div className="compare-row" key={label}><span>{label}</span><p>{value}</p></div>)}<div className="compare-scores"><div><span>Hook</span><b>{itemScore.hook}/25</b></div><div><span>结构 / 节奏</span><b>{itemScore.structure}/25</b></div><div><span>证明力</span><b>{itemScore.proof}/22</b></div><div><span>转化</span><b>{itemScore.conversion}/20</b></div><div><span>自然度 / 留存</span><em>待接入</em></div><div><span>合规风险</span><b>{itemHits.length} 项</b></div></div><button className="adopt-compare" onClick={()=>{adoptRace(item);setCompareOpen(false)}}>采用 {letters[index]}</button></section>})}</div></article></div>}
   </section>;
 }

@@ -276,6 +276,7 @@ export default function Home() {
         error={error}
         aiConnected={aiConnected}
         historyCount={history.length}
+        sellingPointKnowledge={pointLibrary}
         onUpdate={update}
         onUseProduct={applyProductProfile}
         onReferenceChange={setReferenceScript}
