@@ -6,6 +6,7 @@ import { CloudflareStorageUnavailableError } from "../../../db/cloudflare-runtim
 import { runTeamDataAction } from "../../team-data-adapter";
 import {callProvider,getProviderStatuses,ProviderCallError} from "../../provider-router";
 import type {ProviderErrorType,ProviderId,ProviderRunMetadata} from "../../provider-types";
+import {validateScriptLanguage} from "../../language-guard";
 
 export const runtime="nodejs";
 
@@ -395,11 +396,13 @@ function applyLocalStrategy<T extends {hook:string;alternateHooks:string[];narra
 async function generateOne(p:Payload,recent:RecentScript[]) {
   const providerRequested=p.provider||"deepseek";const providerStatus=getProviderStatuses()[providerRequested];
   let aiScript:StructuredScript|null=null;let responseTimeMs:number|null=null;
-  let fallbackCategory:ProviderErrorType|undefined;
+  let fallbackCategory:ProviderErrorType|undefined;let languageRepairAttempted=false;
   if(providerStatus.configured){
     for(let attempt=1;attempt<=2;attempt++){
       const retryGuidance=attempt===1?"":fallbackCategory==="fact_validation_error"
         ?"上一版触发了事实或参考边界。保留参考的信息顺序，但必须更换Hook的核心词、主语、具体问题和首帧画面；不得对参考Hook做近义改写，也不得新增事实。"
+        :fallbackCategory==="language_validation_error"
+          ?`上一版混入了非目标语言。保持完全相同的 Product Facts、Creative Concept、Hook机制、Framework、信息顺序和证明逻辑，只修复语言一致性。title、hook、alternateHooks、narration、conflict、productReveal、proof、sellingPoints、cta、shootingSuggestion 以及所有 scenes.line 必须全部使用${p.language}，不得保留中文结构摘要。`
         :fallbackCategory==="strategy_validation_error"
           ?"上一版没有清晰执行策略。保持产品事实不变，用新的表达明确呈现本次Hook机制和创作模式。"
           :"上一版未通过结构校验。重新输出完整且严格符合Schema的脚本。";
@@ -407,7 +410,8 @@ async function generateOne(p:Payload,recent:RecentScript[]) {
       try{const result=await createAiScript(attemptPayload,recent,providerRequested);aiScript=result.script;responseTimeMs=result.responseTimeMs;break;}
       catch(error){
         const classified=providerError(error); fallbackCategory=classified.category; logProviderFallback(classified,p,attempt);
-        const retryable=classified.category==="provider_http_error"&&(classified.status===429||Boolean(classified.status&&classified.status>=500))||classified.category==="timeout"||classified.category==="fact_validation_error"||classified.category==="strategy_validation_error";
+        if(classified.category==="language_validation_error")languageRepairAttempted=true;
+        const retryable=classified.category==="provider_http_error"&&(classified.status===429||Boolean(classified.status&&classified.status>=500))||classified.category==="timeout"||classified.category==="fact_validation_error"||classified.category==="strategy_validation_error"||classified.category==="language_validation_error";
         if(!retryable||attempt===2)break;
         await new Promise(resolve=>setTimeout(resolve,350*attempt));
       }
@@ -416,7 +420,7 @@ async function generateOne(p:Payload,recent:RecentScript[]) {
   const localPayload=localStrategyPayload(p);
   const localScript=applyLocalStrategy(createDistinctLocalScript(localPayload,recent),p);
   const generated=aiScript ?? normalizeStructuredScript(localScript,p,p.creativeConcept);
-  const run:ProviderRunMetadata={providerRequested,providerUsed:aiScript?providerRequested:"local",aiGenerated:Boolean(aiScript),fallbackUsed:!aiScript,providerErrorType:aiScript?null:fallbackCategory||"missing_field",responseTimeMs};
+  const run:ProviderRunMetadata={providerRequested,providerUsed:aiScript?providerRequested:"local",aiGenerated:Boolean(aiScript),fallbackUsed:!aiScript,providerErrorType:aiScript?null:fallbackCategory||"missing_field",responseTimeMs,languageRepairAttempted};
   return {...generated,...run,providerFallbackCategory:aiScript?undefined:fallbackCategory,id:Date.now()+Math.floor(Math.random()*1000),createdAt:new Date().toISOString()};
 }
 
@@ -445,7 +449,7 @@ async function createAiScript(p: Payload, recent: RecentScript[],provider:Provid
 创作优先级从高到低：用户产品事实与合规边界 → 本次 Creative Concept → 创作模式 → Hook Strategy → Framework → Creativity → 平台与时长。不要用旧的固定破坏测试模板覆盖这些设置。
 
 写作硬规则：
-1. 输出语言必须是用户指定语言；使用目标市场真人会说的短句，避免翻译腔、AI腔和广告腔。
+1. 输出语言必须是用户指定语言；使用目标市场真人会说的短句，避免翻译腔、AI腔和广告腔。title、hook、alternateHooks、narration、conflict、productReveal、proof、sellingPoints、cta、shootingSuggestion 和每个 scenes.line 都是用户可见内容，必须逐字段使用输出语言；不能因为字段名、产品知识或系统指令是中文，就用中文概括这些字段。
 2. 输出6到11个可实拍镜头，一句话一个镜头；镜头数量与所选时长匹配。
 3. 前3秒必须严格体现所选 Hook Strategy；好奇不等于暴力测试，结果前置必须直接展示结果，视觉钩子必须先有可拍动作。
 4. 信息顺序必须严格服从 Framework。不得为了沿用旧模板而把 PAS、AIDA 或 Storytelling 改写成统一的竞品破坏测试。
@@ -513,6 +517,8 @@ Creativity：${p.creativity || "平衡"}
   if(missingFields.length)throw new ProviderGenerationError("structured_fields_missing",`Provider缺少${missingFields.length}个结构化字段`);
   if(generated.scenes.length<6||generated.scenes.some(scene=>![scene.time,scene.visual,scene.line,scene.edit].every(value=>typeof value==="string"&&value.trim())))throw new ProviderGenerationError("schema_validation_error","Provider镜头结构无效");
   const narration = generated.scenes.map(scene => scene.line.trim()).filter(Boolean).join("\n");
+  const languageValidation=validateScriptLanguage({...generated,narration},p.language);
+  if(!languageValidation.passed)throw new ProviderGenerationError("language_validation_error",`Provider输出语言与${p.language}不一致`,undefined,[...languageValidation.reasons,...languageValidation.offendingFields.map(field=>`field:${field}`)]);
   const factViolations=findFactViolations(narration,knowledgeContext);
   if(factViolations.length){
     const safeDetails=[...new Set(factViolations.map(item=>item.startsWith("直接复制")?"viral_reference_copy":item.startsWith("复用了近期")?"history_hook_reuse":item.startsWith("使用了未提供的参数")?"unsupported_numeric_claim":item.startsWith("使用了未提供的认证")?"unsupported_certification":item.startsWith("命中产品禁用")?"banned_expression":"fact_boundary"))];
@@ -548,7 +554,7 @@ export async function POST(request: Request) {
     }
     const p = body as Payload;
     if(p.provider&&!(["deepseek","doubao","openai"] as const).includes(p.provider))return Response.json({error:"未知 Provider"},{status:400});
-    if(p.provider==="openai")return Response.json({error:"GPT 未配置，本阶段不会发送 OpenAI 请求。",provider:{providerRequested:"openai",providerUsed:"local",aiGenerated:false,fallbackUsed:false,providerErrorType:"missing_field",responseTimeMs:null}},{status:503});
+    if(p.provider==="openai")return Response.json({error:"GPT 未配置，本阶段不会发送 OpenAI 请求。",provider:{providerRequested:"openai",providerUsed:"local",aiGenerated:false,fallbackUsed:false,providerErrorType:"missing_field",responseTimeMs:null,languageRepairAttempted:false}},{status:503});
     if (!p.product?.trim() || !p.sellingPoints?.trim()) return Response.json({ error: "请填写产品名称和核心卖点。" }, { status: 400 });
     if (p.referenceScript !== undefined && p.referenceScript.trim().length < 30) return Response.json({ error: "请粘贴完整的爆款参考文案，至少30个字。" }, { status: 400 });
     const recent = (p.recent ?? []).slice(0, 6);
@@ -573,12 +579,12 @@ export async function POST(request: Request) {
         return replacement;
       },2);
       const metadata=buildRequestKnowledge(p,recent).metadata;
-      return Response.json({scripts:retryResult.scripts,concepts,sellingPointPriorities:priorities,knowledge:metadata,diversity:retryResult.diversity,providerRuns:retryResult.scripts.map(({providerRequested,providerUsed,aiGenerated,fallbackUsed,providerErrorType,responseTimeMs})=>({providerRequested,providerUsed,aiGenerated,fallbackUsed,providerErrorType,responseTimeMs}))}, {status:201});
+      return Response.json({scripts:retryResult.scripts,concepts,sellingPointPriorities:priorities,knowledge:metadata,diversity:retryResult.diversity,providerRuns:retryResult.scripts.map(({providerRequested,providerUsed,aiGenerated,fallbackUsed,providerErrorType,responseTimeMs,languageRepairAttempted})=>({providerRequested,providerUsed,aiGenerated,fallbackUsed,providerErrorType,responseTimeMs,languageRepairAttempted}))}, {status:201});
     }
     const context=buildRequestKnowledge(p,recent);
     const priority=context.sellingPointPriority;
     const generated=await generateOne({...p,sellingPoints:[priority.primary,...priority.secondary].filter(Boolean).join("；")||p.sellingPoints},recent);
-    const provider={providerRequested:generated.providerRequested,providerUsed:generated.providerUsed,aiGenerated:generated.aiGenerated,fallbackUsed:generated.fallbackUsed,providerErrorType:generated.providerErrorType,responseTimeMs:generated.responseTimeMs};
+    const provider={providerRequested:generated.providerRequested,providerUsed:generated.providerUsed,aiGenerated:generated.aiGenerated,fallbackUsed:generated.fallbackUsed,providerErrorType:generated.providerErrorType,responseTimeMs:generated.responseTimeMs,languageRepairAttempted:generated.languageRepairAttempted};
     return Response.json({script:generated,knowledge:context.metadata,sellingPointPriority:priority,provider}, {status:201});
   } catch (error) { return Response.json({ error: error instanceof Error ? error.message : "生成失败" }, { status: 500 }); }
 }

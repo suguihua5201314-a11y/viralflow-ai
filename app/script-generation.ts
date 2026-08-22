@@ -33,6 +33,7 @@ export type StructuredScript = {
   proofMechanism?: string; ctaStyle?: string; concept?: CreativeConcept;
   providerRequested?: "deepseek"|"doubao"|"openai"; providerUsed?: "deepseek"|"doubao"|"openai"|"local";
   fallbackUsed?:boolean; providerErrorType?:string|null; responseTimeMs?:number|null; aiGenerated?:boolean;
+  languageRepairAttempted?:boolean;
   scenes?: Array<{time:string;visual:string;line:string;edit:string}>;
 };
 
