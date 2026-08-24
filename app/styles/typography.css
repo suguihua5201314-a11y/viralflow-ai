@@ -1,0 +1,183 @@
+/* ViralFlow AI global typography and readability system.
+   Presentation only — no component, state, API or persistence behavior. */
+:root{
+  --vf-type-page:clamp(24px,2vw,32px);
+  --vf-type-section:clamp(18px,1.35vw,20px);
+  --vf-type-card:16px;
+  --vf-type-body:15px;
+  --vf-type-body-compact:14px;
+  --vf-type-caption:13px;
+  --vf-type-label:12px;
+  --vf-leading-heading:1.25;
+  --vf-leading-body:1.65;
+}
+
+html{font-size:16px}
+body{font-size:var(--vf-type-body-compact);font-weight:400;line-height:var(--vf-leading-body);text-rendering:optimizeLegibility;-webkit-font-smoothing:antialiased}
+button,input,select,textarea{font-size:var(--vf-type-body-compact);line-height:1.45}
+h1,h2,h3,h4{line-height:var(--vf-leading-heading);font-weight:650}
+p,li,dd,blockquote{line-height:var(--vf-leading-body)}
+
+/* Global application chrome */
+body .vf-brand strong{font-size:18px}
+body .vf-brand small,body .vf-nav-group>p,body .vf-team-card span{font-size:12px;line-height:1.4}
+body .vf-nav-group nav button{min-height:44px;font-size:14px}
+body .vf-nav-group nav button>b{font-weight:550}
+body .vf-nav-group nav button>em,body .vf-team-card p,body .vf-team-card button{font-size:12px;line-height:1.5}
+.vf-header-title h1{font-size:20px}
+.vf-header-title p,.vf-service-state,.vf-team-state,.vf-user b,.vf-user small{font-size:12px;line-height:1.45}
+body .vf-workspace{font-size:var(--vf-type-body-compact)}
+
+/* Shared page hierarchy */
+.studio-titlebar h1,.vr-command-head h1,.projects-page>header h2,.project-detail-hero h2{font-size:var(--vf-type-page)!important;line-height:1.2}
+.studio-titlebar p,.vr-command-head p,.projects-page>header p,.project-detail-hero p{font-size:14px!important;line-height:1.6}
+.vf-dashboard h2,.vf-data-center h2,.script-studio h2,.va-shell h2,.vr-shell h2,.director-studio h2,.voice-studio h2,.library-panel h2,.product-center-panel h2{line-height:1.3}
+.studio-kicker,.studio-card-head span,.studio-editor-head>div:first-child>span,.race-arena>header>div>span,
+.pacing-card header span,.score-panel header span,.compliance-panel header span,
+.va-head span,.va-hook>span,.vr-command-head span,.vr-source span,.vr-strategy header span,.vr-race header span,.vr-compare header span,
+.projects-page>header span,.project-detail-hero span,.project-section-head span,.project-detail-grid>aside>section>span{
+  font-size:12px!important;font-weight:600!important;line-height:1.4;letter-spacing:.08em!important
+}
+
+/* Dashboard */
+.vf-dashboard-hero h2{font-size:var(--vf-type-page)!important}
+.vf-dashboard-hero p,.vf-dashboard-section>header p,.vf-recent-main p,.vf-continue-project p{font-size:14px!important;line-height:1.6!important}
+.vf-dashboard-section>header h2{font-size:var(--vf-type-section)!important}
+.vf-quick-grid h3,.vf-metric-grid article>div span,.vf-recent-main h3,.vf-continue-project h3{font-size:16px!important;font-weight:600!important}
+.vf-quick-grid p,.vf-metric-grid small,.vf-recent-meta span,.vf-recent-main span,.vf-recent-main small,
+.vf-activity-list b,.vf-activity-list small,.vf-intelligence-rail p,.vf-intelligence-rail span,.vf-intelligence-rail b{
+  font-size:12px!important;line-height:1.55!important
+}
+.vf-quick-grid button,.vf-metric-grid article,.vf-recent-list article{padding:18px!important}
+.vf-continue-project{padding:18px 20px!important}
+.vf-continue-project button,.vf-recent-actions button,.vf-metric-grid button{font-size:12px!important}
+
+/* Project Workspace */
+.projects-page>header,.project-detail-hero{padding:24px!important}
+.projects-toolbar button,.projects-toolbar input,.project-status,.project-tags span,.project-save-state{font-size:12px!important}
+.project-card-grid{gap:16px}
+.project-card-grid>article{padding:20px!important}
+.project-card-grid h3{font-size:16px!important;line-height:1.3}
+.project-card-grid>article>p,.project-card-grid article>section>div span,.project-card-grid article>section>div b,
+.project-card-grid article>footer span,.project-card-grid article>footer small,.project-card-grid article>footer button,
+.project-dates,.project-back,.project-detail-actions small,.project-progress header span,.project-progress header p{
+  font-size:12px!important;line-height:1.55
+}
+.project-card-grid article>section{padding:14px!important}
+.project-section-head h3{font-size:18px!important}
+.project-section-head p,.project-flow-grid p,.project-flow-grid small,.project-flow-grid em{font-size:12px!important;line-height:1.5}
+.project-flow-grid{gap:12px}
+.project-flow-grid button{min-height:112px;padding:18px!important}
+.project-flow-grid h4{font-size:16px!important}
+.project-detail-grid>main{padding:22px!important}
+.project-detail-grid>aside>section{padding:18px!important}
+.project-detail-grid>aside h3{font-size:16px!important}
+.project-detail-grid dt,.project-detail-grid dd,.project-detail-grid>aside p,.project-action-list button{font-size:12px!important;line-height:1.55}
+.project-modal h3{font-size:20px!important}.project-modal label,.project-modal input,.project-modal select,.project-modal footer button,.project-delete-confirm p{font-size:14px!important}
+
+/* Script Studio */
+.studio-titlebar h1{font-weight:700}
+.studio-card-head h2,.studio-editor-head h2{font-size:18px!important}
+.studio-title-actions>button,.provider-chip,.studio-workflow b,.studio-card-head small{font-size:12px!important}
+.studio-workflow{height:auto;min-height:66px;padding:10px 18px}
+.studio-workflow span{font-size:12px!important}
+.studio-column{padding:18px!important}
+.brief-group,.setting-group{padding:16px 0}
+.brief-group>header b,.setting-group>header b,.studio-column label,.studio-column input,.studio-column select,.studio-column textarea,
+.setting-group>select,.studio-segments button,.choice-grid button,.reference-button,.more-settings,.provider-card strong,
+.studio-generate,.studio-race,.version-tabs button,.editor-actions button,.pacing-card header b,.editor-status>div:first-child span{
+  font-size:12px!important;line-height:1.5
+}
+.studio-column label small,.brief-group>header span,.setting-group>header>span,.pending-badge,.provider-card span,
+.generation-summary span,.version-tabs>span,.pacing-card header small,.pacing-bar span{font-size:12px!important;line-height:1.45}
+.provider-card p,.generation-summary p,.studio-error,.provider-warning,.studio-empty p{font-size:13px!important;line-height:1.6}
+.studio-empty h2{font-size:20px!important}
+.script-blocks{gap:14px}
+.script-blocks>article{grid-template-columns:48px 1fr}
+.script-blocks>article>aside{padding-top:20px}
+.script-blocks>article>aside b{font-size:12px!important}
+.block-main{padding:20px 22px!important}
+.block-main>header span{font-size:16px!important;font-weight:600!important}
+.block-main>header em,.block-main>header small,.block-main>header>div:last-child button{font-size:12px!important}
+.block-main>p,.block-main>textarea{font-size:15px!important;line-height:1.7!important}
+.block-main>p{margin:14px 0}
+.block-main>footer{padding-top:12px;gap:7px}
+.block-main>footer span,.block-main>footer button,.block-main>footer em,.block-risk-row button{font-size:12px!important}
+.pacing-card,.editor-status,.score-panel,.compliance-panel,.race-arena{padding:18px!important}
+
+/* Viral Analyzer */
+.va-shell{gap:18px}
+.va-source,.va-analysis,.va-intel{padding:22px!important}
+.va-shell h2{font-size:20px!important}.va-shell h3{font-size:16px!important}
+.va-shell p,.va-shell small,.va-source label,.va-source summary,.va-toggle button,.va-legacy{font-size:13px!important;line-height:1.65!important}
+.va-source input,.va-source textarea{padding:12px;font-size:14px!important;line-height:1.6}
+.va-analysis{min-height:680px}
+.va-head b{font-size:32px!important}.va-head b small{font-size:13px!important}
+.va-hook{padding:20px!important}.va-hook blockquote{font-size:18px!important;line-height:1.6}
+.va-hook p strong,.va-chips b,.va-card p>b{font-size:12px!important}
+.va-card,.va-structure article,.va-insight-card{padding:18px!important}
+
+/* Viral Replication */
+.vr-command-head{padding:22px 24px!important}
+.vr-command-head h1{font-size:var(--vf-type-page)!important}
+.vr-command-state span,.vr-command-state strong,.vr-workflow span,.vr-workflow small{font-size:12px!important}
+.vr-workflow>div{padding:12px!important}
+body .vr-grid{grid-template-columns:minmax(320px,360px) minmax(560px,1fr) minmax(320px,360px)!important;gap:18px}
+body .vr-setup,body .vr-main,body .vr-intel-rail{padding:20px!important}
+.vr-source h2,.vr-strategy h2,.vr-race h2,.vr-compare h2,.vr-setup h2{font-size:18px!important}
+.vr-source p,.vr-source-summary small,.vr-source-summary strong,.vr-section-label,.vr-cta-step,.vr-setup h3,.vr-setup label,
+.vr-setup input,.vr-setup textarea,.vr-setup select,.vr-source-guide label,.vr-source-guide button,.vr-source-empty-actions label,.vr-source-empty-actions button{
+  font-size:12px!important;line-height:1.6!important
+}
+.vr-card,.vr-strategy article,.vr-race article,.vr-compare article{padding:20px!important}
+
+/* AI Director */
+.director-studio,.director-workspace{font-size:14px}
+.workspace-topbar{padding:16px 18px!important}
+.workspace-topbar>div span,.workspace-topbar>div b,.workspace-topbar small,.workspace-topbar strong,
+.workspace-topbar button,.workspace-actions button,.add-shot button,.ai-shot-panel button{font-size:12px!important;line-height:1.45}
+.workspace-shell{grid-template-columns:280px minmax(560px,1fr) 340px;gap:16px}
+.plan-sidebar,.shot-workspace,.shot-inspector{padding:18px!important}
+.plan-sidebar>span,.shot-inspector header span,.inspector-empty>b,.plan-sidebar article b,.plan-sidebar summary,
+.workspace-actions b,.workspace-actions span{font-size:12px!important}
+.plan-sidebar h2{font-size:18px!important}
+.plan-sidebar article p,.plan-sidebar details p,.shot-essentials p,.director-visual p,.director-plan-grid p,
+.director-production-summary p,.director-shot-grid dd,.rewrite-modal article p,.context-change-gate p,.archived-director article p{
+  font-size:14px!important;line-height:1.65!important
+}
+.director-shot-card.workspace>header{padding:14px 16px!important}
+.director-shot-card>header b,.director-shot-card>header span,.director-shot-card>header em,
+.director-shot-card.workspace header button,.director-shot-card.workspace summary,.director-shot-tags span,.director-visual small,
+.director-shot-grid dt,.shot-essentials b,.shot-essentials strong,.shot-essentials small,.shot-expand,
+.inspector-fields label,.ai-shot-panel,.inspector-actions button,.inspector-status,.director-timeline header,
+.director-timeline button b,.director-timeline button span,.director-timeline p,.rewrite-modal header span,
+.rewrite-modal article b,.rewrite-modal article small,.rewrite-modal footer span,.rewrite-modal footer button,
+.context-change-gate span,.context-change-gate button,.director-empty-actions button,.archived-director article b,.archived-director article small{
+  font-size:12px!important;line-height:1.5
+}
+.shot-essentials article,.director-visual,.director-shot-grid div{padding:16px!important}
+.inspector-fields input,.inspector-fields textarea,.inspector-fields select,.ai-shot-panel input,.ai-shot-panel textarea,.ai-shot-panel select{font-size:14px!important;padding:11px!important}
+
+/* Voice Studio and Knowledge Base */
+.voice-studio h2,.library-panel h2,.product-center-panel h2{font-size:var(--vf-type-section)!important}
+.voice-studio h3,.library-list h3,.product-card h3{font-size:16px!important}
+.voice-studio p,.voice-studio label,.voice-studio small,.voice-studio span,.voice-studio button,.voice-studio input,.voice-studio select,.voice-studio textarea,
+.library-panel label,.library-panel input,.library-panel select,.library-panel textarea,.library-list p,.library-list span,.library-list button,
+.product-center-panel p,.product-center-panel label,.product-center-panel small,.product-center-panel button,.product-center-panel input,.product-center-panel select,.product-center-panel textarea{
+  font-size:13px!important;line-height:1.6!important
+}
+.library-form,.library-list article,.product-form,.product-list article{padding:20px!important}
+.library-list p{font-size:14px!important;line-height:1.7!important}
+
+/* Laptop: preserve readable type and let layout breathe instead of shrinking text. */
+@media(max-width:1300px){
+  body .vr-grid{grid-template-columns:320px minmax(520px,1fr)!important}
+  body .vr-intel-rail{position:static!important;grid-column:1/-1;max-height:none!important}
+  .workspace-shell{grid-template-columns:250px minmax(520px,1fr)}
+  .project-card-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
+}
+@media(max-width:900px){
+  .studio-grid,.va-shell,body .vr-grid,.workspace-shell{grid-template-columns:1fr!important}
+  .studio-column,.va-source,.va-intel,.vr-setup,.plan-sidebar,.shot-inspector{position:static!important;max-height:none!important}
+  .project-card-grid{grid-template-columns:1fr}
+}
