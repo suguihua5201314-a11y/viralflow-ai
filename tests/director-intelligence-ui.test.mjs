@@ -18,3 +18,21 @@ test("Step 6.4-B creative directions reuse guarded shot regeneration",async()=>{
  assert.ok(source.includes("setPreview"));
  assert.doesNotMatch(source,/generate-shot-variations/);
 });
+
+test("AI Director is workspace-first even before a Director result exists",async()=>{
+ const source=await readFile(new URL("../app/shooting-director.tsx",import.meta.url),"utf8");
+ assert.match(source,/director-empty-workspace/);
+ assert.match(source,/storyboard-empty-canvas/);
+ assert.match(source,/还没有导演方案/);
+ assert.match(source,/AI DIRECTOR ASSISTANT · AI 副导演/);
+ assert.doesNotMatch(source,/className="director-form"/);
+});
+
+test("AI Director restores the current project's persisted workspace",async()=>{
+ const page=await readFile(new URL("../app/page.tsx",import.meta.url),"utf8");
+ const director=await readFile(new URL("../app/shooting-director.tsx",import.meta.url),"utf8");
+ assert.match(page,/assets\.directorResult/);
+ assert.match(page,/initialWorkspace=\{currentDirectorWorkspace\}/);
+ for(const field of ["result","shots","selectedShot","intelligence","intelligenceMetadata"])assert.ok(director.includes(field),field);
+ assert.match(director,/restoredWorkspace\(initialWorkspace\)/);
+});
