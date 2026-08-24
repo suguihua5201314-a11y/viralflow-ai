@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import "./globals.css";
 import "./styles/viralflow-shell.css";
 import "./styles/dashboard.css";
+import "./styles/data-center.css";
 import "./styles/script-studio.css";
 import "./styles/viral-analyzer.css";
 import "./styles/viral-replication.css";

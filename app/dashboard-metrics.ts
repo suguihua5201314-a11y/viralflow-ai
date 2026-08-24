@@ -8,9 +8,9 @@ type ScriptMetricSource = Timestamped & { id?: number; title: string; product: s
 export type DashboardActivity = { id: string; type: "脚本" | "案例" | "产品"; title: string; timestamp: string };
 export type DashboardProvider = { id: ProviderId; label: string; status: "已连接" | "配置不完整" | "未配置"; connected: boolean };
 export type DashboardMetrics = {
-  counts: { products: number; cases: number; scripts: number; recent: number; director: null };
+  counts: { products: number; cases: number; scripts: number; recent: number; variants: number | null; director: number | null; voice: number | null };
   periods: { today: number; week: number; month: number; available: boolean };
-  usage: { scripts: number; analyzer: number; replication: null; director: null };
+  usage: { scripts: number; analyzer: number; replication: number | null; director: number | null; voice: number | null };
   activity: DashboardActivity[];
   trend: Array<{ label: string; count: number }>;
   providers: DashboardProvider[];
@@ -66,9 +66,9 @@ export function buildDashboardMetrics(input: {
     return { id, label: item?.label || id, connected, status: connected ? "已连接" as const : item?.missingFields?.length ? "配置不完整" as const : "未配置" as const };
   });
   return {
-    counts: { products: input.products.length, cases: input.cases.length, scripts: input.scripts.length, recent: input.recentCount, director: null },
+    counts: { products: input.products.length, cases: input.cases.length, scripts: input.scripts.length, recent: input.recentCount, variants: null, director: null, voice: null },
     periods: { today: dated.filter(value => value >= dayStart).length, week: dated.filter(value => value >= dayStart - 6 * 86400000).length, month: dated.filter(value => value >= monthStart).length, available: dated.length > 0 },
-    usage: { scripts: input.scripts.length, analyzer: input.cases.length, replication: null, director: null },
+    usage: { scripts: input.scripts.length, analyzer: input.cases.length, replication: null, director: null, voice: null },
     activity: activities.slice(0, 6), trend,
     providers,
   };

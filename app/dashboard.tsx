@@ -1,6 +1,7 @@
 import type { ActiveView } from "./navigation";
 import type { DashboardMetrics } from "./dashboard-metrics";
 import WorkspaceState from "./components/ui/workspace-state";
+import type { DataMode } from "./demo-data";
 
 export type RecentWorkItem = {
   key: string;
@@ -19,6 +20,7 @@ type DashboardProps = {
   recent: RecentWorkItem[];
   onNavigate: (view: ActiveView) => void;
   onOpenRecent: (key: string, destination: "script" | "director") => void;
+  dataMode: DataMode;
 };
 
 const quickStarts: Array<{ view: ActiveView; icon: string; title: string; description: string; tone: string }> = [
@@ -34,7 +36,9 @@ const statCards = [
   { key: "products", label: "产品数量", context: "产品知识库", icon: "▣" },
   { key: "cases", label: "创意案例", context: "已保存爆款案例", icon: "▦" },
   { key: "scripts", label: "历史脚本", context: "创作资产", icon: "◷" },
-  { key: "recent", label: "最近创作", context: "当前可继续处理", icon: "↗" },
+  { key: "variants", label: "脚本方案", context: "多方案版本", icon: "◇" },
+  { key: "director", label: "导演方案", context: "镜头规划", icon: "◉" },
+  { key: "voice", label: "AI 语音生成", context: "口播音轨", icon: "♫" },
 ] as const;
 
 const formatTime = (value?: string) => {
@@ -43,14 +47,14 @@ const formatTime = (value?: string) => {
   return Number.isNaN(date.getTime()) ? "暂无更新时间" : date.toLocaleString("zh-CN", { month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" });
 };
 
-const statDestinations: Record<string, ActiveView> = { products: "products", cases: "library", scripts: "history", recent: "create" };
+const statDestinations: Record<string, ActiveView> = { products: "products", cases: "library", scripts: "history", variants:"create", director:"director", voice:"voice" };
 
-export default function Dashboard({ metrics, recent, onNavigate, onOpenRecent }: DashboardProps) {
+export default function Dashboard({ metrics, recent, onNavigate, onOpenRecent, dataMode }: DashboardProps) {
   const counts = metrics.counts;
   const trendMax = Math.max(1, ...metrics.trend.map(item => item.count));
   return <section className="vf-dashboard" data-testid="dashboard-home">
     <section className="vf-dashboard-hero">
-      <div className="vf-hero-copy"><span><i /> ViralFlow AI · 智能创意工作台</span><h2>欢迎回来，苏苏团队</h2><p>从爆款洞察到脚本、导演与成片，在一个工作台完成。</p></div>
+      <div className="vf-hero-copy"><span><i /> ViralFlow AI · 智能创意工作台</span><h2>欢迎回来，苏苏团队</h2><p>从爆款洞察到脚本、导演与成片，在一个工作台完成。</p>{dataMode==="demo"&&<em className="vf-demo-badge">演示数据</em>}</div>
       <div className="vf-hero-actions"><small>创意生产中枢</small><button type="button" onClick={() => onNavigate("create")}><span>＋</span> 开始新创作 <i>→</i></button></div>
     </section>
 
@@ -61,8 +65,8 @@ export default function Dashboard({ metrics, recent, onNavigate, onOpenRecent }:
       </section>
 
       <section className="vf-dashboard-section">
-        <header><div><span>数据概览</span><h2>真实资产总览</h2></div><p>仅统计当前系统中可读取的数据</p></header>
-        <div className="vf-metric-grid">{statCards.map(item => <article key={item.key}><div><span>{item.label}</span><i>{item.icon}</i></div><strong>{counts[item.key]}</strong><small><b>{counts[item.key] === 0 ? "暂无数据" : "数据已同步"}</b>{item.context}</small><button type="button" onClick={() => onNavigate(statDestinations[item.key])}>查看 →</button></article>)}</div>
+        <header><div><span>数据概览</span><h2>{dataMode==="demo"?"创意生产总览":"真实资产总览"}</h2></div><p>{dataMode==="demo"?"当前展示独立演示数据":"仅统计当前系统中可读取的数据"}</p></header>
+        <div className="vf-metric-grid">{statCards.map(item => {const value=counts[item.key];return <article key={item.key}><div><span>{item.label}</span><i>{item.icon}</i></div><strong>{value??"—"}</strong><small><b>{value==null?"尚未产生记录":value===0?"暂无数据":dataMode==="demo"?"演示数据":"数据已同步"}</b>{item.context}</small><button type="button" onClick={() => onNavigate(statDestinations[item.key])}>查看 →</button></article>})}</div>
       </section>
 
       <section className="vf-dashboard-section vf-recent-section">
@@ -75,16 +79,16 @@ export default function Dashboard({ metrics, recent, onNavigate, onOpenRecent }:
         </article>)}</div>}
       </section>
 
-      <section className="vf-dashboard-section vf-trend-section"><header><div><span>创作趋势</span><h2>近 7 天真实活动</h2></div><p>{metrics.periods.available ? `今日 ${metrics.periods.today} · 本周 ${metrics.periods.week} · 本月 ${metrics.periods.month}` : "暂无历史统计"}</p></header>
+      <section className="vf-dashboard-section vf-trend-section"><header><div><span>创作趋势</span><h2>近 7 天{dataMode==="demo"?"演示":"真实"}活动</h2></div><p>{metrics.periods.available ? `今日 ${metrics.periods.today} · 本周 ${metrics.periods.week} · 本月 ${metrics.periods.month}` : "暂无历史统计"}</p></header>
         {metrics.trend.some(item => item.count > 0) ? <div className="vf-trend-chart">{metrics.trend.map(item => <div className="vf-trend-day" key={item.label}><span className="vf-trend-bar" style={{ height: `${Math.max(8, item.count / trendMax * 100)}%` }}><b>{item.count}</b></span><span>{item.label}</span></div>)}</div> : <WorkspaceState compact kind="unavailable" icon="↗" title="暂无趋势数据" description="产生带可靠时间记录的脚本、案例或产品更新后，这里才会显示真实趋势。" />}
       </section>
       <section className="vf-pipeline"><span>创意生产路径</span>{["爆款洞察", "脚本", "创意复刻", "导演", "配音"].map((label, index) => <div key={label}><b>{index + 1}</b>{label}{index < 4 && <i>→</i>}</div>)}</section>
     </main>
 
     <aside className="vf-intelligence-rail">
-      <section><header><span>创作概览</span><b>实时派生</b></header><div className="vf-rail-overview"><p><span>产品</span><strong>{counts.products}</strong></p><p><span>案例</span><strong>{counts.cases}</strong></p><p><span>脚本</span><strong>{counts.scripts}</strong></p><p><span>导演方案</span><strong>暂无数据</strong></p></div></section>
+      <section><header><span>创作概览</span><b>{dataMode==="demo"?"演示数据":"实时派生"}</b></header><div className="vf-rail-overview"><p><span>产品</span><strong>{counts.products}</strong></p><p><span>案例</span><strong>{counts.cases}</strong></p><p><span>脚本方案</span><strong>{counts.variants??"暂无数据"}</strong></p><p><span>导演方案</span><strong>{counts.director??"暂无数据"}</strong></p></div></section>
       <section><header><span>最近动态</span><b>{metrics.activity.length ? `${metrics.activity.length} 条` : "暂无"}</b></header>{metrics.activity.length ? <div className="vf-activity-list">{metrics.activity.map(item => <article key={item.id}><i /><div><b>{item.title}</b><small>{formatTime(item.timestamp)} · {item.type}</small></div></article>)}</div> : <p className="vf-rail-empty">暂无带可靠时间的创作活动。</p>}</section>
-      <section><header><span>可读取 AI 记录</span><b>非请求次数</b></header><div className="vf-usage-list"><p><span>脚本记录</span><strong>{metrics.usage.scripts}</strong></p><p><span>洞察案例</span><strong>{metrics.usage.analyzer}</strong></p><p><span>创意复刻</span><strong>暂无数据</strong></p><p><span>导演方案</span><strong>暂无数据</strong></p></div></section>
+      <section><header><span>可读取 AI 记录</span><b>非请求次数</b></header><div className="vf-usage-list"><p><span>脚本记录</span><strong>{metrics.usage.scripts}</strong></p><p><span>洞察案例</span><strong>{metrics.usage.analyzer}</strong></p><p><span>导演方案</span><strong>{metrics.usage.director??"暂无数据"}</strong></p><p><span>语音生成</span><strong>{metrics.usage.voice??"暂无数据"}</strong></p></div></section>
       <section><header><span>AI 服务状态</span><b>Provider</b></header><div className="vf-provider-list">{metrics.providers.map(item => <p key={item.id} className={item.connected ? "connected" : ""}><i /><span>{item.label}</span><strong>{item.status}</strong></p>)}</div></section>
     </aside></div>
   </section>;
