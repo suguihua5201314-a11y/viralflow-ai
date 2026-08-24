@@ -39,7 +39,7 @@ test("C: API 通过 Image Provider Router 调用真实豆包 Ark Adapter", () =>
 test("D: 生成成功组装并保存完整 Image Asset", () => {
   for (const field of ["imageUrl", "prompt", "imageType", "style", "camera", "ratio", "model", "createdAt", "projectId", "metadata"]) assert.match(assets + studio + router, new RegExp(field));
   assert.match(studio, /saveImageAssets\(next\)/);
-  assert.match(assets, /assets\.slice\(0, 6\)/);
+  assert.match(assets, /assets\.slice\(0, IMAGE_ASSET_LIMIT\)/);
   assert.match(assets, /asset\.projectId === projectId/);
 });
 

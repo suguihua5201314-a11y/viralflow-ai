@@ -2,7 +2,7 @@
 
 import Image from "next/image";
 import { useEffect, useMemo, useState } from "react";
-import { assetsForProject, readImageAssets, saveImageAssets, type ImageAsset } from "./image-assets";
+import { IMAGE_ASSET_LIMIT, assetsForProject, readImageAssets, saveImageAssets, takeImageStudioDraft, type ImageAsset } from "./image-assets";
 import type { ImageGenerationRequest, ImageProviderId, ImageProviderStatus } from "./image-provider-router";
 
 type ProjectOption = { id: string; name: string; product: string };
@@ -46,6 +46,16 @@ export default function ImageStudio({ projects, currentProjectId }: { projects: 
   const activeProvider = providerState.providers.find(item => item.id === selectedProvider);
 
   useEffect(() => {
+    const timer = window.setTimeout(() => {
+      const draft = takeImageStudioDraft();
+      if (draft) {
+        setProjectId(draft.projectId); setPrompt(draft.prompt); setImageType(draft.imageType); setStyle(draft.style); setCamera(draft.camera); setRatio(draft.ratio); setStatus("idle"); setCurrentAssetId(null);
+      }
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, []);
+
+  useEffect(() => {
     fetch("/api/images/generate", { cache: "no-store" }).then(response => response.json()).then(data => {
       const providers = Array.isArray(data.providers) ? data.providers : [];
       const activeProvider = data.activeProvider === "openai-image" ? "openai-image" : "doubao-image";
@@ -62,7 +72,7 @@ export default function ImageStudio({ projects, currentProjectId }: { projects: 
       const data = await response.json() as { image?: Pick<ImageAsset, "provider" | "model" | "imageUrl" | "createdAt" | "metadata">; error?: ApiError };
       if (!response.ok || !data.image) throw data.error || { type: "provider_error", message: "图片生成失败，请稍后重试。", retryable: true };
       const asset: ImageAsset = { id: `image-${Date.now()}`, prompt: requestedPrompt, imageType, style, camera, ratio, projectId, ...data.image };
-      const next = [asset, ...assets].slice(0, 6);
+      const next = [asset, ...assets].slice(0, IMAGE_ASSET_LIMIT);
       setAssets(next); setCurrentAssetId(asset.id); setStatus("success");
       if (!saveImageAssets(next)) setError({ type: "storage_full", message: "图片已生成，但浏览器存储空间不足，刷新后记录可能无法保留。", retryable: false });
     } catch (caught) {

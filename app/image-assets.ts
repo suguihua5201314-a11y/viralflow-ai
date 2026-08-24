@@ -1,6 +1,11 @@
 import type { ImageProviderId } from "./image-provider-router";
 
 export const IMAGE_ASSET_STORAGE_KEY = "viralflow-image-assets-v1";
+export const IMAGE_STUDIO_DRAFT_KEY = "viralflow-image-studio-draft-v1";
+export const IMAGE_ASSET_LIMIT = 60;
+
+export type ImageSourceReference = { type: "director-shot"; shotId: string; sourceBlockId: string };
+export type ImageAssetMetadata = { size: string; requestId?: string; sourceReference?: ImageSourceReference };
 
 export type ImageAsset = {
   id: string;
@@ -14,8 +19,10 @@ export type ImageAsset = {
   provider: ImageProviderId;
   model: string;
   createdAt: string;
-  metadata?: { size: string; requestId?: string };
+  metadata?: ImageAssetMetadata;
 };
+
+export type ImageStudioDraft = Pick<ImageAsset, "projectId" | "prompt" | "imageType" | "style" | "camera" | "ratio"> & { sourceReference?: ImageSourceReference };
 
 export function readImageAssets(): ImageAsset[] {
   if (typeof window === "undefined") return [];
@@ -29,10 +36,25 @@ export function readImageAssets(): ImageAsset[] {
 
 export function saveImageAssets(assets: ImageAsset[]) {
   if (typeof window === "undefined") return false;
-  try { localStorage.setItem(IMAGE_ASSET_STORAGE_KEY, JSON.stringify(assets.slice(0, 6))); return true; }
+  try { localStorage.setItem(IMAGE_ASSET_STORAGE_KEY, JSON.stringify(assets.slice(0, IMAGE_ASSET_LIMIT))); return true; }
   catch { return false; }
 }
 
 export function assetsForProject(assets: ImageAsset[], projectId: string | null) {
   return projectId ? assets.filter(asset => asset.projectId === projectId) : assets;
+}
+
+export function saveImageStudioDraft(draft: ImageStudioDraft) {
+  if (typeof window === "undefined") return false;
+  try { sessionStorage.setItem(IMAGE_STUDIO_DRAFT_KEY, JSON.stringify(draft)); return true; }
+  catch { return false; }
+}
+
+export function takeImageStudioDraft(): ImageStudioDraft | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = sessionStorage.getItem(IMAGE_STUDIO_DRAFT_KEY);
+    sessionStorage.removeItem(IMAGE_STUDIO_DRAFT_KEY);
+    return raw ? JSON.parse(raw) as ImageStudioDraft : null;
+  } catch { return null; }
 }
