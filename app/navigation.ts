@@ -1,7 +1,8 @@
-export type ActiveView = "dashboard" | "create" | "video" | "director" | "voice" | "breakdown" | "replicate" | "checker" | "library" | "products" | "reviews" | "history" | "monitor";
+export type ActiveView = "dashboard" | "projects" | "create" | "video" | "director" | "voice" | "breakdown" | "replicate" | "checker" | "library" | "products" | "reviews" | "history" | "monitor";
 
 export const viewMeta: Record<ActiveView, { label: string; eyebrow: string; description: string }> = {
   dashboard: { label: "工作台首页", eyebrow: "创意生产总览", description: "汇总真实创作资产，快速进入下一步工作" },
+  projects: { label: "我的项目", eyebrow: "项目工作区", description: "按产品与市场管理从洞察到数据复盘的完整创作流程" },
   create: { label: "AI 创作工作台", eyebrow: "创意策划", description: "根据产品与创作参数，生成多条短视频脚本" },
   breakdown: { label: "爆款洞察", eyebrow: "创意策划", description: "拆解爆款内容的开场、结构、节奏与证明机制" },
   replicate: { label: "创意复刻", eyebrow: "创意策划", description: "保留爆款机制，结合目标产品生成原创方向" },

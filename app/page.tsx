@@ -25,6 +25,7 @@ import type {DirectorRequest,DirectorSourceType} from "./director-core";
 import {notifyWorkspace} from "./components/ui/workspace-feedback";
 import DataCenter from "./data-center";
 import {DATA_MODE,demoAnalytics,demoDashboardData,demoProjects} from "./demo-data";
+import ProjectWorkspace from "./project-workspace";
 
 type Scene = { time: string; visual: string; line: string; edit: string };
 type Script = { id?: number; title: string; product: string; language: string; country: string; style: string; hook: string; alternateHooks: string[]; narration: string; scenes: Scene[]; createdAt?: string; aiGenerated?: boolean; creativeAngle?:string; hookType?:string; framework?:string; conflict?:string; productReveal?:string; proof?:string; sellingPoints?:string; cta?:string; shootingSuggestion?:string; scenario?:string; proofMechanism?:string; ctaStyle?:string };
@@ -91,6 +92,7 @@ const initialMonitorAccounts: MonitorAccount[] = [
 
 export default function Home() {
   const [active, setActive] = useState<ActiveView>("dashboard");
+  const [selectedProjectKey,setSelectedProjectKey]=useState<string|null>(null);
   const [loading, setLoading] = useState(false);
   const [aiConnected, setAiConnected] = useState(false);
   const [providerStatuses,setProviderStatuses]=useState(initialProviderStatuses);
@@ -302,12 +304,14 @@ export default function Home() {
   const realDashboardMetrics=buildDashboardMetrics({products:productProfiles,cases:viralCases,scripts:history,currentScript:result,recentCount:recentWork.length,providers:providerStatuses});
   const dashboardMetrics=DATA_MODE==="demo"?demoDashboardData:realDashboardMetrics;
   const dashboardRecent=DATA_MODE==="demo"?demoProjects:recentWork;
+  const openProject=(key:string)=>{setSelectedProjectKey(key);setActive("projects");};
 
   return <AppShell
-    sidebar={<Sidebar active={active} onNavigate={setActive} onHistory={() => { setActive("history"); void loadHistory(); }} counts={{ library: hookLibrary.length + pointLibrary.length, monitor: monitorAccounts.length, history: history.length, products: productProfiles.length, reviews: reviewRecords.length }} teamConnected={teamConnected} onTeamToggle={() => { if (teamConnected) { setTeamConnected(false); setTeamPassword(""); } else setShowTeamLogin(true); }} />}
+    sidebar={<Sidebar active={active} onNavigate={view=>{if(view==="projects")setSelectedProjectKey(null);setActive(view);}} onHistory={() => { setActive("history"); void loadHistory(); }} counts={{ library: hookLibrary.length + pointLibrary.length, monitor: monitorAccounts.length, history: history.length, products: productProfiles.length, reviews: reviewRecords.length }} teamConnected={teamConnected} onTeamToggle={() => { if (teamConnected) { setTeamConnected(false); setTeamPassword(""); } else setShowTeamLogin(true); }} />}
     header={<TopHeader active={active} aiConnected={aiConnected} teamConnected={teamConnected} searchItems={searchItems} />}
   >
-      {active === "dashboard" && <Dashboard metrics={dashboardMetrics} recent={dashboardRecent} dataMode={DATA_MODE} onNavigate={setActive} onOpenRecent={openRecent} />}
+      {active === "dashboard" && <Dashboard metrics={dashboardMetrics} recent={dashboardRecent} dataMode={DATA_MODE} onNavigate={setActive} onOpenRecent={openRecent} onOpenProject={openProject} />}
+      {active === "projects" && <ProjectWorkspace projects={demoProjects} initialProjectKey={selectedProjectKey} onNavigate={setActive} />}
       {active === "video" && <VideoAnalyzer products={productProfiles.map(x=>x.name)} />}
       {active === "director" && <ShootingDirector input={directorInput} onNavigate={view=>setActive(view)} />}
       {active === "voice" && <VoiceStudio initialText={result?.narration ?? ""} />}

@@ -8,6 +8,11 @@ export type DemoProject = RecentWorkItem & {
   type: "脚本" | "导演" | "语音" | "洞察";
   status: "创作中" | "待审核" | "已完成";
   owner: string;
+  projectName: string;
+  stage: "洞察" | "复刻" | "脚本" | "导演" | "语音" | "复盘";
+  nextAction: string;
+  progress: number;
+  assets: { analysis: number; replication: number; scripts: number; director: number; voice: number; reviews: number };
 };
 
 export type AnalyticsData = {
@@ -19,10 +24,10 @@ export type AnalyticsData = {
 };
 
 export const demoProjects: DemoProject[] = [
-  { key:"demo-ca-es", title:"结果前置 · 10秒自动除尘安装", product:"CrystalArmor 钢化膜", market:"西班牙", language:"西班牙语", platform:"TikTok", duration:30, updatedAt:"2026-08-24T01:42:00.000Z", current:true, type:"导演", status:"创作中", owner:"苏苏" },
-  { key:"demo-oxy-it", title:"通勤口气场景 · 温和清洁", product:"Oxyora 牙膏", market:"意大利", language:"意大利语", platform:"TikTok", duration:35, updatedAt:"2026-08-23T09:18:00.000Z", current:false, type:"脚本", status:"待审核", owner:"小林" },
-  { key:"demo-strip-us", title:"使用步骤与前后对比方向", product:"牙贴", market:"美国", language:"英语", platform:"Reels", duration:28, updatedAt:"2026-08-22T07:26:00.000Z", current:false, type:"语音", status:"已完成", owner:"阿杰" },
-  { key:"demo-mascara-de", title:"双头睫毛膏 A/B/C 创意赛马", product:"睫毛膏", market:"德国", language:"德语", platform:"TikTok", duration:32, updatedAt:"2026-08-21T11:08:00.000Z", current:false, type:"洞察", status:"已完成", owner:"苏苏" },
+  { key:"demo-ca-es", projectName:"CrystalArmor 西班牙 TikTok", title:"结果前置 · 10秒自动除尘安装", product:"CrystalArmor 钢化膜", market:"西班牙", language:"西班牙语", platform:"TikTok", duration:30, updatedAt:"2026-08-24T01:42:00.000Z", current:true, type:"导演", status:"创作中", stage:"导演", nextAction:"完善 AI 导演方案", progress:72, owner:"苏苏", assets:{analysis:3,replication:2,scripts:3,director:1,voice:0,reviews:0} },
+  { key:"demo-oxy-it", projectName:"Oxyora 意大利 KOC 测试", title:"通勤口气场景 · 温和清洁", product:"Oxyora 牙膏", market:"意大利", language:"意大利语", platform:"TikTok", duration:35, updatedAt:"2026-08-23T09:18:00.000Z", current:false, type:"脚本", status:"待审核", stage:"脚本", nextAction:"审核 Script V1/V2/V3", progress:48, owner:"小林", assets:{analysis:2,replication:1,scripts:3,director:0,voice:0,reviews:0} },
+  { key:"demo-strip-us", projectName:"牙贴美国 Reels 转化组", title:"使用步骤与前后对比方向", product:"牙贴", market:"美国", language:"英语", platform:"Reels", duration:28, updatedAt:"2026-08-22T07:26:00.000Z", current:false, type:"语音", status:"已完成", stage:"复盘", nextAction:"录入发布数据", progress:92, owner:"阿杰", assets:{analysis:4,replication:3,scripts:6,director:2,voice:2,reviews:1} },
+  { key:"demo-mascara-de", projectName:"双头睫毛膏德国赛马", title:"双头睫毛膏 A/B/C 创意赛马", product:"睫毛膏", market:"德国", language:"德语", platform:"TikTok", duration:32, updatedAt:"2026-08-21T11:08:00.000Z", current:false, type:"洞察", status:"创作中", stage:"复刻", nextAction:"生成原创复刻方向", progress:31, owner:"苏苏", assets:{analysis:5,replication:0,scripts:0,director:0,voice:0,reviews:0} },
 ];
 
 export const demoActivities = [

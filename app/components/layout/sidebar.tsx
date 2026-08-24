@@ -10,7 +10,7 @@ type SidebarProps = {
 };
 
 const groups: Array<{ label: string; items: Array<{ id: ActiveView; icon: string; label: string }> }> = [
-  { label: "总览", items: [{ id: "dashboard", icon: "⌂", label: "工作台首页" }] },
+  { label: "总览", items: [{ id: "dashboard", icon: "⌂", label: "工作台首页" }, { id: "projects", icon: "▤", label: "我的项目" }] },
   { label: "创意策划", items: [
     { id: "create", icon: "✦", label: "AI 创作工作台" },
     { id: "breakdown", icon: "◇", label: "爆款洞察" },
@@ -35,7 +35,7 @@ export default function Sidebar({ active, onNavigate, onHistory, counts, teamCon
   const countFor = (id: ActiveView) => id === "library" ? counts.library : id === "monitor" ? counts.monitor : id === "history" ? counts.history : id === "products" ? counts.products : id === "reviews" ? counts.reviews : undefined;
   return <aside className="sidebar vf-sidebar">
     <button className="brand vf-brand" type="button" onClick={() => onNavigate("dashboard")} aria-label="返回工作台首页"><span className="brand-mark vf-brand-mark">V</span><div><strong>ViralFlow AI</strong><small>智能创意工作台</small></div></button>
-    <button className="vf-new-project" onClick={() => onNavigate("create")}><span>＋</span> 新建项目</button>
+    <button className="vf-new-project" onClick={() => onNavigate("projects")}><span>＋</span> 新建项目</button>
     <div className="vf-sidebar-scroll">
       {groups.map(group => <section className="vf-nav-group" key={group.label}>
         <p>{group.label}</p>

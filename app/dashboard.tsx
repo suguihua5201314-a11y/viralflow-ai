@@ -13,6 +13,9 @@ export type RecentWorkItem = {
   duration: number;
   updatedAt?: string;
   current: boolean;
+  projectName?: string;
+  stage?: string;
+  nextAction?: string;
 };
 
 type DashboardProps = {
@@ -20,6 +23,7 @@ type DashboardProps = {
   recent: RecentWorkItem[];
   onNavigate: (view: ActiveView) => void;
   onOpenRecent: (key: string, destination: "script" | "director") => void;
+  onOpenProject: (key: string) => void;
   dataMode: DataMode;
 };
 
@@ -49,7 +53,7 @@ const formatTime = (value?: string) => {
 
 const statDestinations: Record<string, ActiveView> = { products: "products", cases: "library", scripts: "history", variants:"create", director:"director", voice:"voice" };
 
-export default function Dashboard({ metrics, recent, onNavigate, onOpenRecent, dataMode }: DashboardProps) {
+export default function Dashboard({ metrics, recent, onNavigate, onOpenRecent, onOpenProject, dataMode }: DashboardProps) {
   const counts = metrics.counts;
   const trendMax = Math.max(1, ...metrics.trend.map(item => item.count));
   return <section className="vf-dashboard" data-testid="dashboard-home">
@@ -70,12 +74,12 @@ export default function Dashboard({ metrics, recent, onNavigate, onOpenRecent, d
       </section>
 
       <section className="vf-dashboard-section vf-recent-section">
-        <header><div><span>最近创作</span><h2>继续你的内容工作</h2></div><button type="button" onClick={() => onNavigate("history")}>查看全部创作资产 →</button></header>
-        {recent.length === 0 ? <WorkspaceState compact eyebrow="最近创作" title="还没有创作项目" description="从一个真实产品开始第一个 AI 创作流程，生成后可继续进入导演和配音。" primary={{label:"开始第一个创作",onClick:()=>onNavigate("create")}} secondary={{label:"先看爆款洞察",onClick:()=>onNavigate("breakdown")}} /> : <div className="vf-recent-list">{recent.map(item => <article key={item.key}>
+        <header><div><span>最近项目</span><h2>继续项目工作</h2></div><button type="button" onClick={() => onNavigate("projects")}>查看全部项目 →</button></header>
+        {recent.length === 0 ? <WorkspaceState compact eyebrow="最近项目" title="还没有创作项目" description="从一个真实产品开始第一个 AI 创作流程，后续资产都会归入同一个项目。" primary={{label:"新建第一个项目",onClick:()=>onNavigate("projects")}} secondary={{label:"先看爆款洞察",onClick:()=>onNavigate("breakdown")}} /> : <div className="vf-recent-list">{recent.map(item => <article key={item.key}>
           <div className="vf-recent-mark">{item.product.trim().slice(0, 1) || "创"}</div>
-          <div className="vf-recent-main"><div><span>{item.current ? "当前采用" : "脚本"}</span><small>{formatTime(item.updatedAt)}</small></div><h3>{item.title}</h3><p>{item.product} · {item.market || "未设置市场"}</p></div>
+          <div className="vf-recent-main"><div><span>{item.stage || (item.current ? "当前采用" : "脚本")}</span><small>{formatTime(item.updatedAt)}</small></div><h3>{item.projectName || item.title}</h3><p>{item.product} · {item.market || "未设置市场"}</p></div>
           <div className="vf-recent-meta"><span>{item.language || "未设置语言"}</span><span>{item.platform}</span><span>{item.duration}s</span></div>
-          <div className="vf-recent-actions"><button type="button" onClick={() => onOpenRecent(item.key, "script")}>查看脚本</button><button type="button" onClick={() => onOpenRecent(item.key, "director")}>进入导演</button></div>
+          <div className="vf-recent-actions">{item.projectName?<><button type="button" onClick={() => onOpenProject(item.key)}>打开项目</button><button type="button" onClick={() => onOpenProject(item.key)}>{item.nextAction || "继续项目"}</button></>:<><button type="button" onClick={() => onOpenRecent(item.key, "script")}>查看脚本</button><button type="button" onClick={() => onOpenRecent(item.key, "director")}>进入导演</button></>}</div>
         </article>)}</div>}
       </section>
 
