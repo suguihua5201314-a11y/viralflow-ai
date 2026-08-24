@@ -4,12 +4,12 @@ import type {AnalysisInput,ViralAnalysisResult,ViralCase} from "./viral-analysis
 import WorkspaceState from "./components/ui/workspace-state";
 import {notifyWorkspace} from "./components/ui/workspace-feedback";
 
-type Props={cases:ViralCase[];onSave:(item:ViralCase)=>void;onReplicate:(item:ViralCase)=>void;product?:string;market?:string;language?:string};
+type Props={cases:ViralCase[];onSave:(item:ViralCase)=>void;onReplicate:(item:ViralCase)=>void;onResult?:(result:ViralAnalysisResult)=>void;product?:string;market?:string;language?:string};
 const empty=(product="",market="",language=""):AnalysisInput=>({sourceText:"",inputType:"transcript",platform:"TikTok",market,language,product,category:"",durationSeconds:undefined,views:"",likes:"",comments:"",shares:"",saves:"",gmv:"",sourceUrl:"",notes:"",visualNotes:""});
-export default function ViralAnalyzer({cases,onSave,onReplicate,product="",market="",language=""}:Props){
+export default function ViralAnalyzer({cases,onSave,onReplicate,onResult,product="",market="",language=""}:Props){
  const [input,setInput]=useState(()=>empty(product,market,language));const [result,setResult]=useState<ViralAnalysisResult|null>(null);const [busy,setBusy]=useState(false);const [error,setError]=useState("");
  const patch=(value:Partial<AnalysisInput>)=>{setInput(prev=>({...prev,...value}));setResult(null)};
- async function analyze(){setBusy(true);setError("");try{const res=await fetch("/api/analyze",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify(input)});const data=await res.json();if(!res.ok)throw new Error(data.error||"分析失败");setResult(data.analysis);notifyWorkspace("爆款结构分析完成",{detail:"结果已使用当前输入的真实内容生成"});}catch(e){setError(e instanceof Error?e.message:"分析失败");}finally{setBusy(false)}}
+ async function analyze(){setBusy(true);setError("");try{const res=await fetch("/api/analyze",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify(input)});const data=await res.json();if(!res.ok)throw new Error(data.error||"分析失败");setResult(data.analysis);onResult?.(data.analysis);notifyWorkspace("爆款结构分析完成",{detail:"结果已使用当前输入的真实内容生成"});}catch(e){setError(e instanceof Error?e.message:"分析失败");}finally{setBusy(false)}}
  const currentCase=()=>result?{id:`viral-${Date.now()}`,title:`${input.product||input.category||"爆款内容"}｜${result.hook.type}`,createdAt:new Date().toISOString(),source:input,analysis:result}:null;
  return <section className="va-shell">
   <aside className="va-source"><span className="modal-kicker">来源输入 · 已提供信息</span><h2>输入爆款内容</h2><p>文案与口播文本是本阶段真实分析依据。没有提供的数据不会被补写。</p>

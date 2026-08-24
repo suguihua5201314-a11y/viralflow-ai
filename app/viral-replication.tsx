@@ -7,11 +7,11 @@ import type {ViralCase} from "./viral-analysis";
 
 type Product=ProductKnowledge&{id:number;name:string};
 type Form={product:string;sellingPoints:string;audience:string;country:string;language:string;platform?:string;duration:string;offer:string;style:string;framework:string};
-type Props={cases:ViralCase[];initialCase:ViralCase|null;products:Product[];form:Form;onAdopt:(script:StructuredScript,reference:string,setup:ReplicationSetup)=>void;onDirector:(script:StructuredScript,reference:string,setup:ReplicationSetup)=>void;onAnalyze:()=>void};
+type Props={cases:ViralCase[];initialCase:ViralCase|null;products:Product[];form:Form;onGenerated?:(value:unknown)=>void;onAdopt:(script:StructuredScript,reference:string,setup:ReplicationSetup)=>void;onDirector:(script:StructuredScript,reference:string,setup:ReplicationSetup)=>void;onAnalyze:()=>void};
 const modeOptions:Array<{id:ReplicationMode;label:string;note:string}>=[{id:"structure",label:"结构复刻",note:"保留信息位置"},{id:"hook",label:"Hook机制",note:"重建开头表达"},{id:"pacing",label:"节奏复刻",note:"迁移信息节拍"},{id:"proof",label:"Proof逻辑",note:"映射证明功能"},{id:"formula",label:"创意公式",note:"使用Formula骨架"},{id:"free",label:"自由改编",note:"只保留心理机制"}];
 const letters=["A","B","C"];
 // REPLICATION STRATEGY remains the same engine; this component only presents its UI states.
-export default function ViralReplication({cases,initialCase,products,form,onAdopt,onDirector,onAnalyze}:Props){
+export default function ViralReplication({cases,initialCase,products,form,onGenerated,onAdopt,onDirector,onAnalyze}:Props){
  const sourceOptions=useMemo(()=>initialCase&&!cases.some(x=>x.id===initialCase.id)?[initialCase,...cases]:cases,[cases,initialCase]);const [sourceId,setSourceId]=useState(initialCase?.id||cases[0]?.id||"");const source=useMemo(()=>sourceOptions.find(x=>x.id===sourceId)||null,[sourceOptions,sourceId]);
  const [productId,setProductId]=useState(()=>products.find(x=>x.name===form.product)?.id||products[0]?.id||0);const profile=products.find(x=>x.id===productId);
  const [target,setTarget]=useState({...form,platform:form.platform||"TikTok"});const [setup,setSetup]=useState<ReplicationSetup>({mode:"formula",intensity:"medium",market:form.country,language:form.language,platform:form.platform||"TikTok",duration:form.duration,instruction:""});
@@ -23,7 +23,7 @@ export default function ViralReplication({cases,initialCase,products,form,onAdop
  async function generate(){if(!source)return;setBusy(true);setError("");setCandidates([]);try{const targetPayload={...payload(),referenceScript:undefined};const res=await fetch("/api/replicate",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({action:"strategy",sourceCase:source,setup,target:targetPayload})});const data=await res.json();if(!res.ok)throw new Error(data.error||"策略生成失败");const currentStrategy=data.strategy as ReplicationStrategy;setStrategy(currentStrategy);setCopyTrapBlocked(Boolean(data.metadata?.copyTrapBlocked));
    const scripts=await Promise.all(data.concepts.map((concept:ReplicationConcept)=>generateScript(concept,currentStrategy)));let checked=await check(scripts.map((script,i)=>({id:letters[i],script})));const attempts=[0,0,0];
    for(let round=1;round<=2;round++){const failed=new Set(checked.checks.map((x,i)=>x.originalityPassed&&!x.factViolations.length?-1:i).filter(i=>i>=0));if(checked.diversity.duplicateIndex!==null)failed.add(checked.diversity.duplicateIndex);if(!failed.size)break;const replacements=await Promise.all([...failed].map(async i=>({i,script:await generateScript(data.concepts[i],currentStrategy,round)})));for(const x of replacements){scripts[x.i]=x.script;attempts[x.i]=round;}checked=await check(scripts.map((script,i)=>({id:letters[i],script,regenerated:attempts[i]>0})));}
-   setCandidates(scripts.map((script,i)=>({id:letters[i],concept:data.concepts[i],script,similarity:checked.checks[i],regenerationAttempts:attempts[i]})));setSelected(1);
+   const generated=scripts.map((script,i)=>({id:letters[i],concept:data.concepts[i],script,similarity:checked.checks[i],regenerationAttempts:attempts[i]}));setCandidates(generated);setSelected(1);onGenerated?.({sourceId,setup,target,strategy:currentStrategy,candidates:generated});
  }catch(e){setError(e instanceof Error?e.message:"复刻失败");}finally{setBusy(false)}}
  const chosen=candidates[selected];const reference=source&&strategy?replicationReference(source,strategy,setup):"";
  const understoodPoints=target.sellingPoints.split(/[、；;，,\n]/).map(x=>x.trim()).filter(Boolean).slice(0,4);
