@@ -6,6 +6,7 @@ const imageTypes = new Set(["Product Image", "UGC Creator", "TikTok Ad Creative"
 const styles = new Set(["Realistic", "UGC", "Premium", "Cinematic", "E-commerce"]);
 const cameras = new Set(["Close Up", "Macro", "Wide Shot", "Handheld"]);
 const ratios = new Set(["9:16", "1:1", "16:9"]);
+const providers = new Set<ImageProviderId>(["doubao-image", "openai-image"]);
 
 export function validateImageRequest(value: unknown): value is ImageGenerationRequest {
   if (!value || typeof value !== "object") return false;
@@ -15,14 +16,16 @@ export function validateImageRequest(value: unknown): value is ImageGenerationRe
     imageTypes.has(String(body.imageType)) && styles.has(String(body.style)) && cameras.has(String(body.camera)) && ratios.has(String(body.ratio));
 }
 export async function GET() {
-  const providers = listImageProviders(); const active = providers.find(provider => provider.id === "openai-image");
-  return Response.json({ activeProvider: "openai-image", configured: Boolean(active?.configured), model: active?.model || null, providers });
+  const availableProviders = listImageProviders(); const active = availableProviders.find(provider => provider.id === "doubao-image");
+  return Response.json({ activeProvider: "doubao-image", configured: Boolean(active?.configured), model: active?.model || null, providers: availableProviders });
 }
 export async function POST(request: Request) {
   try {
     const body = await request.json();
     if (!validateImageRequest(body)) return Response.json({ error: { type: "invalid_request", message: "请完整填写图片描述、项目和生成参数。", retryable: false } }, { status: 400 });
-    const provider: ImageProviderId = "openai-image";
+    const requestedModel = typeof body.model === "string" ? body.model : "doubao-image";
+    if (!providers.has(requestedModel as ImageProviderId)) return Response.json({ error: { type: "invalid_request", message: "请选择可用的图片模型。", retryable: false } }, { status: 400 });
+    const provider = requestedModel as ImageProviderId;
     return Response.json({ image: await routeImageGeneration(provider, body) });
   } catch (error) {
     if (error instanceof ImageProviderError) {

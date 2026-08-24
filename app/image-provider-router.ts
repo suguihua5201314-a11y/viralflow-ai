@@ -4,8 +4,8 @@ export type ImageStyle = "Realistic" | "UGC" | "Premium" | "Cinematic" | "E-comm
 export type ImageCamera = "Close Up" | "Macro" | "Wide Shot" | "Handheld";
 export type ImageRatio = "9:16" | "1:1" | "16:9";
 
-export type ImageGenerationRequest = { prompt: string; imageType: ImageType; style: ImageStyle; camera: ImageCamera; ratio: ImageRatio; projectId: string };
-export type ImageGenerationResult = { provider: ImageProviderId; model: string; imageUrl: string; createdAt: string };
+export type ImageGenerationRequest = { prompt: string; imageType: ImageType; style: ImageStyle; camera: ImageCamera; ratio: ImageRatio; model?: ImageProviderId; projectId: string };
+export type ImageGenerationResult = { provider: ImageProviderId; model: string; imageUrl: string; createdAt: string; metadata: { size: string; requestId?: string } };
 export type ImageProviderStatus = { id: ImageProviderId; label: string; model: string | null; configured: boolean };
 export type ImageProviderErrorType = "configuration" | "unauthorized" | "rate_limit" | "moderation_blocked" | "timeout" | "invalid_request" | "provider_error" | "empty_result";
 
@@ -20,9 +20,9 @@ export type ImageProviderAdapter = {
   generate(request: ImageGenerationRequest): Promise<ImageGenerationResult>;
 };
 
-const OPENAI_IMAGE_ENDPOINT = "https://api.openai.com/v1/images/generations";
-const DEFAULT_OPENAI_IMAGE_MODEL = "gpt-image-2";
-const imageSizes: Record<ImageRatio, string> = { "9:16": "1024x1824", "1:1": "1024x1024", "16:9": "1824x1024" };
+const ARK_IMAGE_ENDPOINT = "https://ark.cn-beijing.volces.com/api/v3/images/generations";
+const DEFAULT_ARK_IMAGE_MODEL = "doubao-seedream-4-0-250828";
+const imageSizes: Record<ImageRatio, string> = { "9:16": "1440x2560", "1:1": "2048x2048", "16:9": "2560x1440" };
 const imageTypeGuidance: Record<ImageType, string> = {
   "Product Image": "商业产品展示图，主体清晰，材质与细节可信",
   "UGC Creator": "真实达人使用场景，自然构图，避免过度棚拍感",
@@ -41,43 +41,51 @@ const cameraGuidance: Record<ImageCamera, string> = {
 function buildImagePrompt(request: ImageGenerationRequest) {
   return `${request.prompt.trim()}\n\n创作要求：${imageTypeGuidance[request.imageType]}；${styleGuidance[request.style]}；${cameraGuidance[request.camera]}；画面比例 ${request.ratio}。生成一张可直接用于商业短视频、电商或广告的图片。画面中不要添加水印、品牌标识或模型自行编造的文字。`;
 }
-function openAIConfig() { return { apiKey: process.env.OPENAI_API_KEY?.trim() || "", model: process.env.OPENAI_IMAGE_MODEL?.trim() || DEFAULT_OPENAI_IMAGE_MODEL }; }
-type OpenAIImageResponse = { data?: Array<{ b64_json?: string }>; error?: { code?: string; message?: string; type?: string } };
+function arkImageConfig() { return { apiKey: process.env.ARK_API_KEY?.trim() || "", model: process.env.ARK_IMAGE_MODEL_ID?.trim() || DEFAULT_ARK_IMAGE_MODEL }; }
+type ArkImageResponse = {
+  data?: Array<{ url?: string; b64_json?: string }>;
+  error?: { code?: string; message?: string; type?: string };
+  request_id?: string;
+};
 
 const openAIImageAdapter: ImageProviderAdapter = {
   id: "openai-image", label: "OpenAI 图片模型",
-  status() { const config = openAIConfig(); return { id: this.id, label: this.label, model: config.apiKey ? config.model : null, configured: Boolean(config.apiKey) }; },
+  status() { return { id: this.id, label: this.label, model: null, configured: false }; },
+  async generate() {
+    throw new ImageProviderError("configuration", "OpenAI 图片模型当前未启用。", 503);
+  },
+};
+const doubaoImageAdapter: ImageProviderAdapter = {
+  id: "doubao-image", label: "豆包图片模型",
+  status() { const config = arkImageConfig(); return { id: this.id, label: this.label, model: config.apiKey ? config.model : null, configured: Boolean(config.apiKey) }; },
   async generate(request) {
-    const config = openAIConfig();
-    if (!config.apiKey) throw new ImageProviderError("configuration", "图片模型尚未配置，请先添加 OPENAI_API_KEY。", 503);
+    const config = arkImageConfig();
+    if (!config.apiKey) throw new ImageProviderError("configuration", "豆包图片模型尚未配置，请先添加 ARK_API_KEY。", 503);
     let response: Response;
     try {
-      response = await fetch(OPENAI_IMAGE_ENDPOINT, {
+      response = await fetch(ARK_IMAGE_ENDPOINT, {
         method: "POST", headers: { authorization: `Bearer ${config.apiKey}`, "content-type": "application/json" }, signal: AbortSignal.timeout(150000),
-        body: JSON.stringify({ model: config.model, prompt: buildImagePrompt(request), size: imageSizes[request.ratio], quality: "medium", output_format: "jpeg", output_compression: 78, n: 1 }),
+        body: JSON.stringify({ model: config.model, prompt: buildImagePrompt(request), size: imageSizes[request.ratio], sequential_image_generation: "disabled", stream: false, response_format: "url", watermark: false }),
       });
     } catch (error) {
       if (error instanceof DOMException && error.name === "TimeoutError") throw new ImageProviderError("timeout", "图片生成超时，请稍后重新生成。", 504, true);
       throw new ImageProviderError("provider_error", "暂时无法连接图片生成服务，请稍后重试。", 502, true);
     }
-    const payload = await response.json().catch(() => ({})) as OpenAIImageResponse;
+    const payload = await response.json().catch(() => ({})) as ArkImageResponse;
     if (!response.ok) {
       const code = payload.error?.code || "";
       if (response.status === 401 || response.status === 403) throw new ImageProviderError("unauthorized", "图片模型认证失败，请检查服务器配置。", 502);
       if (response.status === 429) throw new ImageProviderError("rate_limit", "图片生成请求较多，请稍后重试。", 429, true);
-      if (code === "moderation_blocked") throw new ImageProviderError("moderation_blocked", "图片描述未通过安全检查，请调整内容后重试。", 422);
+      if (/moderation|sensitive|risk/i.test(`${code} ${payload.error?.type || ""}`)) throw new ImageProviderError("moderation_blocked", "图片描述未通过安全检查，请调整内容后重试。", 422);
       if (response.status >= 400 && response.status < 500) throw new ImageProviderError("invalid_request", "当前图片描述或参数无法生成，请调整后重试。", 422);
       throw new ImageProviderError("provider_error", "图片模型暂时不可用，请稍后重试。", 502, response.status >= 500);
     }
-    const base64 = payload.data?.[0]?.b64_json;
-    if (!base64) throw new ImageProviderError("empty_result", "图片模型没有返回图片，请重新生成。", 502, true);
-    return { provider: this.id, model: config.model, imageUrl: `data:image/jpeg;base64,${base64}`, createdAt: new Date().toISOString() };
+    const image = payload.data?.[0];
+    const imageUrl = image?.url || (image?.b64_json ? `data:image/png;base64,${image.b64_json}` : "");
+    if (!imageUrl) throw new ImageProviderError("empty_result", "豆包图片模型没有返回图片，请重新生成。", 502, true);
+    const requestId = response.headers.get("x-request-id") || payload.request_id || undefined;
+    return { provider: this.id, model: config.model, imageUrl, createdAt: new Date().toISOString(), metadata: { size: imageSizes[request.ratio], requestId } };
   },
-};
-const doubaoImageAdapter: ImageProviderAdapter = {
-  id: "doubao-image", label: "豆包图片模型",
-  status() { return { id: this.id, label: this.label, model: null, configured: false }; },
-  async generate() { throw new ImageProviderError("configuration", "豆包图片模型将在后续阶段接入。", 503); },
 };
 const adapters: Record<ImageProviderId, ImageProviderAdapter> = { "openai-image": openAIImageAdapter, "doubao-image": doubaoImageAdapter };
 export function getImageProvider(id: ImageProviderId) { return adapters[id]; }

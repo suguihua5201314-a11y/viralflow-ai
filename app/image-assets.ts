@@ -14,6 +14,7 @@ export type ImageAsset = {
   provider: ImageProviderId;
   model: string;
   createdAt: string;
+  metadata?: { size: string; requestId?: string };
 };
 
 export function readImageAssets(): ImageAsset[] {

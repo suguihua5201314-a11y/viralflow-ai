@@ -12,6 +12,9 @@
 .generated-image{z-index:2;object-fit:contain;background:#090c13}
 .canvas-result-actions{position:absolute;z-index:4;right:12px;bottom:12px;display:flex;gap:7px}
 .canvas-result-actions button,.canvas-result-actions a{border:1px solid #ffffff22;border-radius:8px;background:#111522dd;color:#fff;padding:8px 10px;font-size:7px;font-weight:800;text-decoration:none;cursor:pointer}
+.image-lightbox{position:fixed;z-index:80;inset:0;background:#05070cea;display:grid;place-items:center;padding:32px;backdrop-filter:blur(10px)}
+.image-lightbox img{object-fit:contain;padding:32px}
+.image-lightbox>button{position:absolute;z-index:2;right:22px;top:18px;width:36px;height:36px;border:1px solid #ffffff2b;border-radius:50%;background:#111522;color:#fff;font-size:22px;cursor:pointer}
 .image-error{margin-top:10px;border:1px solid #733b4b;background:#2a1720;border-radius:9px;padding:9px;color:#f1bdc9}
 .image-error b{font-size:8px}
 .image-error p{font-size:7px;line-height:1.5}

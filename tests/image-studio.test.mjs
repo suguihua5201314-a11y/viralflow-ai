@@ -24,18 +24,20 @@ test("B: 图片生成 API 同时提供状态与 POST 生成入口", () => {
   assert.match(route, /Response\.json\(\{ image: await routeImageGeneration/);
 });
 
-test("C: API 通过 Image Provider Router 调用真实 OpenAI Adapter", () => {
+test("C: API 通过 Image Provider Router 调用真实豆包 Ark Adapter", () => {
   assert.match(route, /routeImageGeneration\(provider, body\)/);
   assert.match(router, /ImageProviderAdapter/);
-  assert.match(router, /https:\/\/api\.openai\.com\/v1\/images\/generations/);
-  assert.match(router, /gpt-image-2/);
-  assert.match(router, /process\.env\.OPENAI_API_KEY/);
+  assert.match(router, /https:\/\/ark\.cn-beijing\.volces\.com\/api\/v3\/images\/generations/);
+  assert.match(router, /doubao-seedream-4-0-250828/);
+  assert.match(router, /process\.env\.ARK_API_KEY/);
+  assert.match(router, /response_format: "url"/);
+  assert.match(route, /activeProvider: "doubao-image"/);
   assert.match(router, /doubaoImageAdapter/);
-  assert.doesNotMatch(studio, /api\.openai\.com|OPENAI_API_KEY/);
+  assert.doesNotMatch(studio, /ark\.cn-beijing\.volces\.com/);
 });
 
 test("D: 生成成功组装并保存完整 Image Asset", () => {
-  for (const field of ["imageUrl", "prompt", "imageType", "style", "camera", "ratio", "model", "createdAt", "projectId"]) assert.match(assets + studio, new RegExp(field));
+  for (const field of ["imageUrl", "prompt", "imageType", "style", "camera", "ratio", "model", "createdAt", "projectId", "metadata"]) assert.match(assets + studio + router, new RegExp(field));
   assert.match(studio, /saveImageAssets\(next\)/);
   assert.match(assets, /assets\.slice\(0, 6\)/);
   assert.match(assets, /asset\.projectId === projectId/);
@@ -54,7 +56,19 @@ test("F: Loading、失败恢复和重新生成状态完整", () => {
   assert.match(studio, /生成失败/);
   assert.match(studio, /error\.retryable/);
   assert.match(studio, /重新生成/);
+  assert.match(studio, /生成完成/);
+  assert.match(studio, /生成失败，重新生成/);
+  assert.match(studio, /查看大图/);
+  assert.match(studio, /保存资产/);
   for (const category of ["configuration", "unauthorized", "rate_limit", "moderation_blocked", "timeout", "invalid_request", "provider_error", "empty_result"]) assert.match(router, new RegExp(category));
+});
+
+test("图片模型选择默认豆包，OpenAI 未启用时不可选", () => {
+  assert.match(studio, /aria-label="图片模型"/);
+  assert.match(studio, /selectedProvider.*doubao-image/);
+  assert.match(studio, /disabled=\{!item\.configured\}/);
+  assert.match(router, /OpenAI 图片模型当前未启用/);
+  assert.doesNotMatch(router, /OPENAI_API_KEY|api\.openai\.com/);
 });
 
 test("G: 现有功能与 Project Memory Schema 保持不变", () => {
