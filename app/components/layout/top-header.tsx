@@ -13,7 +13,7 @@ export type GlobalSearchItem = {
   onSelect: () => void;
 };
 
-export default function TopHeader({ active, aiConnected, teamConnected, searchItems }: { active: ActiveView; aiConnected: boolean; teamConnected: boolean; searchItems: GlobalSearchItem[] }) {
+export default function TopHeader({ active, aiConnected, teamConnected, saveState, searchItems }: { active: ActiveView; aiConnected: boolean; teamConnected: boolean; saveState: "saved"|"saving"; searchItems: GlobalSearchItem[] }) {
   const meta = viewMeta[active];
   const [query, setQuery] = useState("");
   const [focused, setFocused] = useState(false);
@@ -44,6 +44,7 @@ export default function TopHeader({ active, aiConnected, teamConnected, searchIt
       </div>}
     </div>
     <div className="vf-header-actions">
+      <div className={`vf-global-save ${saveState}`} role="status" aria-live="polite"><i />{saveState==="saving"?"正在保存...":"已保存 ✓"}</div>
       <div className={`vf-service-state ${aiConnected ? "is-online" : ""}`}><i />{aiConnected ? "AI 服务正常" : "本地稳定模式"}</div>
       <div className={`vf-team-state ${teamConnected ? "is-online" : ""}`}>{teamConnected ? "团队已同步" : "团队未连接"}</div>
       <div className="vf-user"><span>VF</span><div><b>苏苏团队</b><small>内容管理员</small></div></div>

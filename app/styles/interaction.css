@@ -1,0 +1,96 @@
+/* Step 5.4.1 — shared interaction feedback.
+   Uses existing loading, selected, active, disabled and saving states only. */
+:root{
+  --vf-interaction-fast:160ms cubic-bezier(.2,.8,.2,1);
+  --vf-interaction-lift:translateY(-2px);
+  --vf-focus-ring:0 0 0 3px rgba(121,104,255,.2);
+}
+
+button{transition:transform var(--vf-interaction-fast),border-color var(--vf-interaction-fast),background-color var(--vf-interaction-fast),color var(--vf-interaction-fast),box-shadow var(--vf-interaction-fast),opacity var(--vf-interaction-fast)}
+button:not(:disabled):hover{filter:brightness(1.08)}
+button:not(:disabled):active{transform:translateY(1px) scale(.99);filter:brightness(.98)}
+button:focus-visible,[tabindex="0"]:focus-visible,input:focus-visible,textarea:focus-visible,select:focus-visible{outline:0;box-shadow:var(--vf-focus-ring)!important}
+button:disabled{cursor:not-allowed!important;opacity:.48!important;filter:saturate(.55)}
+button[aria-busy="true"]{position:relative;cursor:progress!important;pointer-events:none}
+.button-spinner{display:inline-block;width:14px;height:14px;margin-right:8px;border:2px solid rgba(255,255,255,.32);border-top-color:#fff;border-radius:50%;vertical-align:-2px;animation:vf-spin .75s linear infinite}
+@keyframes vf-spin{to{transform:rotate(360deg)}}
+
+/* Global save lifecycle */
+.vf-global-save{display:flex;align-items:center;gap:7px;padding:7px 10px;border:1px solid rgba(77,194,151,.18);border-radius:999px;background:rgba(58,166,126,.08);color:#74d4b0;font-size:12px;white-space:nowrap}
+.vf-global-save i{width:7px;height:7px;border-radius:50%;background:#55c99e;box-shadow:0 0 0 3px rgba(85,201,158,.1)}
+.vf-global-save.saving{border-color:rgba(138,119,245,.23);background:rgba(111,88,228,.1);color:#b9adff}
+.vf-global-save.saving i{background:#9482ff;animation:vf-save-pulse 1s ease-in-out infinite}
+@keyframes vf-save-pulse{50%{opacity:.38;transform:scale(.72)}}
+
+/* Honest AI processing: only the first row is active; later rows stay pending. */
+.workspace-processing-steps{width:min(520px,100%);display:grid;gap:7px;margin:14px auto 0;text-align:left}
+.workspace-processing-steps>div{display:grid;grid-template-columns:18px 1fr auto;align-items:center;gap:9px;padding:9px 11px;border:1px solid rgba(139,155,190,.12);border-radius:9px;background:rgba(255,255,255,.025)}
+.workspace-processing-steps i{width:10px;height:10px;border:2px solid #39445b;border-radius:50%}
+.workspace-processing-steps span{color:#9ca8bd;font-size:12px;line-height:1.45}
+.workspace-processing-steps em{color:#58667d;font-size:12px;font-style:normal}
+.workspace-processing-steps .is-processing{border-color:rgba(130,108,248,.25);background:rgba(108,86,232,.08)}
+.workspace-processing-steps .is-processing i{border-color:rgba(158,143,255,.28);border-top-color:#a99cff;animation:vf-spin .75s linear infinite}
+.workspace-processing-steps .is-processing em{color:#a99cff}
+
+/* Navigation */
+body .vf-nav-group nav button{position:relative}
+body .vf-nav-group nav button:after{content:"";position:absolute;left:0;top:10px;bottom:10px;width:3px;border-radius:3px;background:transparent;transition:background var(--vf-interaction-fast),box-shadow var(--vf-interaction-fast)}
+body .vf-nav-group nav button:hover{background:rgba(255,255,255,.075);color:#fff;transform:translateX(2px)}
+body .vf-nav-group nav button.nav-active{font-weight:650;box-shadow:0 9px 24px rgba(69,61,190,.28),inset 0 1px rgba(255,255,255,.08)}
+body .vf-nav-group nav button.nav-active:after{background:#d5ceff;box-shadow:0 0 12px rgba(190,178,255,.8)}
+body .vf-nav-group nav button.nav-active>span{transform:scale(1.04);box-shadow:inset 0 0 0 1px rgba(255,255,255,.16)}
+.vf-breadcrumb span{font-weight:650;color:#b8adff!important}
+
+/* Tabs and segmented controls */
+.version-tabs button,.studio-segments button,.choice-grid button,.provider-tabs button,.va-toggle button,
+.vr-modes button,.vr-intensity button,.projects-toolbar button,.library-tabs button,.race-cards footer button{
+  position:relative;transition:all var(--vf-interaction-fast)!important
+}
+.version-tabs button:hover,.studio-segments button:hover,.choice-grid button:hover,.provider-tabs button:hover,.va-toggle button:hover,
+.vr-modes button:hover,.vr-intensity button:hover,.projects-toolbar button:hover,.library-tabs button:hover{
+  border-color:rgba(139,122,255,.42)!important;color:#c8c0ff!important;background:rgba(111,88,228,.1)!important
+}
+.version-tabs button.active,.studio-segments button.selected,.choice-grid button.selected,.provider-tabs button.selected,
+.va-toggle button.selected,.vr-modes button.active,.vr-intensity button.active,.projects-toolbar button.active,.library-tabs button.selected{
+  border-color:rgba(154,139,255,.5)!important;background:linear-gradient(135deg,rgba(119,92,238,.26),rgba(66,108,222,.14))!important;color:#eeeaff!important;font-weight:650!important;box-shadow:inset 0 1px rgba(255,255,255,.06),0 5px 14px rgba(51,40,139,.15)!important
+}
+
+/* Interactive cards */
+.project-card-grid>article,.vf-quick-grid button,.vf-metric-grid article,.vf-recent-list article,.race-cards>article,
+.va-saved,.vr-strategy-grid>article,.director-shot-card,.library-list article,.product-list article{
+  transition:transform var(--vf-interaction-fast),border-color var(--vf-interaction-fast),box-shadow var(--vf-interaction-fast),background-color var(--vf-interaction-fast)
+}
+.project-card-grid>article:hover,.vf-quick-grid button:hover,.vf-metric-grid article:hover,.vf-recent-list article:hover,
+.race-cards>article:hover,.va-saved:hover,.vr-strategy-grid>article:hover,.director-shot-card:hover,.library-list article:hover,.product-list article:hover{
+  transform:var(--vf-interaction-lift);border-color:rgba(139,122,255,.36)!important;box-shadow:0 16px 38px rgba(0,0,0,.24),0 0 0 1px rgba(118,95,235,.07)!important
+}
+.race-cards>article.comparing,.race-cards>article.adopted,.director-shot-card.selected{border-color:#806ef5!important;box-shadow:0 0 0 2px rgba(128,110,245,.18),0 14px 34px rgba(0,0,0,.2)!important}
+
+/* Button outcome and disabled explanations */
+.generation-state.generating{color:#b9adff!important;background:rgba(111,88,228,.12)!important}
+.generation-state.completed{color:#69d3aa!important;background:rgba(57,170,127,.1)!important}
+.generation-state.error{color:#ef8c9a!important;background:rgba(217,74,94,.1)!important}
+.provider-warning{position:relative;padding-left:30px!important}
+.provider-warning:before{content:"!";position:absolute;left:10px;top:9px;display:grid;width:14px;height:14px;place-items:center;border-radius:50%;background:rgba(213,145,50,.18);font-weight:800}
+.project-action-notice{position:fixed;right:26px;bottom:26px;z-index:110;padding:11px 15px;border:1px solid rgba(86,203,159,.24);border-radius:10px;background:#10251f;color:#7ce0b9;font-size:13px;box-shadow:0 16px 44px rgba(0,0,0,.35);animation:vf-notice-in .2s ease-out}
+@keyframes vf-notice-in{from{opacity:0;transform:translateY(8px)}}
+
+/* Existing empty states gain a clear action hierarchy without changing content. */
+.workspace-state:not(.state-loading) .workspace-state-icon,.projects-empty>span,.race-empty>div,.director-no-input>b{transition:transform var(--vf-interaction-fast),color var(--vf-interaction-fast)}
+.workspace-state:hover:not(.state-loading) .workspace-state-icon{transform:translateY(-2px)}
+.workspace-state-actions .primary,.projects-empty>button,.vr-source-empty button{box-shadow:0 8px 22px rgba(92,73,235,.2)}
+
+/* Laptop and tablet: hide secondary status before reducing readable type. */
+@media(max-width:1180px){
+  .vf-header-actions .vf-team-state{display:none}
+  .vf-global-save{padding-inline:8px}
+  .studio-title-actions .provider-chip{display:none}
+}
+@media(max-width:850px){
+  .vf-global-save{position:fixed;right:12px;bottom:12px;z-index:70;box-shadow:0 10px 30px rgba(0,0,0,.3);background:#111a2a}
+  .vf-header-actions .vf-service-state{display:none}
+  .project-action-notice{right:12px;bottom:58px}
+}
+@media(prefers-reduced-motion:reduce){
+  *,*:before,*:after{scroll-behavior:auto!important;transition-duration:.01ms!important;animation-duration:.01ms!important;animation-iteration-count:1!important}
+}

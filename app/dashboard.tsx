@@ -48,7 +48,7 @@ const statCards = [
 const formatTime = (value?: string) => {
   if (!value) return "暂无更新时间";
   const date = new Date(value);
-  return Number.isNaN(date.getTime()) ? "暂无更新时间" : date.toLocaleString("zh-CN", { month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" });
+  return Number.isNaN(date.getTime()) ? "暂无更新时间" : date.toLocaleString("zh-CN", { month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", timeZone: "Asia/Singapore" });
 };
 
 const statDestinations: Record<string, ActiveView> = { products: "products", cases: "library", scripts: "history", variants:"create", director:"director", voice:"voice" };

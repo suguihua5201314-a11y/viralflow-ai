@@ -363,7 +363,7 @@ export default function Home() {
 
   return (<AppShell
     sidebar={<Sidebar active={active} onNavigate={view=>{if(view==="projects")setSelectedProjectKey(null);setActive(view);}} onHistory={() => { setActive("history"); void loadHistory(); }} counts={{ library: hookLibrary.length + pointLibrary.length, monitor: monitorAccounts.length, history: history.length, products: productProfiles.length, reviews: reviewRecords.length }} teamConnected={teamConnected} onTeamToggle={() => { if (teamConnected) { setTeamConnected(false); setTeamPassword(""); } else setShowTeamLogin(true); }} />}
-    header={<TopHeader active={active} aiConnected={aiConnected} teamConnected={teamConnected} searchItems={searchItems} />}
+    header={<TopHeader active={active} aiConnected={aiConnected} teamConnected={teamConnected} saveState={memorySaveState} searchItems={searchItems} />}
   >
       {active === "dashboard" && <Dashboard metrics={dashboardMetrics} recent={dashboardRecent} dataMode={DATA_MODE} onNavigate={setActive} onOpenRecent={openRecent} onOpenProject={openProject} />}
       {active === "projects" && <ProjectWorkspace projects={persistentProjects} initialProjectKey={selectedProjectKey} saveState={memorySaveState} onCreate={createProject} onRename={renameProject} onDuplicate={duplicateProject} onDelete={deleteProject} onSelect={id=>saveWorkspaceSnapshot({currentProjectId:id,activeView:"projects"})} onNavigate={view=>{setActive(view);saveWorkspaceSnapshot({activeView:view});}} />}
