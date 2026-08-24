@@ -362,8 +362,8 @@ export default function Home() {
   const dashboardRecent=persistentProjects.length?persistentProjects:demoRecent;
   const openProject=(key:string)=>{setSelectedProjectKey(key);setActive("projects");saveWorkspaceSnapshot({activeView:"projects",currentProjectId:key});};
 
-  return (<AppShell
-    sidebar={<Sidebar active={active} onNavigate={view=>{if(view==="projects")setSelectedProjectKey(null);setActive(view);}} onHistory={() => { setActive("history"); void loadHistory(); }} counts={{ library: hookLibrary.length + pointLibrary.length, monitor: monitorAccounts.length, history: history.length, products: productProfiles.length, reviews: reviewRecords.length }} teamConnected={teamConnected} onTeamToggle={() => { if (teamConnected) { setTeamConnected(false); setTeamPassword(""); } else setShowTeamLogin(true); }} />}
+  return (<AppShell className={active==="director"?"vf-director-mode":""}
+    sidebar={<Sidebar active={active} project={active==="director"?{name:`${result?.country||form.country} · TikTok 项目`,product:result?.product||form.product}:null} onNavigate={view=>{if(view==="projects")setSelectedProjectKey(null);setActive(view);}} onHistory={() => { setActive("history"); void loadHistory(); }} counts={{ library: hookLibrary.length + pointLibrary.length, monitor: monitorAccounts.length, history: history.length, products: productProfiles.length, reviews: reviewRecords.length }} teamConnected={teamConnected} onTeamToggle={() => { if (teamConnected) { setTeamConnected(false); setTeamPassword(""); } else setShowTeamLogin(true); }} />}
     header={<TopHeader active={active} aiConnected={aiConnected} teamConnected={teamConnected} saveState={memorySaveState} searchItems={searchItems} />}
   >
       {active === "dashboard" && <Dashboard metrics={dashboardMetrics} recent={dashboardRecent} dataMode={DATA_MODE} onNavigate={setActive} onOpenRecent={openRecent} onOpenProject={openProject} />}
