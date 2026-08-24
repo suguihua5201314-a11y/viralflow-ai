@@ -15,7 +15,7 @@ export async function GET() {
     const row = await db.prepare("SELECT payload,updated_at FROM team_workspace WHERE workspace_key=?").bind(WORKSPACE_KEY).first<{ payload: string; updated_at: string }>();
     return NextResponse.json({ memory: row ? JSON.parse(row.payload) : null, updatedAt: row?.updated_at ?? null });
   } catch (error) {
-    return NextResponse.json({ error: error instanceof Error ? error.message : "项目记忆读取失败" }, { status: 500 });
+    return NextResponse.json({ memory: null, updatedAt: null, storage: "browser-fallback", reason: error instanceof Error ? "D1 unavailable" : "storage unavailable" });
   }
 }
 
@@ -28,6 +28,6 @@ export async function PUT(request: Request) {
       .bind(WORKSPACE_KEY, JSON.stringify(memory)).run();
     return NextResponse.json({ ok: true });
   } catch (error) {
-    return NextResponse.json({ error: error instanceof Error ? error.message : "项目记忆保存失败" }, { status: 500 });
+    return NextResponse.json({ ok: true, persisted: false, storage: "browser-fallback", reason: error instanceof Error ? "D1 unavailable" : "storage unavailable" }, { status: 202 });
   }
 }
