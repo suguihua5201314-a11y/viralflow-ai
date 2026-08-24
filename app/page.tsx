@@ -26,6 +26,8 @@ import {notifyWorkspace} from "./components/ui/workspace-feedback";
 import DataCenter from "./data-center";
 import {DATA_MODE,demoAnalytics,demoDashboardData,demoProjects,type DemoProject} from "./demo-data";
 import {demoDirectorInput,demoDirectorWorkspace} from "./demo-director";
+import {demoScript,demoScriptVariations} from "./demo-script";
+import {restoreProjectScriptState} from "./script-workspace";
 import ProjectWorkspace from "./project-workspace";
 import {cacheProjectMemory,readProjectMemory,touchProject,type PersistentProject,type ProjectMemory} from "./project-memory";
 import ImageStudio from "./image-studio";
@@ -150,7 +152,7 @@ export default function Home() {
   const [memorySaveState,setMemorySaveState]=useState<"saved"|"saving">("saved");
   const [projectMemory,setProjectMemory]=useState<ProjectMemory>(()=>readProjectMemory()||{
     version:1,
-    projects:demoProjects.map((item,index)=>({id:item.key,name:item.projectName,product:item.product,market:item.market||"",platform:item.platform||"TikTok",language:item.language||"",stage:item.stage,createdAt:new Date(Date.parse(item.updatedAt||"")-index*86400000).toISOString(),updatedAt:item.updatedAt||new Date().toISOString(),status:item.status,progress:item.progress,owner:item.owner,assets:{scriptVersions:[]}})),
+    projects:demoProjects.map((item,index)=>({id:item.key,name:item.projectName,product:item.product,market:item.market||"",platform:item.platform||"TikTok",language:item.language||"",stage:item.stage,createdAt:new Date(Date.parse(item.updatedAt||"")-index*86400000).toISOString(),updatedAt:item.updatedAt||new Date().toISOString(),status:item.status,progress:item.progress,owner:item.owner,assets:{scriptVersions:index===0?demoScriptVariations:[]}})),
     workspace:{activeView:"dashboard",currentProjectId:demoProjects[0]?.key||null},
     updatedAt:new Date().toISOString(),
   });
@@ -179,9 +181,11 @@ export default function Home() {
     const hydrate=(memory:ProjectMemory)=>{
       setProjectMemory(memory);
       const snapshot=memory.workspace;
-      if(snapshot.form)setForm(previous=>({...previous,...snapshot.form}));
-      if(snapshot.currentScript)setResult(snapshot.currentScript as Script);
-      if(Array.isArray(snapshot.raceResults))setRaceResults(snapshot.raceResults as Script[]);
+      const project=memory.projects.find(item=>item.id===snapshot.currentProjectId);
+      const restored=restoreProjectScriptState(project,snapshot);
+      if(snapshot.form)setForm(previous=>({...previous,...snapshot.form,...(project?{product:project.product,country:project.market,language:project.language}:{} )}));
+      setResult((restored.currentScript||(DATA_MODE==="demo"&&project?.id===demoProjects[0]?.key?demoScript:null)) as Script|null);
+      setRaceResults((restored.raceResults.length?restored.raceResults:(DATA_MODE==="demo"&&project?.id===demoProjects[0]?.key?demoScriptVariations:[])) as Script[]);
       if(typeof snapshot.referenceScript==="string")setReferenceScript(snapshot.referenceScript);
       if(snapshot.directorContext){setAdoptedDirectorContext({duration:snapshot.directorContext.duration,offer:snapshot.directorContext.offer});setDirectorSourceType(snapshot.directorContext.sourceType as DirectorSourceType);}
       setSelectedProjectKey(snapshot.currentProjectId);
@@ -190,6 +194,16 @@ export default function Home() {
     if(local)hydrate(local);
     fetch("/api/project-memory",{cache:"no-store"}).then(response=>response.ok?response.json():Promise.reject()).then(data=>{if(data.memory)hydrate(data.memory as ProjectMemory);}).catch(()=>undefined).finally(()=>{memoryReady.current=true;});
   },[]);
+
+  useEffect(()=>{
+    if(!memoryReady.current)return;
+    const project=projectMemory.projects.find(item=>item.id===projectMemory.workspace.currentProjectId);
+    const restored=restoreProjectScriptState(project,projectMemory.workspace);
+    const demo=DATA_MODE==="demo"&&project?.id===demoProjects[0]?.key;
+    setResult((restored.currentScript||(demo?demoScript:null)) as Script|null);
+    setRaceResults((restored.raceResults.length?restored.raceResults:(demo?demoScriptVariations:[])) as Script[]);
+    if(project)setForm(previous=>({...previous,product:project.product,country:project.market,language:project.language}));
+  },[projectMemory.workspace.currentProjectId]);
 
   useEffect(()=>{
     if(!memoryReady.current)return;
@@ -367,8 +381,8 @@ export default function Home() {
   const dashboardRecent=persistentProjects.length?persistentProjects:demoRecent;
   const openProject=(key:string)=>{setSelectedProjectKey(key);setActive("projects");saveWorkspaceSnapshot({activeView:"projects",currentProjectId:key});};
 
-  return (<AppShell className={active==="director"?"vf-director-mode":""}
-    sidebar={<Sidebar active={active} project={active==="director"?{name:currentDirectorProject?.name||`${result?.country||form.country} · TikTok 项目`,product:currentDirectorProject?.product||result?.product||form.product}:null} onNavigate={view=>{if(view==="projects")setSelectedProjectKey(null);setActive(view);}} onHistory={() => { setActive("history"); void loadHistory(); }} counts={{ library: hookLibrary.length + pointLibrary.length, monitor: monitorAccounts.length, history: history.length, products: productProfiles.length, reviews: reviewRecords.length }} teamConnected={teamConnected} onTeamToggle={() => { if (teamConnected) { setTeamConnected(false); setTeamPassword(""); } else setShowTeamLogin(true); }} />}
+  return (<AppShell className={active==="director"?"vf-director-mode":active==="create"?"vf-project-mode vf-script-mode":""}
+    sidebar={<Sidebar active={active} project={active==="director"||active==="create"?{name:currentDirectorProject?.name||`${result?.country||form.country} · TikTok 项目`,product:currentDirectorProject?.product||result?.product||form.product}:null} onNavigate={view=>{if(view==="projects")setSelectedProjectKey(null);setActive(view);saveWorkspaceSnapshot({activeView:view});}} onHistory={() => { setActive("history"); saveWorkspaceSnapshot({activeView:"history"}); void loadHistory(); }} counts={{ library: hookLibrary.length + pointLibrary.length, monitor: monitorAccounts.length, history: history.length, products: productProfiles.length, reviews: reviewRecords.length }} teamConnected={teamConnected} onTeamToggle={() => { if (teamConnected) { setTeamConnected(false); setTeamPassword(""); } else setShowTeamLogin(true); }} />}
     header={<TopHeader active={active} aiConnected={aiConnected} teamConnected={teamConnected} saveState={memorySaveState} searchItems={searchItems} />}
   >
       {active === "dashboard" && <Dashboard metrics={dashboardMetrics} recent={dashboardRecent} dataMode={DATA_MODE} onNavigate={setActive} onOpenRecent={openRecent} onOpenProject={openProject} />}
