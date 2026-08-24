@@ -32,6 +32,9 @@ const groups: Array<{ label: string; items: Array<{ id: ActiveView; icon: string
     { id: "reviews", icon: "▥", label: "数据中心" },
   ] },
 ];
+const directorItems:Array<{id:ActiveView;icon:string;label:string}>=[
+  {id:"create",icon:"▤",label:"Script"},{id:"breakdown",icon:"◇",label:"Analyzer"},{id:"director",icon:"◉",label:"AI Director"},{id:"images",icon:"▧",label:"Images"},{id:"voice",icon:"♫",label:"Voice"},{id:"history",icon:"◫",label:"Assets"},{id:"projects",icon:"▣",label:"Memory"},
+];
 
 export default function Sidebar({ active, onNavigate, onHistory, counts, teamConnected, onTeamToggle, project }: SidebarProps) {
   const countFor = (id: ActiveView) => id === "library" ? counts.library : id === "monitor" ? counts.monitor : id === "history" ? counts.history : id === "products" ? counts.products : id === "reviews" ? counts.reviews : undefined;
@@ -39,7 +42,7 @@ export default function Sidebar({ active, onNavigate, onHistory, counts, teamCon
     <button className="brand vf-brand" type="button" onClick={() => onNavigate("dashboard")} aria-label="返回工作台首页"><span className="brand-mark vf-brand-mark">V</span><div><strong>ViralFlow AI</strong><small>智能创意工作台</small></div></button>
     {active==="director"&&project?<button className="vf-director-project" onClick={()=>onNavigate("projects")}><span>{project.product.slice(0,2).toUpperCase()}</span><div><b>{project.product}</b><small>{project.name}</small></div><i>⌄</i></button>:<button className="vf-new-project" onClick={() => onNavigate("projects")}><span>＋</span> 新建项目</button>}
     <div className="vf-sidebar-scroll">
-      {groups.map(group => <section className="vf-nav-group" key={group.label}>
+      {active==="director"?<section className="vf-nav-group vf-director-nav"><p>项目内容</p><nav>{directorItems.map(item=><button key={item.id} title={item.label} aria-current={item.id==="director"?"page":undefined} className={item.id==="director"?"nav-active":""} onClick={()=>item.id==="history"?onHistory():onNavigate(item.id)}><span>{item.icon}</span><b>{item.label}</b></button>)}</nav></section>:groups.map(group => <section className="vf-nav-group" key={group.label}>
         <p>{group.label}</p>
         <nav>{group.items.map(item => {
           const count = countFor(item.id);
@@ -49,6 +52,6 @@ export default function Sidebar({ active, onNavigate, onHistory, counts, teamCon
         })}</nav>
       </section>)}
     </div>
-    <div className={`sidebar-note team-note vf-team-card ${teamConnected ? "connected" : ""}`}><span>{teamConnected ? "● 团队云端已连接" : "团队云端空间"}</span><p>{teamConnected ? "产品资料、素材和历史脚本将同步给团队。" : "连接后，多台电脑可共享产品资料和历史脚本。"}</p><button onClick={onTeamToggle}>{teamConnected ? "断开本机" : "连接团队空间"}</button></div>
+    {active==="director"?<div className="vf-director-sidebar-foot"><span>PROJECT MEMORY</span><div><i/><b>项目资产已同步</b></div><small>Storyboard · Images · Intelligence</small></div>:<div className={`sidebar-note team-note vf-team-card ${teamConnected ? "connected" : ""}`}><span>{teamConnected ? "● 团队云端已连接" : "团队云端空间"}</span><p>{teamConnected ? "产品资料、素材和历史脚本将同步给团队。" : "连接后，多台电脑可共享产品资料和历史脚本。"}</p><button onClick={onTeamToggle}>{teamConnected ? "断开本机" : "连接团队空间"}</button></div>}
   </aside>;
 }
