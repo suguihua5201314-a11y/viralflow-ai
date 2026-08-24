@@ -1,7 +1,7 @@
 import { buildKnowledgeContext, renderKnowledgeContext, type ProductKnowledge, type SellingPointKnowledge } from "../../knowledge-context";
 import { getGenerationComplianceKnowledge } from "../../compliance-rules";
 import { isCopilotBlockKey, requestedCopilotKeys, validateCopilotCandidate, type CopilotBlock, type CopilotBlockKey, type CopilotMode } from "../../copilot-core";
-import {callProvider,getProviderStatuses} from "../../provider-router";
+import {callProvider,DEFAULT_PROVIDER,getProviderStatuses} from "../../provider-router";
 
 export const runtime="nodejs";
 
@@ -38,9 +38,9 @@ function validPayload(value:unknown):value is Payload {
 
 function providerTemperature(creativity?:string){return creativity==="稳定"?0.45:creativity==="激进"?0.85:0.65;}
 
-async function callDeepSeek(payload:Payload,prompt:string):Promise<ProviderResult> {
+async function callCopilotProvider(payload:Payload,prompt:string):Promise<ProviderResult> {
   if(process.env.COPILOT_TEST_MODE==="1"&&process.env.COPILOT_TEST_RESPONSE)return JSON.parse(process.env.COPILOT_TEST_RESPONSE) as ProviderResult;
-  if(!getProviderStatuses().deepseek.configured)throw new Error("provider_unavailable");const result=await callProvider({provider:"deepseek",messages:[{role:"system",content:prompt},{role:"user",content:"返回本次局部精修候选。"}],temperature:providerTemperature(payload.creativity),maxTokens:2200});return JSON.parse(result.content) as ProviderResult;
+  if(!getProviderStatuses()[DEFAULT_PROVIDER].configured)throw new Error("provider_unavailable");const result=await callProvider({provider:DEFAULT_PROVIDER,messages:[{role:"system",content:prompt},{role:"user",content:"返回本次局部精修候选。"}],temperature:providerTemperature(payload.creativity),maxTokens:2200});return JSON.parse(result.content) as ProviderResult;
 }
 
 export async function POST(request:Request) {
@@ -58,10 +58,10 @@ export async function POST(request:Request) {
     const prompt=`你是 ViralFlow AI Script Copilot。你只精修指定Script Block，不重写整篇脚本。\n\n硬规则：\n1. 输出必须严格保持${body.language}，即使编辑指令是中文也不能切换语言。\n2. 只返回 requested keys；其它Block和所有Locked Blocks都不得返回或修改。\n3. Locked Blocks是HARD CONSTRAINT，重写后必须与它们逻辑连续。\n4. 只允许使用Knowledge Context中的产品事实、参数、认证、促销、测试和能力；缺失的信息不得补充。\n5. 禁用词、Fact Guard和Compliance Constraints继续生效。\n6. 不解释，不输出Markdown。严格返回JSON：{"blocks":[{"key":"hook","text":"..."}]}。\n\n${renderKnowledgeContext(knowledge)}\n\n[CURRENT SCRIPT]\n${fullScript}\n\n[LOCKED BLOCKS / EXACT HARD CONSTRAINT]\n${lockedLines}\n\n[REQUESTED BLOCKS]\n${targetLines}\n\n[BLOCK-SPECIFIC RULES]\n${keys.map(key=>`- ${key}: ${blockGuidance[key]}`).join("\n")}\n\n[EDIT REQUEST]\n${action}\n\n当前策略上下文：Creative Mode=${body.creationMode||body.script.style||"未指定"}；Hook Strategy=${body.hookStrategy||body.script.hookType||"未指定"}；Framework=${body.framework||body.script.framework||"未指定"}；Creativity=${body.creativity||"平衡"}。`;
     let lastViolations:string[]=[];
     for(let attempt=1;attempt<=2;attempt++){
-      const result=await callDeepSeek(body,attempt===1?prompt:`${prompt}\n\n上一次候选未通过保护层：${lastViolations.join("；")}。请只修正这些问题。`);
+      const result=await callCopilotProvider(body,attempt===1?prompt:`${prompt}\n\n上一次候选未通过保护层：${lastViolations.join("；")}。请只修正这些问题。`);
       const candidate=(result.blocks||[]).filter(item=>isCopilotBlockKey(item.key)&&typeof item.text==="string").map(item=>({...item,key:item.key as CopilotBlockKey,label:body.blocks.find(block=>block.key===item.key)?.label||item.key,type:body.blocks.find(block=>block.key===item.key)?.type||item.key}));
       lastViolations=validateCopilotCandidate({currentBlocks:body.blocks,candidateBlocks:candidate,requestedKeys:keys,lockedKeys:body.lockedKeys,language:body.language,knowledge});
-      if(!lastViolations.length)return Response.json({candidate:{blocks:candidate,keys},knowledge:{...knowledge.metadata,sellingPointPriority:knowledge.sellingPointPriority},guards:{fact:true,compliance:true,language:true,locked:true},provider:"deepseek"});
+      if(!lastViolations.length)return Response.json({candidate:{blocks:candidate,keys},knowledge:{...knowledge.metadata,sellingPointPriority:knowledge.sellingPointPriority},guards:{fact:true,compliance:true,language:true,locked:true},provider:DEFAULT_PROVIDER});
     }
     return Response.json({error:"候选未通过事实、合规或语言保护",details:lastViolations},{status:422});
   }catch(error){

@@ -50,7 +50,7 @@ export function normalizeAnalysis(raw:unknown,input:AnalysisInput):ViralAnalysis
     sellingPoints:(Array.isArray(r.sellingPoints)?r.sellingPoints:[]).map(item=>{const x=item as Record<string,unknown>;return {point:text(x.point),priority:x.priority==="primary"?"primary" as const:"secondary" as const,evidence:text(x.evidence)}}),
     proofMechanisms,objections:list(r.objections),productReveal:text(r.productReveal),cta:text(r.cta),ctaStyle:text(r.ctaStyle),viralMechanisms:list(r.viralMechanisms),reusableFormula:list(r.reusableFormula),
     replicationNotes:{visualSuggestions:list((r.replicationNotes as Record<string,unknown>)?.visualSuggestions),copySuggestions:list((r.replicationNotes as Record<string,unknown>)?.copySuggestions),editingSuggestions:list((r.replicationNotes as Record<string,unknown>)?.editingSuggestions)},risks:list(r.risks),timeline,
-    metadata:{analysisProvider:"deepseek",inputType:input.inputType,transcriptProvided:input.inputType==="transcript",visualEvidenceAvailable:visualAvailable,timelineEstimated,productContextUsed:Boolean(input.product?.trim()),marketContextUsed:Boolean(input.market?.trim()),scoringModel:"viralflow-rule-v1" as const},
+    metadata:{analysisProvider:"doubao",inputType:input.inputType,transcriptProvided:input.inputType==="transcript",visualEvidenceAvailable:visualAvailable,timelineEstimated,productContextUsed:Boolean(input.product?.trim()),marketContextUsed:Boolean(input.market?.trim()),scoringModel:"viralflow-rule-v1" as const},
   };
   return {...result,score:scoreAnalysis(result)};
 }

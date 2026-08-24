@@ -4,7 +4,7 @@ import { buildKnowledgeContext, findFactViolations, renderKnowledgeContext, type
 import { getGenerationComplianceKnowledge } from "../../compliance-rules";
 import { CloudflareStorageUnavailableError } from "../../../db/cloudflare-runtime";
 import { runTeamDataAction } from "../../team-data-adapter";
-import {callProvider,getProviderStatuses,ProviderCallError} from "../../provider-router";
+import {callProvider,DEFAULT_PROVIDER,getProviderStatuses,ProviderCallError} from "../../provider-router";
 import type {ProviderErrorType,ProviderId,ProviderRunMetadata} from "../../provider-types";
 import {validateScriptLanguage} from "../../language-guard";
 
@@ -24,7 +24,7 @@ function providerError(error:unknown) {
   return new ProviderGenerationError("schema_validation_error","Provider返回未通过校验");
 }
 function logProviderFallback(error:ProviderGenerationError,p:Payload,attempt:number) {
-  console.warn("[scripts.provider.fallback]",JSON.stringify({providerRequested:p.provider||"deepseek",category:error.category,status:error.status,details:error.safeDetails,attempt,conceptId:p.creativeConcept?.id??null,creationMode:p.creationMode??null,hookStrategy:p.hookStrategy??null,framework:p.framework??null}));
+  console.warn("[scripts.provider.fallback]",JSON.stringify({providerRequested:p.provider||DEFAULT_PROVIDER,category:error.category,status:error.status,details:error.safeDetails,attempt,conceptId:p.creativeConcept?.id??null,creationMode:p.creationMode??null,hookStrategy:p.hookStrategy??null,framework:p.framework??null}));
 }
 function buildRequestKnowledge(p:Payload,recent:RecentScript[],creativeConcept=p.creativeConcept) {
   return buildKnowledgeContext({...p,recent,creativeConcept,complianceKnowledge:getGenerationComplianceKnowledge()});
@@ -394,7 +394,7 @@ function applyLocalStrategy<T extends {hook:string;alternateHooks:string[];narra
 }
 
 async function generateOne(p:Payload,recent:RecentScript[]) {
-  const providerRequested=p.provider||"deepseek";const providerStatus=getProviderStatuses()[providerRequested];
+  const providerRequested=p.provider||DEFAULT_PROVIDER;const providerStatus=getProviderStatuses()[providerRequested];
   let aiScript:StructuredScript|null=null;let responseTimeMs:number|null=null;
   let fallbackCategory:ProviderErrorType|undefined;let languageRepairAttempted=false;
   if(providerStatus.configured){
@@ -535,7 +535,7 @@ Creativity：${p.creativity || "平衡"}
   return {script:normalizeStructuredScript({ ...generated, title:generated.title || `${p.product}｜${selectedFramework}`, product:p.product, language:p.language, country:p.country, style:p.style, hook:generated.scenes[0]?.line || generated.hook, alternateHooks:generated.alternateHooks.slice(0,2), narration, scenes:generated.scenes, aiGenerated:true }, p, p.creativeConcept),responseTimeMs:providerResult.responseTimeMs};
 }
 export async function GET() {
-  const providers=getProviderStatuses();return Response.json({scripts:[],aiConnected:providers.deepseek.configured,provider:"DeepSeek V4 Pro",providers,defaultProvider:"deepseek"});
+  const providers=getProviderStatuses();return Response.json({scripts:[],aiConnected:providers[DEFAULT_PROVIDER].configured,provider:providers[DEFAULT_PROVIDER].label,providers,defaultProvider:DEFAULT_PROVIDER});
 }
 const teamCorsHeaders = {
   "access-control-allow-origin": "https://viralcraft-ai-eight.vercel.app",

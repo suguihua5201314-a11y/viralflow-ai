@@ -5,9 +5,9 @@ import test from "node:test";
 async function loadWorker(){const url=new URL("../dist/server/index.js",import.meta.url);url.searchParams.set("provider-test",`${process.pid}-${Date.now()}-${Math.random()}`);return(await import(url.href)).default;}
 const runtime={waitUntil(){},passThroughOnException(){}};
 
-test("provider status is safe and legacy requests default to deepseek",async()=>{
+test("provider status is safe and legacy requests default to doubao",async()=>{
  const worker=await loadWorker();const response=await worker.fetch(new Request("http://localhost/api/scripts"),{},runtime);assert.equal(response.status,200);const data=await response.json();
- assert.equal(data.defaultProvider,"deepseek");assert.deepEqual(Object.keys(data.providers),["deepseek","doubao","openai"]);assert.equal(data.providers.openai.configured,false);
+ assert.equal(data.defaultProvider,"doubao");assert.deepEqual(Object.keys(data.providers),["deepseek","doubao","openai"]);assert.equal(data.providers.openai.configured,false);
  assert.ok(!JSON.stringify(data).includes(process.env.DEEPSEEK_API_KEY||"__never__"));
 });
 
@@ -18,7 +18,15 @@ test("GPT placeholder sends no request and returns explicit provider metadata",a
 test("router isolates provider I/O while Studio keeps selector in React session",async()=>{
  const [router,route,studio,page]=await Promise.all([readFile(new URL("../app/provider-router.ts",import.meta.url),"utf8"),readFile(new URL("../app/api/scripts/route.ts",import.meta.url),"utf8"),readFile(new URL("../app/script-studio.tsx",import.meta.url),"utf8"),readFile(new URL("../app/page.tsx",import.meta.url),"utf8")]);
  for(const marker of ["ARK_API_KEY","ARK_MODEL_ID","ARK_ENDPOINT_ID","ARK_BASE_URL","unauthorized","invalid_model_or_endpoint","rate_limit","timeout"])assert.ok(router.includes(marker),marker);
- assert.ok(route.includes("callProvider"));assert.ok(route.includes("providerRequested:p.provider||\"deepseek\""));
+ assert.ok(route.includes("callProvider"));assert.ok(route.includes("providerRequested:p.provider||DEFAULT_PROVIDER"));
  for(const marker of ["AI 模型","provider-warning","selectedProviderStatus","onProviderChange"])assert.ok(studio.includes(marker),marker);
- for(const marker of ["DeepSeek","豆包","GPT",'useState<ProviderId>("deepseek")',"setLastProviderRun"])assert.ok(page.includes(marker),marker);
+ for(const marker of ["DeepSeek","豆包","GPT",'useState<ProviderId>("doubao")',"setLastProviderRun"])assert.ok(page.includes(marker),marker);
+});
+
+test("all text AI features share the doubao default through Provider Router",async()=>{
+ const files=await Promise.all(["analyze","replicate","director","copilot","scripts"].map(name=>readFile(new URL(`../app/api/${name}/route.ts`,import.meta.url),"utf8")));
+ for(const source of files)assert.ok(source.includes("callProvider"),"missing Provider Router call");
+ for(const source of files)assert.equal(/provider:\s*"deepseek"|\|\|\s*"deepseek"/.test(source),false);
+ for(const source of files)assert.ok(source.includes("DEFAULT_PROVIDER"));
+ const knowledge=await readFile(new URL("../app/knowledge-context.ts",import.meta.url),"utf8");assert.equal(knowledge.includes("fetch("),false);assert.equal(knowledge.includes("callProvider("),false);
 });

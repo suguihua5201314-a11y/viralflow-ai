@@ -1,5 +1,5 @@
 import {normalizeAnalysis,type AnalysisInput} from "../../viral-analysis";
-import {callProvider,getProviderStatuses,ProviderCallError} from "../../provider-router";
+import {callProvider,DEFAULT_PROVIDER,getProviderStatuses,ProviderCallError} from "../../provider-router";
 
 export const runtime="nodejs";
 function valid(value:unknown):value is AnalysisInput{return Boolean(value&&typeof value==="object"&&typeof (value as AnalysisInput).sourceText==="string"&&(value as AnalysisInput).sourceText.trim().length>=20&&["copy","transcript"].includes((value as AnalysisInput).inputType));}
@@ -55,18 +55,18 @@ function testResponse(attempt:number){
   return process.env.ANALYZE_TEST_RESPONSE??"";
 }
 
-async function callDeepSeek(input:AnalysisInput,prompt:string,attempt:number){
+async function callAnalysisProvider(input:AnalysisInput,prompt:string,attempt:number){
   const fixture=testResponse(attempt);
   if(fixture!==null)return fixture;
-  if(!getProviderStatuses().deepseek.configured)throw new Error("provider_unavailable");
-  const result=await callProvider({provider:"deepseek",messages:[{role:"system",content:prompt},{role:"user",content:`分析以下${input.inputType==="transcript"?"Transcript":"文案"}：\n\n${input.sourceText}`}],temperature:.3,maxTokens:6000,timeoutMs:60000});
+  if(!getProviderStatuses()[DEFAULT_PROVIDER].configured)throw new Error("provider_unavailable");
+  const result=await callProvider({provider:DEFAULT_PROVIDER,messages:[{role:"system",content:prompt},{role:"user",content:`分析以下${input.inputType==="transcript"?"Transcript":"文案"}：\n\n${input.sourceText}`}],temperature:.3,maxTokens:6000,timeoutMs:60000});
   return result.content;
 }
 
 async function requestStructuredAnalysis(input:AnalysisInput,prompt:string){
   for(let attempt=1;attempt<=2;attempt+=1){
     try{
-      const content=await callDeepSeek(input,prompt,attempt);
+      const content=await callAnalysisProvider(input,prompt,attempt);
       return parseAnalyzerJson(content);
     }
     catch(error){
@@ -96,5 +96,5 @@ export async function POST(request:Request){try{const body=await request.json();
   const visual=Boolean(body.visualNotes?.trim());
   const prompt=`你是 ViralFlow Viral Analyzer，分析短视频文案/Transcript为什么可能有效，而不是做摘要。严格返回JSON对象，不输出Markdown。字段必须为：summary,contentType,targetAudience,corePromise,creativeAngle,hook{original,type,mechanism,informationGap,conflict,curiosity,promise,payoff,whyItWorks},structure[{stage,content,purpose,viewerPsychology}],pacing{assessment,retentionBeats[]},emotionCurve[{stage,emotion,trigger}],sellingPoints[{point,priority,evidence}],proofMechanisms[{type,content,observed}],objections[],productReveal,cta,ctaStyle,viralMechanisms[],reusableFormula[],replicationNotes{visualSuggestions[],copySuggestions[],editingSuggestions[]},risks[],timeline[{start,end,stage,spokenContent,visualDescription,editingNote,purpose,retentionMechanism}]。
 硬规则：1) 只把输入中存在的内容当Observed；AI判断和复刻建议必须分离。2) ${visual?"用户提供了画面描述，只能基于该描述分析画面":"没有可靠画面信息，所有timeline.visualDescription和editingNote必须写unknown / not provided；可以把画面/剪辑想法仅放在replicationNotes"}。3) Proof只有原文真实存在才能observed=true。4) 不虚构播放量、留存率、GMV、画面、参数、认证或产品能力。5) 有时长无时间戳时只做估算，不声称精确。6) Formula提炼机制，不复制原句。输入上下文：平台=${body.platform||"未提供"}；市场=${body.market||"未提供"}；语言=${body.language||"自动识别"}；时长=${body.durationSeconds||"未提供"}秒；产品=${body.product||"未提供"}；品类=${body.category||"未提供"}；用户画面描述=${body.visualNotes||"未提供"}。`;
-  const raw=await requestStructuredAnalysis(body,prompt);const analysis=normalizeAnalysis(raw,body);return Response.json({analysis,provider:"deepseek",guards:{observedSeparated:true,visualClaimsGuarded:!visual,timelineLabeled:true}});
+  const raw=await requestStructuredAnalysis(body,prompt);const analysis=normalizeAnalysis(raw,body);return Response.json({analysis,provider:DEFAULT_PROVIDER,guards:{observedSeparated:true,visualClaimsGuarded:!visual,timelineLabeled:true}});
 }catch(error){const category=classifyError(error);console.error("[analyze.error]",JSON.stringify({category,...diagnosticsFor(error)}));return Response.json({error:category==="provider_unavailable"?"AI Provider未配置":"爆款分析暂时失败，请重试"},{status:category==="provider_unavailable"?503:502});}}

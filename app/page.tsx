@@ -97,7 +97,7 @@ export default function Home() {
   const [loading, setLoading] = useState(false);
   const [aiConnected, setAiConnected] = useState(false);
   const [providerStatuses,setProviderStatuses]=useState(initialProviderStatuses);
-  const [selectedProvider,setSelectedProvider]=useState<ProviderId>("deepseek");
+  const [selectedProvider,setSelectedProvider]=useState<ProviderId>("doubao");
   const [lastProviderRun,setLastProviderRun]=useState<ProviderRunMetadata|null>(null);
   const [error, setError] = useState("");
   const [history, setHistory] = useState<Script[]>([]);
@@ -333,7 +333,7 @@ export default function Home() {
   }
 
   const directorProduct=productProfiles.find(item=>item.name.trim().toLowerCase()===(result?.product||form.product).trim().toLowerCase());
-  const directorInput:DirectorRequest|null=result?{script:result as StructuredScript,context:{product:result.product||form.product,sellingPoints:result.sellingPoints||directorProduct?.sellingPoints||form.sellingPoints,audience:form.audience,market:result.country||form.country,language:result.language||form.language,platform:"TikTok",targetDuration:adoptedDirectorContext.duration,creativeMode:result.style||form.style,hookStrategy:result.hookType||"好奇",framework:result.framework||form.framework,creativeAngle:result.creativeAngle||"",offer:adoptedDirectorContext.offer,productKnowledge:directorProduct?{...directorProduct,offer:adoptedDirectorContext.offer}:undefined,sourceType:directorSourceType,...(directorSourceType==="viral-replication"?{replication:{sourceMechanism:result.creativeAngle||result.hookType||"",replicationStrategy:`${result.hookType||""} · ${result.framework||""}`,proofMapping:result.proof||"",sellingPointMapping:result.sellingPoints||""}}:{})},settings:{provider:"deepseek"}}:null;
+  const directorInput:DirectorRequest|null=result?{script:result as StructuredScript,context:{product:result.product||form.product,sellingPoints:result.sellingPoints||directorProduct?.sellingPoints||form.sellingPoints,audience:form.audience,market:result.country||form.country,language:result.language||form.language,platform:"TikTok",targetDuration:adoptedDirectorContext.duration,creativeMode:result.style||form.style,hookStrategy:result.hookType||"好奇",framework:result.framework||form.framework,creativeAngle:result.creativeAngle||"",offer:adoptedDirectorContext.offer,productKnowledge:directorProduct?{...directorProduct,offer:adoptedDirectorContext.offer}:undefined,sourceType:directorSourceType,...(directorSourceType==="viral-replication"?{replication:{sourceMechanism:result.creativeAngle||result.hookType||"",replicationStrategy:`${result.hookType||""} · ${result.framework||""}`,proofMapping:result.proof||"",sellingPointMapping:result.sellingPoints||""}}:{})},settings:{provider:"doubao"}}:null;
 
   const recentWork:RecentWorkItem[]=[
     ...(result?[{key:"current",title:result.title,product:result.product,market:result.country,language:result.language,platform:"TikTok",duration:adoptedDirectorContext.duration,updatedAt:result.createdAt,current:true}]:[]),
