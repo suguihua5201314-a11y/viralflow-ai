@@ -27,6 +27,7 @@ import DataCenter from "./data-center";
 import {DATA_MODE,demoAnalytics,demoDashboardData,demoProjects,type DemoProject} from "./demo-data";
 import ProjectWorkspace from "./project-workspace";
 import {cacheProjectMemory,readProjectMemory,touchProject,type PersistentProject,type ProjectMemory} from "./project-memory";
+import ImageStudio from "./image-studio";
 
 type Scene = { time: string; visual: string; line: string; edit: string };
 type Script = { id?: number; title: string; product: string; language: string; country: string; style: string; hook: string; alternateHooks: string[]; narration: string; scenes: Scene[]; createdAt?: string; aiGenerated?: boolean; creativeAngle?:string; hookType?:string; framework?:string; conflict?:string; productReveal?:string; proof?:string; sellingPoints?:string; cta?:string; shootingSuggestion?:string; scenario?:string; proofMechanism?:string; ctaStyle?:string };
@@ -367,6 +368,7 @@ export default function Home() {
   >
       {active === "dashboard" && <Dashboard metrics={dashboardMetrics} recent={dashboardRecent} dataMode={DATA_MODE} onNavigate={setActive} onOpenRecent={openRecent} onOpenProject={openProject} />}
       {active === "projects" && <ProjectWorkspace projects={persistentProjects} initialProjectKey={selectedProjectKey} saveState={memorySaveState} onCreate={createProject} onRename={renameProject} onDuplicate={duplicateProject} onDelete={deleteProject} onSelect={id=>saveWorkspaceSnapshot({currentProjectId:id,activeView:"projects"})} onNavigate={view=>{setActive(view);saveWorkspaceSnapshot({activeView:view});}} />}
+      {active === "images" && <ImageStudio projects={projectMemory.projects.map(project=>({id:project.id,name:project.name,product:project.product}))} currentProjectId={projectMemory.workspace.currentProjectId} />}
       {active === "video" && <VideoAnalyzer products={productProfiles.map(x=>x.name)} />}
       {active === "director" && <ShootingDirector input={directorInput} onNavigate={view=>setActive(view)} onChange={value=>{updateProjectMemory({directorResult:value},{stage:"导演",progress:72});saveWorkspaceSnapshot({activeView:"director"});}} />}
       {active === "voice" && <VoiceStudio initialText={result?.narration ?? ""} onChange={value=>{updateProjectMemory({voiceResult:value},{stage:"语音",progress:84});saveWorkspaceSnapshot({activeView:"voice"});}} />}
