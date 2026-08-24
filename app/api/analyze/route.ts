@@ -55,11 +55,15 @@ function testResponse(attempt:number){
   return process.env.ANALYZE_TEST_RESPONSE??"";
 }
 
+function attemptConfig(attempt:number){return attempt===1?{maxTokens:3200,timeoutMs:45000}:{maxTokens:2200,timeoutMs:35000};}
+function compactRetryInstruction(attempt:number){return attempt===1?"":`\n[紧凑重试] 保持所有字段不变。structure最多5项；timeline最多6项；其他数组最多4项；每个字符串只写结论，不复述输入，不解释JSON。`;}
+
 async function callAnalysisProvider(input:AnalysisInput,prompt:string,attempt:number){
   const fixture=testResponse(attempt);
   if(fixture!==null)return fixture;
   if(!getProviderStatuses()[DEFAULT_PROVIDER].configured)throw new Error("provider_unavailable");
-  const result=await callProvider({provider:DEFAULT_PROVIDER,messages:[{role:"system",content:prompt},{role:"user",content:`分析以下${input.inputType==="transcript"?"Transcript":"文案"}：\n\n${input.sourceText}`}],temperature:.3,maxTokens:6000,timeoutMs:60000});
+  const config=attemptConfig(attempt);
+  const result=await callProvider({provider:DEFAULT_PROVIDER,messages:[{role:"system",content:`${prompt}${compactRetryInstruction(attempt)}`},{role:"user",content:`分析以下${input.inputType==="transcript"?"Transcript":"文案"}：\n\n${input.sourceText}`}],temperature:.2,maxTokens:config.maxTokens,timeoutMs:config.timeoutMs});
   return result.content;
 }
 
@@ -75,7 +79,7 @@ async function requestStructuredAnalysis(input:AnalysisInput,prompt:string){
         if(error instanceof StructuredJsonError)error.diagnostics={...error.diagnostics,attempt,maxAttempts:2};
         throw error;
       }
-      console.warn("[analyze.retry]",JSON.stringify({category:classifyError(error),attempt,nextAttempt:attempt+1,...diagnosticsFor(error)}));
+      console.warn("[analyze.retry]",JSON.stringify({category:classifyError(error),attempt,nextAttempt:attempt+1,...attemptConfig(attempt),...diagnosticsFor(error)}));
     }
   }
   throw new StructuredJsonError("structured_json_invalid");
@@ -94,7 +98,8 @@ function diagnosticsFor(error:unknown){
 }
 export async function POST(request:Request){try{const body=await request.json();if(!valid(body))return Response.json({error:"请提供至少20字的文案或Transcript"},{status:400});
   const visual=Boolean(body.visualNotes?.trim());
-  const prompt=`你是 ViralFlow Viral Analyzer，分析短视频文案/Transcript为什么可能有效，而不是做摘要。严格返回JSON对象，不输出Markdown。字段必须为：summary,contentType,targetAudience,corePromise,creativeAngle,hook{original,type,mechanism,informationGap,conflict,curiosity,promise,payoff,whyItWorks},structure[{stage,content,purpose,viewerPsychology}],pacing{assessment,retentionBeats[]},emotionCurve[{stage,emotion,trigger}],sellingPoints[{point,priority,evidence}],proofMechanisms[{type,content,observed}],objections[],productReveal,cta,ctaStyle,viralMechanisms[],reusableFormula[],replicationNotes{visualSuggestions[],copySuggestions[],editingSuggestions[]},risks[],timeline[{start,end,stage,spokenContent,visualDescription,editingNote,purpose,retentionMechanism}]。
-硬规则：1) 只把输入中存在的内容当Observed；AI判断和复刻建议必须分离。2) ${visual?"用户提供了画面描述，只能基于该描述分析画面":"没有可靠画面信息，所有timeline.visualDescription和editingNote必须写unknown / not provided；可以把画面/剪辑想法仅放在replicationNotes"}。3) Proof只有原文真实存在才能observed=true。4) 不虚构播放量、留存率、GMV、画面、参数、认证或产品能力。5) 有时长无时间戳时只做估算，不声称精确。6) Formula提炼机制，不复制原句。输入上下文：平台=${body.platform||"未提供"}；市场=${body.market||"未提供"}；语言=${body.language||"自动识别"}；时长=${body.durationSeconds||"未提供"}秒；产品=${body.product||"未提供"}；品类=${body.category||"未提供"}；用户画面描述=${body.visualNotes||"未提供"}。`;
+  const prompt=`你是 ViralFlow Viral Analyzer。直接分析短视频文案/Transcript的有效机制，不做复述。只返回单个紧凑JSON对象，不输出Markdown或解释。字段必须完整：summary,contentType,targetAudience,corePromise,creativeAngle,hook{original,type,mechanism,informationGap,conflict,curiosity,promise,payoff,whyItWorks},structure[{stage,content,purpose,viewerPsychology}],pacing{assessment,retentionBeats[]},emotionCurve[{stage,emotion,trigger}],sellingPoints[{point,priority,evidence}],proofMechanisms[{type,content,observed}],objections[],productReveal,cta,ctaStyle,viralMechanisms[],reusableFormula[],replicationNotes{visualSuggestions[],copySuggestions[],editingSuggestions[]},risks[],timeline[{start,end,stage,spokenContent,visualDescription,editingNote,purpose,retentionMechanism}]。
+输出预算：summary与各解释字段只写一句；structure最多6项；timeline最多8项；sellingPoints、proofMechanisms最多5项；其余数组最多4项；无内容用空数组或简短字符串，禁止重复表达。
+事实规则：1) 只有输入真实存在的内容可标Observed。2) AI判断与复刻建议分离。3) ${visual?"只基于用户画面描述分析画面":"timeline.visualDescription和editingNote固定写unknown / not provided；画面建议只放replicationNotes"}。4) Proof只有原文存在才observed=true。5) 不虚构数据、画面、参数、认证或产品能力。6) 无时间戳时Timeline只做估算。7) Formula只提炼机制。上下文：平台=${body.platform||"未提供"}；市场=${body.market||"未提供"}；语言=${body.language||"自动识别"}；时长=${body.durationSeconds||"未提供"}秒；产品=${body.product||"未提供"}；品类=${body.category||"未提供"}；画面=${body.visualNotes||"未提供"}。`;
   const raw=await requestStructuredAnalysis(body,prompt);const analysis=normalizeAnalysis(raw,body);return Response.json({analysis,provider:DEFAULT_PROVIDER,guards:{observedSeparated:true,visualClaimsGuarded:!visual,timelineLabeled:true}});
 }catch(error){const category=classifyError(error);console.error("[analyze.error]",JSON.stringify({category,...diagnosticsFor(error)}));return Response.json({error:category==="provider_unavailable"?"AI Provider未配置":"爆款分析暂时失败，请重试"},{status:category==="provider_unavailable"?503:502});}}

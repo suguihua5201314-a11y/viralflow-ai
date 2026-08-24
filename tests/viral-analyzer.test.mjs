@@ -27,3 +27,11 @@ test("J retries once after a truncated structured response",async()=>{process.en
 test("K keeps the public error contract when both structured responses are invalid",async()=>{process.env.ANALYZE_TEST_RESPONSES=JSON.stringify(["not-json","still-not-json"]);const response=await analyze(input);assert.equal(response.status,502);assert.deepEqual(await response.json(),{error:"爆款分析暂时失败，请重试"});});
 
 test("L rejects an empty provider content without changing the public contract",async()=>{const response=await analyze(input,"");assert.equal(response.status,502);assert.deepEqual(await response.json(),{error:"爆款分析暂时失败，请重试"});});
+
+test("M ordinary viral script keeps the complete Analyzer contract",async()=>{const body={...input,sourceText:"先别急着买普通钢化膜。我以前每次都贴歪还有气泡，这次把安装器放上去，拉出除尘条再滑一下，十秒就贴好了。最后检查型号就可以。",market:"中国",language:"中文"};const response=await analyze(body);assert.equal(response.status,200);const {analysis}=await response.json();for(const key of ["summary","hook","structure","pacing","sellingPoints","proofMechanisms","replicationNotes","timeline","score","metadata"])assert.ok(key in analysis,key);});
+
+test("N long transcript remains analyzable without truncating the request contract",async()=>{const body={...input,sourceText:Array.from({length:70},(_,index)=>`${index+1}. ${transcript}`).join("\n"),durationSeconds:180};const response=await analyze(body);assert.equal(response.status,200);const {analysis}=await response.json();assert.equal(analysis.metadata.inputType,"transcript");assert.ok(analysis.structure.length);});
+
+test("O Spanish TikTok script preserves language and structured output",async()=>{const response=await analyze(input);assert.equal(response.status,200);const {analysis,provider}=await response.json();assert.equal(provider,"doubao");assert.equal(analysis.hook.original,"No compres otro protector todavía.");assert.equal(analysis.cta,"Comprueba tu modelo en el enlace.");});
+
+test("P Doubao Analyzer uses bounded output and staged timeouts",async()=>{const source=await readFile(new URL("../app/api/analyze/route.ts",import.meta.url),"utf8");for(const marker of ["maxTokens:3200","timeoutMs:45000","maxTokens:2200","timeoutMs:35000","structure最多6项","timeline最多8项","[紧凑重试]"])assert.ok(source.includes(marker),marker);assert.equal(source.includes("maxTokens:6000,timeoutMs:60000"),false);});
