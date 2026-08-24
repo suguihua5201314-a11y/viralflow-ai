@@ -18,7 +18,7 @@ const groups: Array<{ label: string; items: Array<{ id: ActiveView; icon: string
     { id: "checker", icon: "✓", label: "内容合规" },
   ] },
   { label: "内容制作", items: [
-    { id: "images", icon: "◫", label: "AI Image Studio" },
+    { id: "images", icon: "◫", label: "AI 图片创作工作台" },
     { id: "video", icon: "▶", label: "视频洞察" },
     { id: "director", icon: "◉", label: "AI 导演工作台" },
     { id: "voice", icon: "♫", label: "AI 语音工作台" },

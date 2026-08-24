@@ -27,7 +27,9 @@ export function readImageAssets(): ImageAsset[] {
 }
 
 export function saveImageAssets(assets: ImageAsset[]) {
-  if (typeof window !== "undefined") localStorage.setItem(IMAGE_ASSET_STORAGE_KEY, JSON.stringify(assets));
+  if (typeof window === "undefined") return false;
+  try { localStorage.setItem(IMAGE_ASSET_STORAGE_KEY, JSON.stringify(assets.slice(0, 6))); return true; }
+  catch { return false; }
 }
 
 export function assetsForProject(assets: ImageAsset[], projectId: string | null) {

@@ -1,16 +1,29 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import { assetsForProject, readImageAssets, type ImageAsset } from "./image-assets";
-import { listImageProviders, type ImageGenerationRequest } from "./image-provider-router";
+import Image from "next/image";
+import { useEffect, useMemo, useState } from "react";
+import { assetsForProject, readImageAssets, saveImageAssets, type ImageAsset } from "./image-assets";
+import type { ImageGenerationRequest } from "./image-provider-router";
 
 type ProjectOption = { id: string; name: string; product: string };
-type StudioStatus = "idle" | "ready";
-
-const imageTypes: ImageGenerationRequest["imageType"][] = ["Product Image", "UGC Creator", "TikTok Ad Creative", "Lifestyle Scene"];
-const styles: ImageGenerationRequest["style"][] = ["Realistic", "UGC", "Premium", "Cinematic", "E-commerce"];
-const cameras: ImageGenerationRequest["camera"][] = ["Close Up", "Macro", "Wide Shot", "Handheld"];
-const ratios: Array<{ value: ImageGenerationRequest["ratio"]; label: string }> = [{ value: "9:16", label: "9:16 TikTok" }, { value: "1:1", label: "1:1" }, { value: "16:9", label: "16:9" }];
+type StudioStatus = "idle" | "loading" | "success" | "error";
+type ProviderState = { configured: boolean; model: string | null };
+type ApiError = { type: string; message: string; retryable?: boolean };
+const imageTypes: Array<{ value: ImageGenerationRequest["imageType"]; label: string }> = [
+  { value: "Product Image", label: "产品展示图" }, { value: "UGC Creator", label: "UGC 达人场景" },
+  { value: "TikTok Ad Creative", label: "TikTok 广告素材" }, { value: "Lifestyle Scene", label: "生活场景" },
+];
+const styles: Array<{ value: ImageGenerationRequest["style"]; label: string }> = [
+  { value: "Realistic", label: "真实摄影" }, { value: "UGC", label: "用户真实内容风格" }, { value: "Premium", label: "高端商业" },
+  { value: "Cinematic", label: "电影质感" }, { value: "E-commerce", label: "电商视觉" },
+];
+const cameras: Array<{ value: ImageGenerationRequest["camera"]; label: string }> = [
+  { value: "Close Up", label: "特写" }, { value: "Macro", label: "微距" }, { value: "Wide Shot", label: "广角" }, { value: "Handheld", label: "手持拍摄" },
+];
+const ratios: Array<{ value: ImageGenerationRequest["ratio"]; label: string }> = [
+  { value: "9:16", label: "9:16 短视频" }, { value: "1:1", label: "商品方图" }, { value: "16:9", label: "横版素材" },
+];
+const labelFor = <T extends string>(options: Array<{ value: T; label: string }>, value: T) => options.find(item => item.value === value)?.label || value;
 
 export default function ImageStudio({ projects, currentProjectId }: { projects: ProjectOption[]; currentProjectId: string | null }) {
   const fallbackProject = currentProjectId || projects[0]?.id || "";
@@ -21,47 +34,66 @@ export default function ImageStudio({ projects, currentProjectId }: { projects: 
   const [camera, setCamera] = useState<ImageGenerationRequest["camera"]>("Close Up");
   const [ratio, setRatio] = useState<ImageGenerationRequest["ratio"]>("9:16");
   const [status, setStatus] = useState<StudioStatus>("idle");
-  const [assets] = useState<ImageAsset[]>(readImageAssets);
+  const [error, setError] = useState<ApiError | null>(null);
+  const [provider, setProvider] = useState<ProviderState>({ configured: false, model: null });
+  const [assets, setAssets] = useState<ImageAsset[]>(readImageAssets);
+  const [currentAssetId, setCurrentAssetId] = useState<string | null>(null);
   const history = useMemo(() => assetsForProject(assets, projectId), [assets, projectId]);
+  const currentAsset = history.find(asset => asset.id === currentAssetId) || history[0] || null;
   const project = projects.find(item => item.id === projectId);
-  const providers = listImageProviders();
 
-  function prepareGeneration() {
-    if (!prompt.trim() || !projectId) return;
-    setStatus("ready");
+  useEffect(() => {
+    fetch("/api/images/generate", { cache: "no-store" }).then(response => response.json()).then(data => setProvider({ configured: Boolean(data.configured), model: data.model || null })).catch(() => setProvider({ configured: false, model: null }));
+  }, []);
+
+  async function generateImage(promptOverride?: string) {
+    const requestedPrompt = promptOverride?.trim() || prompt.trim();
+    if (!requestedPrompt || !projectId || status === "loading") return;
+    setStatus("loading"); setError(null);
+    try {
+      const response = await fetch("/api/images/generate", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ prompt: requestedPrompt, imageType, style, camera, ratio, projectId }) });
+      const data = await response.json() as { image?: Pick<ImageAsset, "provider" | "model" | "imageUrl" | "createdAt">; error?: ApiError };
+      if (!response.ok || !data.image) throw data.error || { type: "provider_error", message: "图片生成失败，请稍后重试。", retryable: true };
+      const asset: ImageAsset = { id: `image-${Date.now()}`, prompt: requestedPrompt, imageType, style, camera, ratio, projectId, ...data.image };
+      const next = [asset, ...assets].slice(0, 6);
+      setAssets(next); setCurrentAssetId(asset.id); setStatus("success");
+      if (!saveImageAssets(next)) setError({ type: "storage_full", message: "图片已生成，但浏览器存储空间不足，刷新后记录可能无法保留。", retryable: false });
+    } catch (caught) {
+      const failure = caught && typeof caught === "object" && "message" in caught ? caught as ApiError : { type: "provider_error", message: "图片生成暂时中断，请稍后重试。", retryable: true };
+      setError(failure); setStatus("error");
+    }
   }
 
-  return <section className="image-studio" aria-label="AI Image Studio">
+  return <section className="image-studio" aria-label="AI 图片创作工作台">
     <div className="image-studio-heading">
-      <div><span>AI COMMERCIAL VISUALS</span><h2>AI Image Studio</h2><p>为短视频、电商与广告准备高质量商业视觉素材。</p></div>
-      <div className="image-provider-state"><i /> Image Provider Router 已就绪 · 模型待接入</div>
+      <div><span>AI 商业视觉创作</span><h2>AI 图片创作工作台</h2><p>为短视频、电商与广告准备高质量商业视觉素材。</p></div>
+      <div className={`image-provider-state ${provider.configured ? "connected" : ""}`}><i />{provider.configured ? `图片模型已连接 · ${provider.model}` : "图片模型未配置"}</div>
     </div>
     <div className="image-studio-grid">
       <aside className="image-settings">
-        <header><span>01</span><div><h3>Image Settings</h3><p>定义视觉目标与生成规格</p></div></header>
-        <label>关联项目<select aria-label="关联项目" value={projectId} onChange={event => { setProjectId(event.target.value); setStatus("idle"); }}><option value="" disabled>请选择项目</option>{projects.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label>
-        <label>Prompt<textarea aria-label="Prompt" rows={7} value={prompt} onChange={event => { setPrompt(event.target.value); setStatus("idle"); }} placeholder="支持中文、English、Español 等多语言描述…" /><small>{prompt.length} / 2000 · Multilingual Prompt</small></label>
-        <fieldset><legend>Image Type</legend><div className="image-option-grid">{imageTypes.map(item => <button type="button" className={imageType === item ? "selected" : ""} key={item} onClick={() => { setImageType(item); setStatus("idle"); }}>{item}</button>)}</div></fieldset>
-        <label>Style<select aria-label="Style" value={style} onChange={event => { setStyle(event.target.value as typeof style); setStatus("idle"); }}>{styles.map(item => <option key={item}>{item}</option>)}</select></label>
-        <label>Camera<select aria-label="Camera" value={camera} onChange={event => { setCamera(event.target.value as typeof camera); setStatus("idle"); }}>{cameras.map(item => <option key={item}>{item}</option>)}</select></label>
-        <fieldset><legend>Ratio</legend><div className="ratio-options">{ratios.map(item => <button type="button" className={ratio === item.value ? "selected" : ""} key={item.value} onClick={() => { setRatio(item.value); setStatus("idle"); }}><span>{item.value}</span><small>{item.label}</small></button>)}</div></fieldset>
-        <button className="image-generate" type="button" disabled={!prompt.trim() || !projectId} onClick={prepareGeneration}>准备生成图片 <span>↗</span></button>
+        <header><span>01</span><div><h3>图片设置</h3><p>定义视觉目标与生成规格</p></div></header>
+        <label>项目<select aria-label="项目" value={projectId} onChange={event => { setProjectId(event.target.value); setStatus("idle"); setCurrentAssetId(null); }}><option value="" disabled>请选择项目</option>{projects.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label>
+        <label>图片描述<textarea aria-label="图片描述" rows={7} maxLength={2000} value={prompt} onChange={event => { setPrompt(event.target.value); setStatus("idle"); setError(null); }} placeholder="描述主体、场景、光线、构图与希望呈现的商业氛围，支持多语言输入……" /><small>{prompt.length} / 2000 · 支持多语言</small></label>
+        <fieldset><legend>图片类型</legend><div className="image-option-grid">{imageTypes.map(item => <button type="button" className={imageType === item.value ? "selected" : ""} key={item.value} onClick={() => setImageType(item.value)}>{item.label}</button>)}</div></fieldset>
+        <label>视觉风格<select aria-label="视觉风格" value={style} onChange={event => setStyle(event.target.value as typeof style)}>{styles.map(item => <option key={item.value} value={item.value}>{item.label}</option>)}</select></label>
+        <label>镜头类型<select aria-label="镜头类型" value={camera} onChange={event => setCamera(event.target.value as typeof camera)}>{cameras.map(item => <option key={item.value} value={item.value}>{item.label}</option>)}</select></label>
+        <fieldset><legend>图片比例</legend><div className="ratio-options">{ratios.map(item => <button type="button" className={ratio === item.value ? "selected" : ""} key={item.value} onClick={() => setRatio(item.value)}><span>{item.value}</span><small>{item.label}</small></button>)}</div></fieldset>
+        <button className="image-generate" type="button" disabled={!prompt.trim() || !projectId || status === "loading" || !provider.configured} onClick={() => void generateImage()}>{status === "loading" ? <><span className="image-spinner" />正在生成图片……</> : <>生成图片 <span>↗</span></>}</button>
+        {!provider.configured && <p className="image-config-hint">图片模型尚未连接，请联系管理员完成服务器配置。</p>}
+        {error && <div className="image-error" role="alert"><b>{status === "error" ? "生成失败" : "保存提醒"}</b><p>{error.message}</p>{error.retryable && <button type="button" onClick={() => void generateImage()}>重新生成</button>}</div>}
       </aside>
-
       <main className="image-canvas">
-        <header><div><span>02</span><h3>Image Canvas</h3></div><em>{ratio} · {style}</em></header>
+        <header><div><span>02</span><h3>图片画布</h3></div><em>{labelFor(ratios, ratio)} · {labelFor(styles, style)}</em></header>
         <div className={`canvas-stage ratio-${ratio.replace(":", "-")}`}>
-          <div className="canvas-glow" />
-          <div className="canvas-empty"><span>✦</span><h3>{status === "ready" ? "创作参数已就绪" : "从一个视觉想法开始"}</h3><p>{status === "ready" ? "Image Provider 接入后即可按当前配置生成，Step 6.1 不会自动调用模型。" : "输入多语言 Prompt 并选择图片类型、风格、机位与画幅。"}</p>{status === "ready" && <dl><div><dt>项目</dt><dd>{project?.name}</dd></div><div><dt>类型</dt><dd>{imageType}</dd></div><div><dt>镜头</dt><dd>{camera}</dd></div><div><dt>画幅</dt><dd>{ratio}</dd></div></dl>}</div>
+          {status === "loading" ? <div className="canvas-loading"><span className="image-spinner large" /><h3>正在创作商业图片</h3><p>图片生成通常需要几十秒，请保持页面开启。</p></div> : currentAsset ? <><Image className="generated-image" src={currentAsset.imageUrl} alt={currentAsset.prompt} fill sizes="(max-width: 800px) 100vw, 55vw" unoptimized /><div className="canvas-result-actions"><button type="button" onClick={() => { setPrompt(currentAsset.prompt); void generateImage(currentAsset.prompt); }}>重新生成</button><a href={currentAsset.imageUrl} download={`ViralFlow-${currentAsset.id}.jpg`}>下载图片</a></div></> : <><div className="canvas-glow" /><div className="canvas-empty"><span>✦</span><h3>从一个视觉想法开始</h3><p>输入图片描述并选择图片类型、视觉风格、镜头与比例。</p></div></>}
         </div>
-        <footer><span><i /> 安全草稿模式</span><p>当前阶段不产生图片、不计费，也不会调用视频生成。</p></footer>
+        <footer><span><i /> {status === "success" ? "图片已生成并保存" : "真实图片生成"}</span><p>仅生成图片，不调用视频模型。</p></footer>
       </main>
-
       <aside className="image-history">
-        <header><div><span>03</span><h3>Generation History</h3></div><em>{history.length}</em></header>
-        <div className="history-project"><small>当前项目</small><b>{project?.name || "未选择项目"}</b><span>{project?.product || "选择项目后查看资产"}</span></div>
-        {history.length ? <div className="image-history-list">{history.map(asset => <article key={asset.id}><div className="asset-preview">IMAGE</div><b>{asset.imageType}</b><p>{asset.prompt}</p><span>{asset.style} · {asset.ratio}</span><small>{asset.model} · {new Date(asset.createdAt).toLocaleString("zh-CN")}</small></article>)}</div> : <div className="image-history-empty"><span>◫</span><h4>暂无图片资产</h4><p>未来生成的图片会按当前 Project 自动归档，并保留 Prompt、Style、Ratio、Model 与时间。</p></div>}
-        <footer>{providers.map(provider => <span key={provider.id}><i /> {provider.label}<em>{provider.configured ? "Ready" : "Reserved"}</em></span>)}</footer>
+        <header><div><span>03</span><h3>生成记录</h3></div><em>{history.length}</em></header>
+        <div className="history-project"><small>当前项目</small><b>{project?.name || "未选择项目"}</b><span>{project?.product || "选择项目后查看图片资产"}</span></div>
+        {history.length ? <div className="image-history-list">{history.map(asset => <button type="button" className={currentAsset?.id === asset.id ? "selected" : ""} key={asset.id} onClick={() => { setCurrentAssetId(asset.id); setStatus("success"); }}><div className="asset-preview"><Image src={asset.imageUrl} alt={asset.prompt} fill sizes="220px" unoptimized /></div><b>{labelFor(imageTypes, asset.imageType)}</b><p>{asset.prompt}</p><span>{labelFor(styles, asset.style)} · {labelFor(ratios, asset.ratio)}</span><small>{asset.model} · {new Date(asset.createdAt).toLocaleString("zh-CN")}</small></button>)}</div> : <div className="image-history-empty"><span>◫</span><h4>暂无生成图片</h4><p>生成成功后会按当前项目自动归档，并保留描述、类型、风格、比例、模型与时间。</p></div>}
+        <footer><span><i className={provider.configured ? "online" : ""} /> OpenAI 图片模型<em>{provider.configured ? "已连接" : "未配置"}</em></span><span><i /> 豆包图片模型<em>待接入</em></span></footer>
       </aside>
     </div>
   </section>;
