@@ -6,6 +6,7 @@ import { mergeCopilotBlocks, type CopilotBlock, type CopilotBlockKey } from "./c
 import type {ProviderId,ProviderRunMetadata,ProviderStatus} from "./provider-types";
 import WorkspaceState from "./components/ui/workspace-state";
 import {notifyWorkspace} from "./components/ui/workspace-feedback";
+import {appendScriptVariant, variantIdentity, type ScriptVariant} from "./script-variants";
 
 export type StudioScene = { time: string; visual: string; line: string; edit: string };
 export type StudioScript = { id?: number; title: string; product: string; language: string; country: string; style: string; hook: string; alternateHooks: string[]; narration: string; scenes: StudioScene[]; createdAt?: string; aiGenerated?: boolean; creativeAngle?:string; hookType?:string; framework?:string; conflict?:string; productReveal?:string; proof?:string; sellingPoints?:string; cta?:string; shootingSuggestion?:string; scenario?:string; proofMechanism?:string; ctaStyle?:string; providerRequested?:ProviderId;providerUsed?:ProviderId|"local";fallbackUsed?:boolean;providerErrorType?:string|null;responseTimeMs?:number|null };
@@ -28,7 +29,7 @@ type Props = {
 };
 
 type EditorBlock = CopilotBlock & { duration:string };
-type SavedVersion = { label:string; script:StudioScript; blocks:EditorBlock[] };
+type SavedVersion = ScriptVariant<StudioScript,EditorBlock>;
 type RewritePreview = { before:EditorBlock[]; after:EditorBlock[]; keys:CopilotBlockKey[]; action:string };
 type UndoRewrite = { blocks:EditorBlock[]; label:string };
 const letters = ["A","B","C","D","E"];
@@ -53,11 +54,6 @@ function withBlocks(script:StudioScript, blocks:EditorBlock[]):StudioScript {
   return { ...script, hook:byKey.get("hook")||script.hook, conflict:byKey.get("conflict")||script.conflict, productReveal:byKey.get("product")||script.productReveal, proof:byKey.get("proof")||script.proof, sellingPoints:byKey.get("points")||script.sellingPoints, cta:byKey.get("cta")||script.cta, narration:blocks.map(block=>block.text.trim()).filter(Boolean).join(" ") };
 }
 
-function scriptIdentity(script:StudioScript|null) {
-  if (!script) return null;
-  return script.id != null ? `id:${script.id}` : script.createdAt ? `created:${script.createdAt}` : `script:${script.title}:${script.product}`;
-}
-
 function scaleTime(value:number, total:number) { return Math.round(value * total / 30); }
 
 function MarkedCopy({text,hits,onSelect}:{text:string;hits:ComplianceHit[];onSelect:(hit:ComplianceHit)=>void}) {
@@ -79,7 +75,7 @@ export default function ScriptStudio(props:Props) {
   const [locked,setLocked] = useState<Record<string,boolean>>({});
   const [editing,setEditing] = useState<string|null>(null);
   const [blocks,setBlocks] = useState<EditorBlock[]>(()=>props.result?buildBlocks(props.result,props.form.sellingPoints):[]);
-  const [versions,setVersions] = useState<SavedVersion[]>(()=>props.result?[{label:"V1",script:props.result,blocks:buildBlocks(props.result,props.form.sellingPoints)}]:[]);
+  const [versions,setVersions] = useState<SavedVersion[]>(()=>props.result?[{label:"V1",identity:variantIdentity(props.result),script:props.result,blocks:buildBlocks(props.result,props.form.sellingPoints)}]:[]);
   const [activeVersion,setActiveVersion] = useState(0);
   const [compare,setCompare] = useState<number[]>([]);
   const [compareOpen,setCompareOpen] = useState(false);
@@ -92,7 +88,7 @@ export default function ScriptStudio(props:Props) {
   const [rewritePreview,setRewritePreview] = useState<RewritePreview|null>(null);
   const [undoRewrite,setUndoRewrite] = useState<UndoRewrite|null>(null);
   const script = props.result;
-  const resultIdentity=scriptIdentity(script);
+  const resultIdentity=script?variantIdentity(script):null;
   const syncedResultIdentity=useRef(resultIdentity);
 
   useEffect(()=>{
@@ -100,12 +96,15 @@ export default function ScriptStudio(props:Props) {
     syncedResultIdentity.current=resultIdentity;
     const nextBlocks=buildBlocks(script,props.form.sellingPoints);
     setBlocks(nextBlocks);
-    setVersions([{label:"V1",script,blocks:nextBlocks.map(block=>({...block}))}]);
-    setActiveVersion(0);
+    setVersions(current=>{
+      const next=appendScriptVariant(current,script,nextBlocks.map(block=>({...block})));
+      setActiveVersion(next.activeIndex);
+      if(next.added){setSavedNotice(true);window.setTimeout(()=>setSavedNotice(false),1800);}
+      return next.variants;
+    });
     setLocked({});
     setEditing(null);
     setRewriteOpen(null); setRewriteInstruction(""); setRewritePreview(null); setUndoRewrite(null); setRewriteError("");
-    setSavedNotice(false);
   },[resultIdentity,script,props.form.sellingPoints]);
 
   const draftScript = useMemo(()=>script ? withBlocks(script,blocks) : null,[script,blocks]);
@@ -117,6 +116,8 @@ export default function ScriptStudio(props:Props) {
   const generationSummary = `${props.form.country} · ${props.form.language} · ${platform} · ${totalDuration}s · ${creationMode} · ${props.form.framework} · ${outputCount} ${outputCount===1?"version":"versions"}`;
   const controls=(count:1|5):GenerationControls=>({platform,additionalRequirements:briefNotes,scenario:scene,creationMode,hookStrategy,creativity,outputCount:count,provider:props.selectedProvider});
   const selectedProviderStatus=props.providerStatuses[props.selectedProvider];const providerReady=selectedProviderStatus?.configured;
+  const generationState=props.loading?"generating":props.error?"error":draftScript?"completed":"idle";
+  const generationStateLabel={idle:"待生成",generating:"生成中",completed:"已完成",error:"生成失败"}[generationState];
 
   function updateBlock(key:string,text:string) {
     const next=blocks.map(block=>block.key===key?{...block,text}:block);
@@ -149,12 +150,12 @@ export default function ScriptStudio(props:Props) {
     if (!draftScript) return;
     const saved=props.onSaveVersion(draftScript);
     const nextLabel=`V${versions.length+1}`;
-    setVersions(prev=>[...prev,{label:nextLabel,script:saved,blocks:blocks.map(block=>({...block}))}]);
+    setVersions(prev=>[...prev,{label:nextLabel,identity:variantIdentity(saved),script:saved,blocks:blocks.map(block=>({...block}))}]);
     setActiveVersion(versions.length); setSavedNotice(true); window.setTimeout(()=>setSavedNotice(false),1800);
   }
   function openVersion(index:number) {
     const version=versions[index]; if(!version)return;
-    syncedResultIdentity.current=scriptIdentity(version.script);
+    syncedResultIdentity.current=variantIdentity(version.script);
     setActiveVersion(index); setBlocks(version.blocks.map(block=>({...block}))); props.onDraftChange(version.script);
   }
   function adoptRace(item:StudioScript) {
@@ -178,8 +179,9 @@ export default function ScriptStudio(props:Props) {
       </aside>
 
       <main className="studio-center">
-        <div className="studio-editor-head"><div><span>AI 脚本编辑器</span><h2>{draftScript?.title || "Script Editor"}</h2></div><div className="version-tabs"><span>版本</span>{versions.map((version,index)=><button className={activeVersion===index?"active":""} key={version.label} onClick={()=>openVersion(index)}>{version.label}</button>)}<button onClick={()=>props.onNavigate("history")}>历史版本</button></div><div className="editor-actions"><button disabled={!draftScript||rewriteBusy||blocks.every(block=>locked[block.key])} onClick={()=>void requestRewrite("unlocked")}>{rewriteBusy?"AI 精修中…":"✦ 重写未锁定"}</button>{undoRewrite&&<button onClick={undoLastRewrite}>撤回精修</button>}<button disabled={!draftScript} onClick={()=>draftScript&&props.onCopy(draftScript.narration)}>复制全文</button><button disabled={!draftScript} onClick={()=>draftScript&&props.onExport(draftScript)}>导出</button></div></div>
+        <div className="studio-editor-head"><div><span>AI 脚本编辑器</span><h2>{draftScript?.title || "脚本编辑器"}</h2></div><div className="version-tabs"><span>方案</span>{versions.map((version,index)=><button className={activeVersion===index?"active":""} key={version.identity} onClick={()=>openVersion(index)}>{version.label}</button>)}<button onClick={()=>props.onNavigate("history")}>全部历史</button></div><div className="editor-actions"><span className={`generation-state ${generationState}`}>{generationStateLabel}</span><button disabled={!draftScript||rewriteBusy||blocks.every(block=>locked[block.key])} onClick={()=>void requestRewrite("unlocked")}>{rewriteBusy?"AI 精修中…":"优化当前脚本"}</button>{undoRewrite&&<button onClick={undoLastRewrite}>撤回精修</button>}<button disabled={!draftScript} onClick={()=>draftScript&&props.onCopy(draftScript.narration)}>复制全文</button><button disabled={!draftScript} onClick={()=>draftScript&&props.onExport(draftScript)}>导出</button></div></div>
         {props.loading?<WorkspaceState kind="loading" eyebrow="AI 脚本工作台" title="AI 正在构建脚本结构" description="正在根据产品事实、目标用户、Hook 策略和内容框架生成可编辑脚本。" detail="生成结果将保留当前语言、市场与时长设置" />:props.error&&!draftScript?<WorkspaceState kind="error" icon="!" title="脚本生成暂时中断" description={props.error} primary={{label:"重新生成",onClick:()=>props.onGenerate(controls(1)),disabled:!props.inputReady||!providerReady}} secondary={{label:"修改创作配置",onClick:()=>document.querySelector<HTMLInputElement>(".studio-brief input")?.focus()}} />:!draftScript?<WorkspaceState eyebrow="AI 创作工作台" title="开始创建第一条短视频脚本" description="选择产品并设置创作方向，AI 将生成可编辑脚本，并可继续进入导演和配音。" primary={{label:"生成第一条脚本",onClick:()=>props.onGenerate(controls(1)),disabled:!props.inputReady||!providerReady}} secondary={{label:"从产品知识库开始",onClick:()=>props.onNavigate("products")}} detail="也可以从爆款案例库选择参考内容" />:<>
+          <section className="variant-workflow"><div><span>多方案创作</span><b>当前 {versions[activeVersion]?.label || "V1"}</b><p>{versions.length} 个方案已独立保留，可随时切换继续编辑。</p></div><div><button className="variant-primary" disabled={props.loading||!props.inputReady||!providerReady} onClick={()=>props.onGenerate(controls(1))}>＋ 生成新方案</button><button disabled={rewriteBusy} onClick={()=>void requestRewrite("unlocked")}>优化当前脚本</button><button onClick={()=>props.onNavigate("director")}>进入 AI 导演</button><button onClick={()=>props.onNavigate("voice")}>AI 语音</button></div></section>
           <section className="pacing-card"><header><div><span>脚本节奏</span><b>{totalDuration}s 节奏时间轴</b></div><small>随视频时长动态适配</small></header><div className="pacing-bar">{pacing.map(([label,start,end,color])=><div key={label} style={{width:`${(end-start)/30*100}%`,background:color}}><b>{scaleTime(start,totalDuration)}–{scaleTime(end,totalDuration)}s</b><span>{label}</span></div>)}</div></section>
           <section className="editor-status"><div><span>{draftScript.language}</span><span>{draftScript.style}</span><span>{draftScript.country}</span>{draftScript.aiGenerated&&<span className="ai-badge">AI 服务</span>}</div><div className={hits.length?"compliance-state warning":"compliance-state clear"}><i/>{hits.length?`发现 ${hits.length} 项风险`:"合规：通过"}</div><strong>综合 {score?.total}</strong></section>
           <div className="script-blocks">{blocks.map((block,index)=>{const blockHits=checkCompliance(block.text);const actions=block.key==="hook"?["更吸睛","更自然","更 KOC / UGC","更简短","更口语","加强冲突"]:block.key==="proof"?["加强 Proof / 证明","更自然","更简短","更口语"]:block.key==="cta"?["更强转化","更自然","更 KOC / UGC","更简短"]:["更自然","更 KOC / UGC","加强冲突","更简短","更口语"];return <article key={block.key} className={`${locked[block.key]?"locked":""} ${editing===block.key?"editing":""}`}><aside><b>{String(index+1).padStart(2,"0")}</b><i/></aside><div className="block-main"><header><div><span>{block.label}</span><em>{block.type}</em><small>{block.duration}</small></div><div><button onClick={()=>setEditing(editing===block.key?null:block.key)}>{editing===block.key?"完成":"编辑"}</button><button onClick={()=>props.onCopy(block.text)}>复制</button><button className={locked[block.key]?"active":""} onClick={()=>setLocked(value=>({...value,[block.key]:!value[block.key]}))}>{locked[block.key]?"🔒 已锁定":"锁定"}</button><button disabled={Boolean(locked[block.key])||rewriteBusy} onClick={()=>setRewriteOpen(rewriteOpen===block.key?null:block.key)}>✦ AI 精修</button></div></header>{editing===block.key&&!locked[block.key]?<textarea aria-label={`编辑 ${block.label}`} value={block.text} onChange={e=>updateBlock(block.key,e.target.value)}/>:<p><MarkedCopy text={block.text} hits={blockHits} onSelect={setSelectedRisk}/></p>}<footer><span>快捷 AI</span>{actions.map(action=><button key={action} disabled={Boolean(locked[block.key])||rewriteBusy} onClick={()=>void requestRewrite("single",block.key,action)}>{action}</button>)}</footer>{rewriteOpen===block.key&&!locked[block.key]&&<div className="copilot-custom"><label>自定义 AI 指令<textarea rows={2} value={rewriteInstruction} onChange={event=>setRewriteInstruction(event.target.value)} placeholder="例如：改成西班牙普通女生聊天的感觉，但保留悬念。"/></label><div><button onClick={()=>{setRewriteOpen(null);setRewriteInstruction("")}}>取消</button><button disabled={!rewriteInstruction.trim()||rewriteBusy} onClick={()=>void requestRewrite("single",block.key,undefined,rewriteInstruction)}>{rewriteBusy?"生成中…":"生成候选"}</button></div></div>}{blockHits.length>0&&<div className="block-risk-row">{blockHits.map((hit,hitIndex)=><button key={`${hit.term}-${hitIndex}`} onClick={()=>setSelectedRisk(hit)}><i className={`level-${hit.level}`}/>{hit.level}风险 · {hit.term}</button>)}</div>}</div></article>})}</div>
@@ -188,7 +190,7 @@ export default function ScriptStudio(props:Props) {
         </>}
 
         <section className="race-arena"><header><div><span>创意赛马</span><h2>5 条创意赛马</h2><p>先生成不同 Creative Concept，再分别完成脚本并执行重复度检查。</p></div><div><span className="race-count">已选 {compare.length}/2</span><button disabled={compare.length!==2} onClick={()=>setCompareOpen(true)}>对比所选</button><button className="race-generate" disabled={!props.inputReady||props.loading||props.raceLoading||!providerReady} onClick={()=>{set生成数量Count(5);props.onGenerateRace(controls(5))}}>{props.raceLoading?"正在生成 5 条…":"✦ 生成 5 条赛马稿"}</button></div></header>{props.raceResults.length===0?<div className="race-empty"><div>{letters.map(letter=><span key={letter}>{letter}</span>)}</div><b>候选创意会在这里集中呈现</b><p>每张卡只突出 Hook、方向、框架、真实评分和合规状态。</p></div>:<div className="race-cards">{props.raceResults.map((item,index)=>{const itemScore=props.scoreScript(item);const risks=checkCompliance(item.narration);return <article className={`${script===item?"adopted":""} ${compare.includes(index)?"comparing":""}`} key={`${item.title}-${index}`} onClick={()=>adoptRace(item)}><header><b>{letters[index]}</b><div><span>{itemScore.total}</span><small>综合</small></div></header><span className="direction">{item.creativeAngle || item.title}</span><h3>{item.hook}</h3><dl><div><dt>Hook 类型</dt><dd>{item.hookType || hookStrategy}</dd></div><div><dt>框架</dt><dd>{item.framework || props.form.framework}</dd></div><div><dt>场景</dt><dd>{item.scenario || item.style}</dd></div></dl><div className="race-status"><span className={risks.length?"risk":"safe"}>{risks.length?`${risks.length} 项风险`:"合规通过"}</span>{script===item&&<span className="adopted-state">当前采用</span>}</div><footer><button className="primary" onClick={e=>{e.stopPropagation();adoptRace(item)}}>{script===item?"已采用":"采用"}</button><button className={compare.includes(index)?"selected":""} onClick={e=>{e.stopPropagation();toggleCompare(index)}}>{compare.includes(index)?"已选对比":"对比"}</button></footer></article>})}</div>}</section>
-        <footer className="pipeline-bar"><div className="pipeline-context"><span>当前脚本</span><b>{versions[activeVersion]?.label||"V1"}</b><small>{draftScript?.title||"尚未生成"}</small>{savedNotice&&<em>✓ 已保存为新版本</em>}</div><div><button disabled={!draftScript} onClick={()=>{saveVersion();notifyWorkspace("脚本版本已保存")}}>保存脚本</button><button disabled={!draftScript} onClick={()=>document.querySelector(".compliance-panel")?.scrollIntoView({behavior:"smooth"})}>合规检测</button><button disabled={!draftScript} onClick={()=>props.onNavigate("voice")}>发送到 AI 配音</button><button className="pipeline-primary" disabled={!draftScript} onClick={()=>props.onNavigate("director")}>进入 AI 导演 →</button></div></footer>
+        <footer className="pipeline-bar"><div className="pipeline-context"><span>当前方案</span><b>{versions[activeVersion]?.label||"V1"}</b><small>{draftScript?.title||"尚未生成"}</small>{savedNotice&&<em>✓ 新方案已独立保存</em>}</div><div><button disabled={!draftScript} onClick={()=>{saveVersion();notifyWorkspace("当前版本已保存")}}>保存当前版本</button><button disabled={props.loading||!props.inputReady||!providerReady} onClick={()=>props.onGenerate(controls(1))}>生成新方案</button><button disabled={!draftScript} onClick={()=>document.querySelector(".compliance-panel")?.scrollIntoView({behavior:"smooth"})}>合规检测</button><button disabled={!draftScript} onClick={()=>props.onNavigate("voice")}>AI 语音</button><button className="pipeline-primary" disabled={!draftScript} onClick={()=>props.onNavigate("director")}>进入 AI 导演 →</button></div></footer>
       </main>
 
       <aside className="studio-column studio-settings"><div className="studio-card-head"><div><span>AI 设置</span><h2>AI 创作设置</h2></div><small className={providerReady?"provider-on":"provider-off"}>{providerReady?"在线":"本地"}</small></div><section className="setting-group model-selector"><header><b>AI 模型</b><span>{selectedProviderStatus?.configured?"已连接":"未配置"}</span></header><select aria-label="AI 模型" value={props.selectedProvider} onChange={e=>props.onProviderChange(e.target.value as ProviderId)}>{(["deepseek","doubao","openai"] as ProviderId[]).map(id=>{const item=props.providerStatuses[id];return <option value={id} key={id}>{item.label} · {item.configured?"已连接":"未配置"}</option>})}</select>{!providerReady&&<p className="provider-warning">缺少：{selectedProviderStatus?.missingFields.join("、")}</p>}</section><section className="setting-group"><header><b>创作模式</b><span>已接入</span></header><div className="choice-grid">{creationModes.map(mode=><button className={creationMode===mode?"selected":""} onClick={()=>setCreationMode(mode)} key={mode}>{mode}</button>)}</div></section><section className="setting-group"><header><b>开场策略</b><span>已接入</span></header><div className="choice-grid three">{hookStrategies.map(strategy=><button className={hookStrategy===strategy?"selected":""} onClick={()=>setHookStrategy(strategy)} key={strategy}>{strategy}</button>)}</div></section><section className="setting-group"><header><b>内容框架</b><span>已接入</span></header><select value={props.form.framework} onChange={e=>props.onUpdate("framework",e.target.value)}><option>智能随机</option>{compact内容框架s.map(name=><option key={name}>{name}</option>)}{props.frameworks.filter(item=>!compact内容框架s.includes(item.name)).map(item=><option key={item.name}>{item.name}</option>)}</select></section><section className="setting-group"><header><b>创意强度</b><span>已接入</span></header><div className="studio-segments">{["稳定","平衡","激进"].map(value=><button className={creativity===value?"selected":""} onClick={()=>set创意强度(value)} key={value}>{value}</button>)}</div></section><section className="setting-group"><header><b>生成数量</b><span>已接入</span></header><div className="studio-pair"><label>时长<select value={props.form.duration} onChange={e=>props.onUpdate("duration",e.target.value)}><option value="30">30s</option><option value="45">45s</option><option value="60">60s</option></select></label><label>语言<select value={props.form.language} onChange={e=>props.onUpdate("language",e.target.value)}>{props.languages.map(x=><option key={x}>{x}</option>)}</select></label></div><label>生成数量<div className="studio-segments"><button className={outputCount===1?"selected":""} onClick={()=>set生成数量Count(1)}>1 条</button><button className={outputCount===5?"selected":""} onClick={()=>set生成数量Count(5)}>5 条赛马</button></div></label></section><div className="provider-card"><span>AI 服务状态</span><strong>{props.lastProviderRun ? props.lastProviderRun.providerRequested+" → "+props.lastProviderRun.providerUsed : (selectedProviderStatus?.label||"Provider")+" "+(providerReady?"已连接":"未配置")}</strong><p>{props.lastProviderRun ? "AI="+(props.lastProviderRun.aiGenerated?"是":"否")+" · Fallback="+(props.lastProviderRun.fallbackUsed?"是":"否")+" · "+(props.lastProviderRun.providerErrorType||"无错误")+" · "+(props.lastProviderRun.responseTimeMs??"—")+"ms" : "切换只影响下一次生成，不会重置 Brief 或创作控制项。"}</p></div><div className="generation-summary"><span>生成摘要</span><p>{generationSummary}</p></div>{props.error&&<p className="studio-error">{props.error}</p>}<button className="studio-generate" disabled={!props.inputReady||props.loading||props.raceLoading||!providerReady} onClick={()=>{set生成数量Count(1);props.onGenerate(controls(1))}}>{props.loading?"正在生成…":"✦ 生成单条脚本"}</button><button className="studio-race" disabled={!props.inputReady||props.loading||props.raceLoading||!providerReady} onClick={()=>{set生成数量Count(5);props.onGenerateRace(controls(5))}}>{props.raceLoading?"赛马生成中…":"生成 5 条赛马稿"}</button></aside>
