@@ -75,12 +75,12 @@ export default function Dashboard({ metrics, recent, onNavigate, onOpenRecent, o
 
       <section className="vf-dashboard-section vf-recent-section">
         <header><div><span>最近项目</span><h2>继续项目工作</h2></div><button type="button" onClick={() => onNavigate("projects")}>查看全部项目 →</button></header>
-        {recent.length === 0 ? <WorkspaceState compact eyebrow="最近项目" title="还没有创作项目" description="从一个真实产品开始第一个 AI 创作流程，后续资产都会归入同一个项目。" primary={{label:"新建第一个项目",onClick:()=>onNavigate("projects")}} secondary={{label:"先看爆款洞察",onClick:()=>onNavigate("breakdown")}} /> : <div className="vf-recent-list">{recent.map(item => <article key={item.key}>
+        {recent.length === 0 ? <WorkspaceState compact eyebrow="最近项目" title="还没有创作项目" description="从一个真实产品开始第一个 AI 创作流程，后续资产都会归入同一个项目。" primary={{label:"新建第一个项目",onClick:()=>onNavigate("projects")}} secondary={{label:"先看爆款洞察",onClick:()=>onNavigate("breakdown")}} /> : <><article className="vf-continue-project"><div><span>继续上次创作</span><h3>{recent[0].projectName||recent[0].title}</h3><p>最后编辑：{recent[0].stage||"AI Script Studio"} · {formatTime(recent[0].updatedAt)}</p></div><button type="button" onClick={()=>recent[0].projectName?onOpenProject(recent[0].key):onOpenRecent(recent[0].key,"script")}>继续 <i>→</i></button></article><div className="vf-recent-list">{recent.map(item => <article key={item.key}>
           <div className="vf-recent-mark">{item.product.trim().slice(0, 1) || "创"}</div>
           <div className="vf-recent-main"><div><span>{item.stage || (item.current ? "当前采用" : "脚本")}</span><small>{formatTime(item.updatedAt)}</small></div><h3>{item.projectName || item.title}</h3><p>{item.product} · {item.market || "未设置市场"}</p></div>
           <div className="vf-recent-meta"><span>{item.language || "未设置语言"}</span><span>{item.platform}</span><span>{item.duration}s</span></div>
           <div className="vf-recent-actions">{item.projectName?<><button type="button" onClick={() => onOpenProject(item.key)}>打开项目</button><button type="button" onClick={() => onOpenProject(item.key)}>{item.nextAction || "继续项目"}</button></>:<><button type="button" onClick={() => onOpenRecent(item.key, "script")}>查看脚本</button><button type="button" onClick={() => onOpenRecent(item.key, "director")}>进入导演</button></>}</div>
-        </article>)}</div>}
+        </article>)}</div></>}
       </section>
 
       <section className="vf-dashboard-section vf-trend-section"><header><div><span>创作趋势</span><h2>近 7 天{dataMode==="demo"?"演示":"真实"}活动</h2></div><p>{metrics.periods.available ? `今日 ${metrics.periods.today} · 本周 ${metrics.periods.week} · 本月 ${metrics.periods.month}` : "暂无历史统计"}</p></header>

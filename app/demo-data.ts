@@ -12,6 +12,7 @@ export type DemoProject = RecentWorkItem & {
   stage: "洞察" | "复刻" | "脚本" | "导演" | "语音" | "复盘";
   nextAction: string;
   progress: number;
+  createdAt?: string;
   assets: { analysis: number; replication: number; scripts: number; director: number; voice: number; reviews: number };
 };
 

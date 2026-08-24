@@ -145,6 +145,7 @@ export default function Home() {
   const [accountForm, setAccountForm] = useState({ url: "", market: "西班牙", product: "钢化膜" });
   const [form, setForm] = useState({ product: "变形金刚钢化膜", sellingPoints: "10秒自动除尘安装；无气泡、不歪；28°防窥；表层电镀疏水疏油层；抗刮耐磨、抗冲击；贴合紧密、不易翘边", audience: "经常自己贴坏钢化膜、在意隐私的手机用户", country: "西班牙", language: "西班牙语", style: "强冲突测评", framework: "智能随机", duration: "45", offer: "库存有限；买一份到手两张膜；现在下单加赠镜头保护膜" });
   const memoryReady=useRef(false);
+  const [memorySaveState,setMemorySaveState]=useState<"saved"|"saving">("saved");
   const [projectMemory,setProjectMemory]=useState<ProjectMemory>(()=>readProjectMemory()||{
     version:1,
     projects:demoProjects.map((item,index)=>({id:item.key,name:item.projectName,product:item.product,market:item.market||"",platform:item.platform||"TikTok",language:item.language||"",stage:item.stage,createdAt:new Date(Date.parse(item.updatedAt||"")-index*86400000).toISOString(),updatedAt:item.updatedAt||new Date().toISOString(),status:item.status,progress:item.progress,owner:item.owner,assets:{scriptVersions:[]}})),
@@ -190,8 +191,9 @@ export default function Home() {
 
   useEffect(()=>{
     if(!memoryReady.current)return;
+    setMemorySaveState("saving");
     cacheProjectMemory(projectMemory);
-    const timer=window.setTimeout(()=>{void fetch("/api/project-memory",{method:"PUT",headers:{"content-type":"application/json"},body:JSON.stringify(projectMemory)});},450);
+    const timer=window.setTimeout(()=>{void fetch("/api/project-memory",{method:"PUT",headers:{"content-type":"application/json"},body:JSON.stringify(projectMemory)}).finally(()=>setMemorySaveState("saved"));},450);
     return()=>window.clearTimeout(timer);
   },[projectMemory]);
 
@@ -203,6 +205,14 @@ export default function Home() {
     });
   }
   function saveWorkspaceSnapshot(patch:Partial<ProjectMemory["workspace"]>){setProjectMemory(current=>({...current,workspace:{...current.workspace,...patch},updatedAt:new Date().toISOString()}));}
+  function createProject(input:{name:string;product:string;market:string;platform:string;language:string}){
+    const now=new Date().toISOString();const id=`project-${Date.now()}`;
+    const project:PersistentProject={id,name:input.name.trim(),product:input.product.trim(),market:input.market.trim(),platform:input.platform,language:input.language,stage:"洞察",createdAt:now,updatedAt:now,status:"创作中",progress:0,owner:"苏苏",assets:{scriptVersions:[]}};
+    setProjectMemory(current=>({...current,projects:[project,...current.projects],workspace:{...current.workspace,currentProjectId:id,activeView:"projects"},updatedAt:now}));setSelectedProjectKey(id);
+  }
+  function renameProject(id:string,name:string){setProjectMemory(current=>({...current,projects:current.projects.map(project=>project.id===id?touchProject(project,{name:name.trim()}):project),updatedAt:new Date().toISOString()}));}
+  function duplicateProject(id:string){const copyId=`project-${Date.now()}`;setProjectMemory(current=>{const source=current.projects.find(project=>project.id===id);if(!source)return current;const now=new Date().toISOString();const copy:PersistentProject={...source,id:copyId,name:`${source.name} 副本`,createdAt:now,updatedAt:now,assets:{...source.assets,scriptVersions:[...source.assets.scriptVersions]}};return{...current,projects:[copy,...current.projects],workspace:{...current.workspace,currentProjectId:copy.id,activeView:"projects"},updatedAt:now};});setSelectedProjectKey(copyId);}
+  function deleteProject(id:string){setProjectMemory(current=>{const projects=current.projects.filter(project=>project.id!==id);const nextId=current.workspace.currentProjectId===id?projects[0]?.id||null:current.workspace.currentProjectId;return{...current,projects,workspace:{...current.workspace,currentProjectId:nextId},updatedAt:new Date().toISOString()};});setSelectedProjectKey(null);}
 
   async function syncTeam(payload: TeamPayload) {
     if (!teamConnected || !teamPassword) return;
@@ -346,7 +356,7 @@ export default function Home() {
   ];
   const realDashboardMetrics=buildDashboardMetrics({products:productProfiles,cases:viralCases,scripts:history,currentScript:result,recentCount:recentWork.length,providers:providerStatuses});
   const dashboardMetrics=DATA_MODE==="demo"?demoDashboardData:realDashboardMetrics;
-  const persistentProjects:DemoProject[]=projectMemory.projects.map((project,index)=>{const counts={analysis:project.assets.analyzerResult?1:0,replication:project.assets.replicationResult?1:0,scripts:project.assets.scriptVersions.length,director:project.assets.directorResult?1:0,voice:project.assets.voiceResult?1:0,reviews:0};const type=project.stage==="导演"?"导演":project.stage==="语音"?"语音":project.stage==="洞察"||project.stage==="复刻"?"洞察":"脚本";return{key:project.id,projectName:project.name,title:(project.assets.scriptVersions.at(-1) as Script|undefined)?.title||project.name,product:project.product,market:project.market,language:project.language,platform:project.platform,duration:Number(projectMemory.workspace.form?.duration)||30,updatedAt:project.updatedAt,current:project.id===projectMemory.workspace.currentProjectId,type,status:(project.status as DemoProject["status"])||"创作中",stage:project.stage as DemoProject["stage"],nextAction:project.stage==="导演"?"完善 AI 导演方案":project.stage==="语音"?"继续 AI 语音":"继续创作",progress:project.progress??Math.min(95,20+Object.values(counts).reduce((sum,value)=>sum+value,0)*8),owner:project.owner||"苏苏",assets:counts};});
+  const persistentProjects:DemoProject[]=projectMemory.projects.map((project,index)=>{const counts={analysis:project.assets.analyzerResult?1:0,replication:project.assets.replicationResult?1:0,scripts:project.assets.scriptVersions.length,director:project.assets.directorResult?1:0,voice:project.assets.voiceResult?1:0,reviews:0};const type:DemoProject["type"]=project.stage==="导演"?"导演":project.stage==="语音"?"语音":project.stage==="洞察"||project.stage==="复刻"?"洞察":"脚本";return{key:project.id,projectName:project.name,title:(project.assets.scriptVersions.at(-1) as Script|undefined)?.title||project.name,product:project.product,market:project.market,language:project.language,platform:project.platform,duration:Number(projectMemory.workspace.form?.duration)||30,createdAt:project.createdAt,updatedAt:project.updatedAt,current:project.id===projectMemory.workspace.currentProjectId,type,status:(project.status as DemoProject["status"])||"创作中",stage:project.stage as DemoProject["stage"],nextAction:project.stage==="导演"?"完善 AI 导演方案":project.stage==="语音"?"继续 AI 语音":"继续创作",progress:project.progress??Math.min(95,20+Object.values(counts).reduce((sum,value)=>sum+value,0)*8),owner:project.owner||"苏苏",assets:counts};}).sort((a,b)=>Date.parse(b.updatedAt||"")-Date.parse(a.updatedAt||""));
   const demoRecent=DATA_MODE==="demo"?demoProjects:recentWork;
   const dashboardRecent=persistentProjects.length?persistentProjects:demoRecent;
   const openProject=(key:string)=>{setSelectedProjectKey(key);setActive("projects");saveWorkspaceSnapshot({activeView:"projects",currentProjectId:key});};
@@ -356,7 +366,7 @@ export default function Home() {
     header={<TopHeader active={active} aiConnected={aiConnected} teamConnected={teamConnected} searchItems={searchItems} />}
   >
       {active === "dashboard" && <Dashboard metrics={dashboardMetrics} recent={dashboardRecent} dataMode={DATA_MODE} onNavigate={setActive} onOpenRecent={openRecent} onOpenProject={openProject} />}
-      {active === "projects" && <ProjectWorkspace projects={persistentProjects} initialProjectKey={selectedProjectKey} onNavigate={view=>{setActive(view);saveWorkspaceSnapshot({activeView:view});}} />}
+      {active === "projects" && <ProjectWorkspace projects={persistentProjects} initialProjectKey={selectedProjectKey} saveState={memorySaveState} onCreate={createProject} onRename={renameProject} onDuplicate={duplicateProject} onDelete={deleteProject} onSelect={id=>saveWorkspaceSnapshot({currentProjectId:id,activeView:"projects"})} onNavigate={view=>{setActive(view);saveWorkspaceSnapshot({activeView:view});}} />}
       {active === "video" && <VideoAnalyzer products={productProfiles.map(x=>x.name)} />}
       {active === "director" && <ShootingDirector input={directorInput} onNavigate={view=>setActive(view)} onChange={value=>{updateProjectMemory({directorResult:value},{stage:"导演",progress:72});saveWorkspaceSnapshot({activeView:"director"});}} />}
       {active === "voice" && <VoiceStudio initialText={result?.narration ?? ""} onChange={value=>{updateProjectMemory({voiceResult:value},{stage:"语音",progress:84});saveWorkspaceSnapshot({activeView:"voice"});}} />}
