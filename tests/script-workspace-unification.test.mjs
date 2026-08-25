@@ -44,3 +44,30 @@ test("real project versions restore the version rail and dense editor content",(
   assert.match(css,/height:58px/);
   assert.match(css,/\.pacing-card,[^}]+\.editor-status\{display:none\}/);
 });
+
+test("Version Rail always builds five slots and fills only real versions",()=>{
+  assert.match(studio,/Array\.from\(\{length:5\}/);
+  assert.match(studio,/item:props\.raceResults\[index\]\?\?null/);
+  assert.match(studio,/versionSlots\.map\(\(\{item,index,direction\}\)/);
+  assert.match(studio,/if\(item\)\{const itemScore=props\.scoreScript\(item\)/);
+  assert.match(studio,/key=\{`empty-v\$\{index\+1\}`\}/);
+  assert.match(studio,/>待生成<\/span>/);
+  assert.match(studio,/"生成此版本"/);
+});
+
+test("Version Rail keeps real identity, score and active state without fabricating empty content",()=>{
+  assert.match(studio,/variantIdentity\(script\)===variantIdentity\(item\)/);
+  assert.match(studio,/item\.style\|\|item\.hookType\|\|direction/);
+  assert.match(studio,/\{item\.hook\}/);
+  assert.match(studio,/\{itemScore\.total\}/);
+  const emptyBranch=studio.slice(studio.indexOf('return <article className="version-empty"'),studio.indexOf("</section>",studio.indexOf('return <article className="version-empty"')));
+  assert.doesNotMatch(emptyBranch,/itemScore|item\.hook/);
+});
+
+test("Version Rail remains compact with explicit empty slot styling",()=>{
+  assert.match(css,/\.script-version-rail>header\{height:34px/);
+  assert.match(css,/\.version-select\{height:58px/);
+  assert.match(css,/article\.version-empty[^}]+border-style:dashed/);
+  assert.doesNotMatch(studio,/className="empty" key=\{`empty-v/);
+  assert.match(css,/\.version-slot-generate\{/);
+});
