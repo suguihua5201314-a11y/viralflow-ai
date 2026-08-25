@@ -35,3 +35,12 @@ test("project recovery follows project-owned versions, scoped workspace, replica
   assert.match(page,/restoreProjectScriptState\(project,projectMemory\.workspace\)/);
   assert.doesNotMatch(page,/setResult\(projectMemory\.workspace\.currentScript as StudioScript\)/);
 });
+
+test("real project versions restore the version rail and dense editor content",()=>{
+  assert.match(recovery,/restoredRaceResults\.length\?restoredRaceResults:versions/);
+  assert.match(recovery,/new Map\(project\.assets\.scriptVersions/);
+  assert.match(studio,/variantIdentity\(script\)===variantIdentity\(item\)/);
+  assert.match(studio,/className="script-context-strip"/);
+  assert.match(css,/height:58px/);
+  assert.match(css,/\.pacing-card,[^}]+\.editor-status\{display:none\}/);
+});

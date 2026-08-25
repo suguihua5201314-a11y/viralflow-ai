@@ -7,11 +7,12 @@ const belongsToProject=(script:RestorableScript,project:PersistentProject)=>scri
 
 export function restoreProjectScriptState(project:PersistentProject|undefined,snapshot:ProjectWorkspaceSnapshot){
  if(!project)return{currentScript:null,raceResults:[] as RestorableScript[],versions:[] as RestorableScript[]};
- const versions=project.assets.scriptVersions.filter(isScript),versionIds=new Set(versions.map(identity));
+ const versions=[...new Map(project.assets.scriptVersions.filter(isScript).map(script=>[identity(script),script])).values()],versionIds=new Set(versions.map(identity));
  const workspaceScript=isScript(snapshot.currentScript)&&belongsToProject(snapshot.currentScript,project)&&(!versions.length||versionIds.has(identity(snapshot.currentScript)))?snapshot.currentScript:null;
  const replication=project.assets.replicationResult&&typeof project.assets.replicationResult==="object"?((project.assets.replicationResult as {script?:unknown}).script):null;
  const replicationScript=isScript(replication)&&belongsToProject(replication,project)?replication:null;
  const currentScript=workspaceScript||versions.at(-1)||replicationScript||null;
- const raceResults=Array.isArray(snapshot.raceResults)?snapshot.raceResults.filter(isScript).filter(script=>belongsToProject(script,project)&&versionIds.has(identity(script))):[];
+ const restoredRaceResults=Array.isArray(snapshot.raceResults)?snapshot.raceResults.filter(isScript).filter(script=>belongsToProject(script,project)&&versionIds.has(identity(script))):[];
+ const raceResults=restoredRaceResults.length?restoredRaceResults:versions;
  return{currentScript,raceResults,versions};
 }
