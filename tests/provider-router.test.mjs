@@ -30,3 +30,5 @@ test("all text AI features share the doubao default through Provider Router",asy
  for(const source of files)assert.ok(source.includes("DEFAULT_PROVIDER"));
  const knowledge=await readFile(new URL("../app/knowledge-context.ts",import.meta.url),"utf8");assert.equal(knowledge.includes("fetch("),false);assert.equal(knowledge.includes("callProvider("),false);
 });
+
+test("provider thinking override remains opt-in",async()=>{const router=await readFile(new URL("../app/provider-router.ts",import.meta.url),"utf8");assert.match(router,/thinking\?:"enabled"\|"disabled"\|"auto"/);assert.match(router,/request\.thinking\?/);const callers=await Promise.all(["analyze","replicate","copilot","scripts"].map(name=>readFile(new URL(`../app/api/${name}/route.ts`,import.meta.url),"utf8")));for(const source of callers)assert.equal(source.includes('thinking:"disabled"'),false);});

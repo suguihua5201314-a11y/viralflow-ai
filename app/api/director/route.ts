@@ -2,14 +2,14 @@ import {callProvider,DEFAULT_PROVIDER,ProviderCallError} from "../../provider-ro
 import {checkContextIntegrity,directorContextId,directorFactViolations,directorKnowledge,fallbackDirector,rebalanceShots,targetDuration,validateDirector,type DirectorRequest,type DirectorResult,type DirectorShot} from "../../director-core";
 import {renderKnowledgeContext} from "../../knowledge-context";
 import {validateScriptLanguage} from "../../language-guard";
-import {evaluateShotIntelligenceBatch} from "../../director-intelligence";
+import {evaluateShotIntelligenceBatch,type ShotIntelligenceNeighbor} from "../../director-intelligence";
 import type {ProviderErrorType} from "../../provider-types";
 
 export const maxDuration=120;
 
 type DirectorAction="generate"|"regenerate-shot"|"suggest-shot"|"evaluate-shots";
 type ShotActionRequest=DirectorRequest&{action:"regenerate-shot"|"suggest-shot";contextId:string;currentShot?:DirectorShot;previousShot?:DirectorShot;nextShot?:DirectorShot;directorPlan:DirectorResult["directorPlan"];sourceBlock?:{id:string;stage:string;text:string;visual?:string};preset?:string;instruction?:string};
-type IntelligenceActionRequest=DirectorRequest&{action:"evaluate-shots";contextId:string;shots:DirectorShot[];directorPlan:DirectorResult["directorPlan"];force?:boolean};
+type IntelligenceActionRequest=DirectorRequest&{action:"evaluate-shots";contextId:string;shots:DirectorShot[];directorPlan:DirectorResult["directorPlan"];previousShot?:ShotIntelligenceNeighbor;nextShot?:ShotIntelligenceNeighbor;force?:boolean};
 type Payload=DirectorRequest&{action?:DirectorAction;contextId?:string;shots?:DirectorShot[];directorPlan?:DirectorResult["directorPlan"];force?:boolean};
 const safeError=(error:unknown):ProviderErrorType=>error instanceof ProviderCallError?error.category:"schema_validation_error";
 const shotShape={shotId:"unchanged",order:1,startTime:0,endTime:3,duration:3,sourceBlockId:"scene-1",stage:"PROOF",purpose:"Demonstration / Verification",shotType:"Proof Shot",framing:"Product Macro",cameraAngle:"45 Degree",cameraMovement:"Static",visualDescription:"string",subject:"string",productAction:"string",talentAction:"string",props:["string"],environment:"string",dialogue:"string or empty",voiceover:"string or empty",onScreenText:"string or empty",proofRequirement:"string or empty",transition:"Hard Cut",editingNotes:"string",audioSfx:"string",continuityNotes:"string",priority:"Critical | High | Normal"};
@@ -29,7 +29,7 @@ async function handleIntelligenceAction(body:IntelligenceActionRequest){
  const shell={directorPlan:body.directorPlan,shots:body.shots},structure=validateDirector(shell,body).filter(issue=>issue!=="director_structure"),facts=directorFactViolations(shell,body),contextIssues=checkContextIntegrity(shell,body,body.contextId).issues;
  if(structure.length||facts.length||contextIssues.length)return Response.json({error:"Shot Intelligence 输入未通过结构或事实校验",category:facts.length?"fact_validation_error":"schema_validation_error",diagnostics:[...structure,...facts,...contextIssues.map(issue=>`context:${issue.code}:${issue.value||""}`)]},{status:422});
  const provider=body.settings?.provider||DEFAULT_PROVIDER;
- try{return Response.json(await evaluateShotIntelligenceBatch({request:body,directorPlan:body.directorPlan,shots:body.shots,contextId:body.contextId,provider,force:body.force}));}
+ try{return Response.json(await evaluateShotIntelligenceBatch({request:body,directorPlan:body.directorPlan,shots:body.shots,contextId:body.contextId,provider,previousShot:body.previousShot,nextShot:body.nextShot,force:body.force}));}
  catch(error){const category=safeError(error),status=category==="missing_field"?503:category==="rate_limit"?429:category==="fact_validation_error"||category==="schema_validation_error"||category==="structured_fields_missing"?422:502;return Response.json({error:category==="timeout"?"Shot Intelligence 评分超时，请重试。":category==="fact_validation_error"?"优化建议包含未经产品资料支持的信息，已拒绝。":"Shot Intelligence 暂时不可用，请重试。",category},{status});}
 }
 export async function POST(request:Request){let body:Payload;try{body=await request.json() as Payload;}catch{return Response.json({error:"Director输入不是有效JSON"},{status:400});}if(!body?.script||!body.context?.product)return Response.json({error:"缺少结构化Script或Director Context"},{status:400});if(body.action==="regenerate-shot"||body.action==="suggest-shot")return handleShotAction(body as ShotActionRequest);

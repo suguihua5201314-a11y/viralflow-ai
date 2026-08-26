@@ -8,7 +8,9 @@ test("Step 6.4-B exposes four real scores and isolated shot states",async()=>{
  for(const state of ['"idle"','"loading"','"success"','"error"','"stale"'])assert.ok(source.includes(state),state);
  assert.ok(source.includes("分析失败 · 重试"));
  assert.ok(source.includes("Object.fromEntries(ids.map"));
- assert.ok(source.includes("shots.slice(from,to)"));
+ assert.ok(source.includes("analyzeShots([shots[index]],force"));
+ assert.ok(source.includes("previousShot:shots[index-1]"));
+ assert.ok(source.includes("nextShot:shots[index+1]"));
 });
 
 test("Step 6.4-B creative directions reuse guarded shot regeneration",async()=>{
