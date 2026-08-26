@@ -49,11 +49,13 @@ export type ShotIntelligenceBatchResult={
 type ProviderEvaluation={shotId?:unknown;scores?:Record<string,unknown>;suggestion?:Record<string,unknown>};
 type CacheEntry={evaluation:ShotIntelligenceEvaluation;expiresAt:number};
 
+export const DIRECTOR_INTELLIGENCE_PROVIDER_TIMEOUT_MS=90_000;
 const CACHE_TTL_MS=15*60*1000;
 const CACHE_MAX_ENTRIES=240;
 const intelligenceCache=new Map<string,CacheEntry>();
 const text=(value:unknown)=>typeof value==="string"?value.trim():"";
 const clip=(value:string,max=600)=>value.length>max?value.slice(0,max):value;
+const intelligenceLog=(event:string,details:Record<string,unknown>={})=>console.log(JSON.stringify({scope:"director_intelligence",event,...details}));
 
 function stableHash(value:string){let output=2166136261;for(let index=0;index<value.length;index++){output^=value.charCodeAt(index);output=Math.imul(output,16777619);}return(output>>>0).toString(36);}
 
@@ -105,9 +107,10 @@ function intelligencePrompt(input:ShotIntelligenceBatchInput,misses:Array<{shot:
 
 async function callIntelligenceProvider(input:ShotIntelligenceBatchInput,misses:Array<{shot:DirectorShot;fingerprint:string;previousShot?:DirectorShot;nextShot?:DirectorShot}>){
  const testResponse=process.env.DIRECTOR_INTELLIGENCE_TEST_RESPONSE;
+ if(process.env.DIRECTOR_INTELLIGENCE_TEST_MODE==="1"&&process.env.DIRECTOR_INTELLIGENCE_TEST_ERROR==="timeout")throw new ProviderCallError("timeout","Shot Intelligence provider test timeout");
  if(process.env.DIRECTOR_INTELLIGENCE_TEST_MODE==="1"&&testResponse)return{content:testResponse,responseTimeMs:1};
  const messages=intelligencePrompt(input,misses);
- return callProvider({provider:input.provider,messages:[{role:"system",content:messages.system},{role:"user",content:messages.user}],temperature:.2,maxTokens:Math.min(5200,900+misses.length*260),timeoutMs:45000});
+ return callProvider({provider:input.provider,messages:[{role:"system",content:messages.system},{role:"user",content:messages.user}],temperature:.2,maxTokens:Math.min(5200,900+misses.length*260),timeoutMs:DIRECTOR_INTELLIGENCE_PROVIDER_TIMEOUT_MS});
 }
 
 export async function evaluateShotIntelligenceBatch(input:ShotIntelligenceBatchInput):Promise<ShotIntelligenceBatchResult>{
@@ -115,12 +118,21 @@ export async function evaluateShotIntelligenceBatch(input:ShotIntelligenceBatchI
  if(input.shots.length>24)throw new ProviderCallError("schema_validation_error","单次最多评估24个镜头");
  pruneCache();const hits=new Map<string,ShotIntelligenceEvaluation>(),misses:Array<{shot:DirectorShot;fingerprint:string;previousShot?:DirectorShot;nextShot?:DirectorShot}>=[];
  input.shots.forEach((shot,index)=>{const previousShot=input.shots[index-1],nextShot=input.shots[index+1],fingerprint=shotIntelligenceFingerprint(shot,input.contextId,previousShot,nextShot),cached=input.force?null:readShotIntelligenceCache(fingerprint);if(cached&&cached.shotId===shot.shotId)hits.set(shot.shotId,cached);else misses.push({shot,fingerprint,previousShot,nextShot});});
+ if(hits.size)intelligenceLog("cache_hit",{count:hits.size,shotCount:input.shots.length});
+ if(misses.length)intelligenceLog("cache_miss",{count:misses.length,shotCount:input.shots.length,force:Boolean(input.force)});
  if(!misses.length)return{evaluations:input.shots.map(shot=>hits.get(shot.shotId)!),metadata:{providerRequested:input.provider,providerUsed:"cache",responseTimeMs:0,cacheHits:hits.size,cacheMisses:0,batchSize:input.shots.length}};
- const response=await callIntelligenceProvider(input,misses),raw=parseProviderEvaluations(response.content),byId=new Map<string,ProviderEvaluation>();
+ const providerStarted=Date.now();intelligenceLog("provider_started",{provider:input.provider,shotCount:misses.length,timeoutMs:DIRECTOR_INTELLIGENCE_PROVIDER_TIMEOUT_MS});let response:Awaited<ReturnType<typeof callIntelligenceProvider>>;
+ try{response=await callIntelligenceProvider(input,misses);intelligenceLog("provider_completed",{provider:input.provider,status:200,durationMs:response.responseTimeMs,contentLength:response.content.length,finishReason:"unavailable"});}
+ catch(error){const category=error instanceof ProviderCallError?error.category:"provider_http_error",event=category==="timeout"?"provider_timeout":"provider_error";intelligenceLog(event,{provider:input.provider,category,durationMs:Date.now()-providerStarted});throw error;}
+ intelligenceLog("parse_started",{contentLength:response.content.length});const raw=parseProviderEvaluations(response.content);intelligenceLog("parse_completed",{evaluationCount:raw.length});const byId=new Map<string,ProviderEvaluation>();
  for(const candidate of raw){const shotId=text(candidate.shotId);if(!shotId||byId.has(shotId))throw new ProviderCallError("schema_validation_error","Shot Intelligence 包含重复或无效 shotId");byId.set(shotId,candidate);}
+ intelligenceLog("schema_validation_started",{expectedCount:misses.length,actualCount:byId.size});
  const expected=new Set(misses.map(item=>item.shot.shotId));if(byId.size!==expected.size||[...byId.keys()].some(shotId=>!expected.has(shotId)))throw new ProviderCallError("schema_validation_error","Shot Intelligence 返回镜头与请求不一致");
  const evaluatedAt=new Date().toISOString(),knowledge=directorKnowledge(input.request),grounding=scriptBlocks(input.request.script).flatMap(block=>[block.text,block.visual]).join("\n"),created=new Map<string,ShotIntelligenceEvaluation>();
- for(const item of misses){const candidate=byId.get(item.shot.shotId);if(!candidate)throw new ProviderCallError("structured_fields_missing",`缺少 ${item.shot.shotId} 评分`);const evaluation=normalizeProviderEvaluation(candidate,item.shot,item.fingerprint,input.provider,evaluatedAt),surface=Object.values(evaluation.suggestion).join("\n"),violations=findFactViolations(surface,knowledge,grounding);if(violations.length)throw new ProviderCallError("fact_validation_error",violations.join("；"));created.set(item.shot.shotId,evaluation);}
+ for(const item of misses){const candidate=byId.get(item.shot.shotId);if(!candidate)throw new ProviderCallError("structured_fields_missing",`缺少 ${item.shot.shotId} 评分`);created.set(item.shot.shotId,normalizeProviderEvaluation(candidate,item.shot,item.fingerprint,input.provider,evaluatedAt));}
+ intelligenceLog("schema_validation_completed",{evaluationCount:created.size});
+ for(const evaluation of created.values()){const surface=Object.values(evaluation.suggestion).join("\n"),violations=findFactViolations(surface,knowledge,grounding);if(violations.length)throw new ProviderCallError("fact_validation_error",violations.join("；"));}
+ intelligenceLog("fact_validation_completed",{evaluationCount:created.size});
  for(const evaluation of created.values())writeShotIntelligenceCache(evaluation);
  return{evaluations:input.shots.map(shot=>hits.get(shot.shotId)||created.get(shot.shotId)!),metadata:{providerRequested:input.provider,providerUsed:input.provider,responseTimeMs:response.responseTimeMs,cacheHits:hits.size,cacheMisses:misses.length,batchSize:input.shots.length}};
 }

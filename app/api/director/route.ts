@@ -5,6 +5,8 @@ import {validateScriptLanguage} from "../../language-guard";
 import {evaluateShotIntelligenceBatch} from "../../director-intelligence";
 import type {ProviderErrorType} from "../../provider-types";
 
+export const maxDuration=120;
+
 type DirectorAction="generate"|"regenerate-shot"|"suggest-shot"|"evaluate-shots";
 type ShotActionRequest=DirectorRequest&{action:"regenerate-shot"|"suggest-shot";contextId:string;currentShot?:DirectorShot;previousShot?:DirectorShot;nextShot?:DirectorShot;directorPlan:DirectorResult["directorPlan"];sourceBlock?:{id:string;stage:string;text:string;visual?:string};preset?:string;instruction?:string};
 type IntelligenceActionRequest=DirectorRequest&{action:"evaluate-shots";contextId:string;shots:DirectorShot[];directorPlan:DirectorResult["directorPlan"];force?:boolean};
@@ -21,6 +23,7 @@ async function handleShotAction(body:ShotActionRequest){if(!body.contextId||body
  return Response.json({candidate,metadata:{providerRequested:provider,providerUsed:errorType?"local":provider,aiGenerated:!errorType,fallbackUsed:Boolean(errorType),providerErrorType:errorType,responseTimeMs,factGuardPassed:directorFactViolations({directorPlan:body.directorPlan,shots:[candidate]},body).length===0,language:body.context.language}});
 }
 async function handleIntelligenceAction(body:IntelligenceActionRequest){
+ console.log(JSON.stringify({scope:"director_intelligence",event:"intelligence_request_started",shotCount:Array.isArray(body.shots)?body.shots.length:0,force:Boolean(body.force),provider:body.settings?.provider||DEFAULT_PROVIDER}));
  if(!body.contextId||body.contextId!==directorContextId(body))return Response.json({error:"导演上下文已变化，请重新评估当前导演方案。",category:"context_identity",contextIntegrity:{status:"Needs Attention",issues:[{code:"context_identity",message:"评分上下文与当前脚本不一致"}]}},{status:409});
  if(!body.directorPlan||!Array.isArray(body.shots)||!body.shots.length)return Response.json({error:"缺少 Director Plan 或待评估镜头",category:"missing_field"},{status:400});
  const shell={directorPlan:body.directorPlan,shots:body.shots},structure=validateDirector(shell,body).filter(issue=>issue!=="director_structure"),facts=directorFactViolations(shell,body),contextIssues=checkContextIntegrity(shell,body,body.contextId).issues;
