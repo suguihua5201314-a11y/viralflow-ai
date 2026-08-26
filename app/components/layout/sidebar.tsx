@@ -38,7 +38,7 @@ const projectItems:Array<{id:ActiveView;icon:string;label:string}>=[
 
 export default function Sidebar({ active, onNavigate, onHistory, counts, teamConnected, onTeamToggle, project }: SidebarProps) {
   const countFor = (id: ActiveView) => id === "library" ? counts.library : id === "monitor" ? counts.monitor : id === "history" ? counts.history : id === "products" ? counts.products : id === "reviews" ? counts.reviews : undefined;
-  const projectMode=active==="director"||active==="create";
+  const projectMode=active==="director"||active==="create"||active==="breakdown"||active==="replicate";
   return <aside className="sidebar vf-sidebar">
     <button className="brand vf-brand" type="button" onClick={() => onNavigate("dashboard")} aria-label="返回工作台首页"><span className="brand-mark vf-brand-mark">V</span><div><strong>ViralFlow AI</strong><small>智能创意工作台</small></div></button>
     {projectMode&&project?<button className="vf-director-project" onClick={()=>onNavigate("projects")}><span>{project.product.slice(0,2).toUpperCase()}</span><div><b>{project.product}</b><small>{project.name}</small></div><i>⌄</i></button>:<button className="vf-new-project" onClick={() => onNavigate("projects")}><span>＋</span> 新建项目</button>}
@@ -53,6 +53,6 @@ export default function Sidebar({ active, onNavigate, onHistory, counts, teamCon
         })}</nav>
       </section>)}
     </div>
-    {projectMode?<div className="vf-director-sidebar-foot"><span>PROJECT MEMORY</span><div><i/><b>项目资产已同步</b></div><small>{active==="director"?"Storyboard · Images · Intelligence":"Scripts · Variations · Compliance"}</small></div>:<div className={`sidebar-note team-note vf-team-card ${teamConnected ? "connected" : ""}`}><span>{teamConnected ? "● 团队云端已连接" : "团队云端空间"}</span><p>{teamConnected ? "产品资料、素材和历史脚本将同步给团队。" : "连接后，多台电脑可共享产品资料和历史脚本。"}</p><button onClick={onTeamToggle}>{teamConnected ? "断开本机" : "连接团队空间"}</button></div>}
+    {projectMode?<div className="vf-director-sidebar-foot"><span>PROJECT MEMORY</span><div><i/><b>项目资产已同步</b></div><small>{active==="director"?"Storyboard · Images · Intelligence":active==="create"?"Scripts · Variations · Compliance":active==="breakdown"?"Hook · Structure · Viral Insight":"Mapping · Concepts · Fact Guard"}</small></div>:<div className={`sidebar-note team-note vf-team-card ${teamConnected ? "connected" : ""}`}><span>{teamConnected ? "● 团队云端已连接" : "团队云端空间"}</span><p>{teamConnected ? "产品资料、素材和历史脚本将同步给团队。" : "连接后，多台电脑可共享产品资料和历史脚本。"}</p><button onClick={onTeamToggle}>{teamConnected ? "断开本机" : "连接团队空间"}</button></div>}
   </aside>;
 }

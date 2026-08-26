@@ -25,7 +25,7 @@ test("Test B: AI processing feedback is honest and context-specific",()=>{
   assert.match(state,/steps\?: string\[\]/);
   assert.match(state,/index===0\?"处理中":"等待"/);
   for(const source of [script,analyzer,director,voice])assert.match(source,/steps=\{\[/);
-  assert.match(replication,/vr-loading-steps/);
+  assert.match(replication,/正在迁移爆款机制/);
 });
 
 test("Test C: navigation active state is accessible and visible",()=>{
@@ -48,7 +48,7 @@ test("Test E: actionable cards use restrained elevation",()=>{
 
 test("Test F: empty states keep actionable recovery paths",()=>{
   assert.match(project,/还没有项目/);
-  assert.match(analyzer,/拆解一条爆款内容/);
+  assert.match(analyzer,/还没有爆款分析/);
   assert.match(script,/开始创建第一条短视频脚本/);
   assert.match(director,/选择一个脚本开始导演规划/);
   assert.match(voice,/还没有输入口播文案/);
@@ -64,7 +64,7 @@ test("Test G: save lifecycle is shared by header and Project Memory",()=>{
 
 test("Test H: disabled actions explain why",()=>{
   assert.match(script,/当前 Provider 未配置/);
-  assert.match(replication,/请先选择参考爆款/);
+  assert.match(replication,/还没有复刻来源/);
   assert.match(voice,/GPT API 尚未配置/);
   assert.match(voice,/配置模型 · 未配置 API/);
 });

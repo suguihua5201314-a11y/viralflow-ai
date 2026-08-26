@@ -20,8 +20,8 @@ test("五个核心工作台共享深色 Surface 与三栏层级",()=>{
 });
 
 test("复刻与语音 Intelligence Rail 只展示当前真实状态",()=>{
- assert.match(replication,/vr-intel-rail/);
- assert.match(replication,/source\?\.title/);
+ assert.match(replication,/replication-assistant/);
+ assert.match(replication,/source\.title/);
  assert.match(replication,/target\.product/);
  assert.match(voice,/voice-intelligence/);
  assert.match(voice,/selectedVoice/);
@@ -41,16 +41,16 @@ test("展示层不包含虚假经营指标",()=>{
 });
 
 test("创意复刻升级为产品理解、AI画布与策略助手三栏",()=>{
- for(const marker of ["PRODUCT INTELLIGENCE","AI 爆款拆解画布","AI 创意策略助手","vr-mechanism-stack","vr-adaptation-bridge"])assert.match(replication,new RegExp(marker));
- assert.match(replicationCss,/grid-template-columns:300px minmax\(560px,1fr\) 330px/);
+ for(const marker of ["CREATIVE MAPPING WORKSPACE","ORIGINAL VIRAL PATTERN","AI REPLICATION ASSISTANT","mapping-board","concept-rail"])assert.match(replication,new RegExp(marker));
+ assert.match(readFileSync(new URL("../app/styles/analyzer-replication-workspace.css",import.meta.url),"utf8"),/grid-template-columns:minmax\(620px,1fr\) 360px/);
 });
 
 test("产品理解与复刻洞察全部由当前状态派生",()=>{
- for(const marker of ["target.sellingPoints.split","source.analysis.hook.mechanism","source.analysis.proofMechanisms","strategy?.targetProductFit","candidates.length"])assert.equal(replication.includes(marker),true,marker);
+ for(const marker of ["target.sellingPoints","source.analysis.hook.mechanism","source.analysis.proofMechanisms","strategy.targetProductFit","candidates.slice(0,3)"])assert.equal(replication.includes(marker),true,marker);
 });
 
 test("复刻工作流使用理解导向的四阶段命名",()=>{
- for(const label of ["选择参考爆款","AI 理解内容","生成你的版本","进入创作"])assert.match(replication,new RegExp(label));
+ for(const label of ["ORIGINAL → PRODUCT","爆款机制 × 当前产品知识","三个真实生成方向","发送到 Script Workspace"])assert.match(replication,new RegExp(label));
 });
 
 test("复刻视觉层保留响应式与低动效规则",()=>{
