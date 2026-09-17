@@ -44,6 +44,21 @@ export function assetsForProject(assets: ImageAsset[], projectId: string | null)
   return projectId ? assets.filter(asset => asset.projectId === projectId) : assets;
 }
 
+export function imageAssetSource(asset: ImageAsset) {
+  return asset.metadata?.sourceReference?.type === "director-shot" ? "Director Shot" : "AI 图片创作";
+}
+
+export function currentDirectorAssetIds(assets: ImageAsset[]) {
+  const latestByShot = new Map<string, ImageAsset>();
+  for (const asset of assets) {
+    const shotId = asset.metadata?.sourceReference?.shotId;
+    if (!shotId) continue;
+    const latest = latestByShot.get(shotId);
+    if (!latest || Date.parse(asset.createdAt) > Date.parse(latest.createdAt)) latestByShot.set(shotId, asset);
+  }
+  return new Set([...latestByShot.values()].map(asset => asset.id));
+}
+
 export function saveImageStudioDraft(draft: ImageStudioDraft) {
   if (typeof window === "undefined") return false;
   try { sessionStorage.setItem(IMAGE_STUDIO_DRAFT_KEY, JSON.stringify(draft)); return true; }

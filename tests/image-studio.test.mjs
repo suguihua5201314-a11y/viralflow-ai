@@ -4,16 +4,16 @@ import fs from "node:fs";
 
 const page = fs.readFileSync(new URL("../app/page.tsx", import.meta.url), "utf8");
 const studio = fs.readFileSync(new URL("../app/image-studio.tsx", import.meta.url), "utf8");
+const workspace = fs.readFileSync(new URL("../app/project-asset-workspace.tsx", import.meta.url), "utf8");
 const router = fs.readFileSync(new URL("../app/image-provider-router.ts", import.meta.url), "utf8");
 const route = fs.readFileSync(new URL("../app/api/images/generate/route.ts", import.meta.url), "utf8");
 const assets = fs.readFileSync(new URL("../app/image-assets.ts", import.meta.url), "utf8");
 const memory = fs.readFileSync(new URL("../app/project-memory.ts", import.meta.url), "utf8");
 const navigation = fs.readFileSync(new URL("../app/navigation.ts", import.meta.url), "utf8");
 
-test("A: AI 图片工作台可见界面完成中文化", () => {
-  for (const value of ["AI 图片创作工作台", "AI 商业视觉创作", "图片设置", "图片画布", "生成记录", "项目", "图片描述", "图片类型", "视觉风格", "镜头类型", "图片比例", "生成图片", "暂无生成图片"]) assert.match(studio + navigation, new RegExp(value));
-  for (const value of ["产品展示图", "UGC 达人场景", "TikTok 广告素材", "生活场景", "真实摄影", "高端商业", "电影质感", "用户真实内容风格", "特写", "微距", "广角", "手持拍摄", "9:16 短视频", "商品方图", "横版素材"]) assert.match(studio, new RegExp(value));
-  for (const visibleEnglish of [">Image Settings<", ">Image Canvas<", ">Generation History<", ">Generate<", ">Reserved<", ">Mock<"]) assert.doesNotMatch(studio, new RegExp(visibleEnglish));
+test("A: AI 图片工作台升级为 Project Creative Board", () => {
+  for (const value of ["Images Creative Board", "Asset Inspector", "Image Composer", "CURRENT PROJECT", "搜索 Prompt、Shot ID、Source", "当前项目还没有图片资产"]) assert.match(studio + workspace + navigation, new RegExp(value));
+  for (const value of ["产品图", "UGC", "广告素材", "生活场景", "真实摄影", "高端商业", "电影质感", "特写", "微距", "广角", "手持"]) assert.match(workspace, new RegExp(value));
 });
 
 test("B: 图片生成 API 同时提供状态与 POST 生成入口", () => {
@@ -33,40 +33,37 @@ test("C: API 通过 Image Provider Router 调用真实豆包 Ark Adapter", () =>
   assert.match(router, /response_format: "url"/);
   assert.match(route, /activeProvider: "doubao-image"/);
   assert.match(router, /doubaoImageAdapter/);
-  assert.doesNotMatch(studio, /ark\.cn-beijing\.volces\.com/);
+  assert.doesNotMatch(studio + workspace, /ark\.cn-beijing\.volces\.com/);
 });
 
 test("D: 生成成功组装并保存完整 Image Asset", () => {
-  for (const field of ["imageUrl", "prompt", "imageType", "style", "camera", "ratio", "model", "createdAt", "projectId", "metadata"]) assert.match(assets + studio + router, new RegExp(field));
-  assert.match(studio, /saveImageAssets\(next\)/);
+  for (const field of ["imageUrl", "prompt", "imageType", "style", "camera", "ratio", "model", "createdAt", "projectId", "metadata"]) assert.match(assets + workspace + router, new RegExp(field));
+  assert.match(workspace, /saveImageAssets\(next\)/);
   assert.match(assets, /assets\.slice\(0, IMAGE_ASSET_LIMIT\)/);
   assert.match(assets, /asset\.projectId === projectId/);
 });
 
 test("E: 历史记录展示真实图片并按项目过滤", () => {
-  assert.match(studio, /assetsForProject\(assets, projectId\)/);
-  assert.match(studio, /currentAssetId/);
-  assert.match(studio, /asset\.imageUrl/);
-  assert.match(studio, /new Date\(asset\.createdAt\)\.toLocaleString/);
+  assert.match(workspace, /assetsForProject\(assets, currentProjectId\)/);
+  assert.match(workspace, /selectedAssetId/);
+  assert.match(workspace, /asset\.imageUrl/);
+  assert.match(workspace, /new Date\(asset\.createdAt\)\.toLocaleString/);
 });
 
 test("F: Loading、失败恢复和重新生成状态完整", () => {
-  assert.match(studio, /status === "loading"/);
-  assert.match(studio, /正在创作商业图片/);
-  assert.match(studio, /生成失败/);
-  assert.match(studio, /error\.retryable/);
-  assert.match(studio, /重新生成/);
-  assert.match(studio, /生成完成/);
-  assert.match(studio, /生成失败，重新生成/);
-  assert.match(studio, /查看大图/);
-  assert.match(studio, /保存资产/);
+  assert.match(workspace, /status === "loading"/);
+  assert.match(workspace, /生成失败/);
+  assert.match(workspace, /error\.retryable/);
+  assert.match(workspace, /Retry Generation/);
+  assert.match(workspace, /Generated/);
+  assert.match(workspace, /View Large/);
   for (const category of ["configuration", "unauthorized", "rate_limit", "moderation_blocked", "timeout", "invalid_request", "provider_error", "empty_result"]) assert.match(router, new RegExp(category));
 });
 
 test("图片模型选择默认豆包，OpenAI 未启用时不可选", () => {
-  assert.match(studio, /aria-label="图片模型"/);
-  assert.match(studio, /selectedProvider.*doubao-image/);
-  assert.match(studio, /disabled=\{!item\.configured\}/);
+  assert.match(workspace, /aria-label="图片模型"/);
+  assert.match(workspace, /selectedProvider.*doubao-image/);
+  assert.match(workspace, /disabled=\{!item\.configured\}/);
   assert.match(router, /OpenAI 图片模型当前未启用/);
   assert.doesNotMatch(router, /OPENAI_API_KEY|api\.openai\.com/);
 });

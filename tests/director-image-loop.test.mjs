@@ -9,6 +9,7 @@ const route = fs.readFileSync(new URL("../app/api/images/generate/route.ts", imp
 const provider = fs.readFileSync(new URL("../app/image-provider-router.ts", import.meta.url), "utf8");
 const assets = fs.readFileSync(new URL("../app/image-assets.ts", import.meta.url), "utf8");
 const studio = fs.readFileSync(new URL("../app/image-studio.tsx", import.meta.url), "utf8");
+const workspace = fs.readFileSync(new URL("../app/project-asset-workspace.tsx", import.meta.url), "utf8");
 const page = fs.readFileSync(new URL("../app/page.tsx", import.meta.url), "utf8");
 const memory = fs.readFileSync(new URL("../app/project-memory.ts", import.meta.url), "utf8");
 
@@ -63,8 +64,8 @@ test("Step 6.3 I: Image Studio 联动携带项目、Prompt 与图片参数", () 
   assert.match(panel, /saveImageStudioDraft\(\{ \.\.\.spec/);
   assert.match(panel, /onNavigate\?\.\(\)/);
   assert.match(director, /onNavigate\?\.\("images"\)/);
-  assert.match(studio, /takeImageStudioDraft\(\)/);
-  for (const setter of ["setProjectId", "setPrompt", "setImageType", "setStyle", "setCamera", "setRatio"]) assert.match(studio, new RegExp(`${setter}\\(draft\\.`));
+  assert.match(workspace, /takeImageStudioDraft\(\)/);
+  for (const setter of ["setPrompt", "setImageType", "setStyle", "setCamera", "setRatio", "setSourceReference"]) assert.match(workspace, new RegExp(`${setter}\\(draft\\.`));
 });
 
 test("Step 6.3 Regression: 原 Director、各工作台和 Project Memory 保持原链路", () => {

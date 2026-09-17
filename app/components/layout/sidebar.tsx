@@ -28,17 +28,18 @@ const groups: Array<{ label: string; items: Array<{ id: ActiveView; icon: string
     { id: "products", icon: "▣", label: "产品知识库" },
     { id: "library", icon: "▦", label: "创意案例库" },
     { id: "monitor", icon: "⌁", label: "内容监测" },
-    { id: "history", icon: "◷", label: "创作资产" },
+    { id: "assets", icon: "◫", label: "项目资产库" },
+    { id: "history", icon: "◷", label: "脚本历史" },
     { id: "reviews", icon: "▥", label: "数据中心" },
   ] },
 ];
 const projectItems:Array<{id:ActiveView;icon:string;label:string}>=[
-  {id:"create",icon:"▤",label:"Script"},{id:"breakdown",icon:"◇",label:"Analyzer"},{id:"replicate",icon:"◎",label:"Replication"},{id:"director",icon:"◉",label:"AI Director"},{id:"images",icon:"▧",label:"Images"},{id:"voice",icon:"♫",label:"Voice"},{id:"history",icon:"◫",label:"Assets"},{id:"projects",icon:"▣",label:"Memory"},
+  {id:"breakdown",icon:"◇",label:"Analyzer"},{id:"replicate",icon:"◎",label:"Replication"},{id:"create",icon:"▤",label:"Script"},{id:"director",icon:"◉",label:"AI Director"},{id:"images",icon:"▧",label:"Images"},{id:"assets",icon:"◫",label:"Assets"},{id:"voice",icon:"♫",label:"Voice"},{id:"projects",icon:"▣",label:"Memory"},
 ];
 
 export default function Sidebar({ active, onNavigate, onHistory, counts, teamConnected, onTeamToggle, project }: SidebarProps) {
   const countFor = (id: ActiveView) => id === "library" ? counts.library : id === "monitor" ? counts.monitor : id === "history" ? counts.history : id === "products" ? counts.products : id === "reviews" ? counts.reviews : undefined;
-  const projectMode=active==="director"||active==="create"||active==="breakdown"||active==="replicate";
+  const projectMode=active==="director"||active==="create"||active==="breakdown"||active==="replicate"||active==="images"||active==="assets";
   return <aside className="sidebar vf-sidebar">
     <button className="brand vf-brand" type="button" onClick={() => onNavigate("dashboard")} aria-label="返回工作台首页"><span className="brand-mark vf-brand-mark">V</span><div><strong>ViralFlow AI</strong><small>智能创意工作台</small></div></button>
     {projectMode&&project?<button className="vf-director-project" onClick={()=>onNavigate("projects")}><span>{project.product.slice(0,2).toUpperCase()}</span><div><b>{project.product}</b><small>{project.name}</small></div><i>⌄</i></button>:<button className="vf-new-project" onClick={() => onNavigate("projects")}><span>＋</span> 新建项目</button>}
