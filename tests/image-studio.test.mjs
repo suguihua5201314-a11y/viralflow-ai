@@ -12,7 +12,7 @@ const memory = fs.readFileSync(new URL("../app/project-memory.ts", import.meta.u
 const navigation = fs.readFileSync(new URL("../app/navigation.ts", import.meta.url), "utf8");
 
 test("A: AI 图片工作台升级为 Project Creative Board", () => {
-  for (const value of ["Images Creative Board", "Asset Inspector", "Image Composer", "CURRENT PROJECT", "搜索 Prompt、Shot ID、Source", "当前项目还没有图片资产"]) assert.match(studio + workspace + navigation, new RegExp(value));
+  for (const value of ["AI图片创作工作台", "素材详情", "图片生成器", "当前项目", "搜索提示词、分镜 ID、来源", "开始创建第一个视觉素材"]) assert.match(studio + workspace + navigation, new RegExp(value));
   for (const value of ["产品图", "UGC", "广告素材", "生活场景", "真实摄影", "高端商业", "电影质感", "特写", "微距", "广角", "手持"]) assert.match(workspace, new RegExp(value));
 });
 
@@ -54,9 +54,9 @@ test("F: Loading、失败恢复和重新生成状态完整", () => {
   assert.match(workspace, /status === "loading"/);
   assert.match(workspace, /生成失败/);
   assert.match(workspace, /error\.retryable/);
-  assert.match(workspace, /Retry Generation/);
-  assert.match(workspace, /Generated/);
-  assert.match(workspace, /View Large/);
+  assert.match(workspace, /重新尝试/);
+  assert.match(workspace, /生成成功/);
+  assert.match(workspace, /查看大图/);
   for (const category of ["configuration", "unauthorized", "rate_limit", "moderation_blocked", "timeout", "invalid_request", "provider_error", "empty_result"]) assert.match(router, new RegExp(category));
 });
 

@@ -16,12 +16,12 @@ test("A-D Dashboard is the default and every renamed entry keeps a real ActiveVi
   for (const id of ["create", "breakdown", "replicate", "director", "voice", "checker"]) {
     assert.match(dashboard, new RegExp(`view: "${id}"`));
   }
-  for (const label of ["AI 创作工作台", "爆款洞察", "创意复刻", "内容合规", "视频洞察", "AI 导演工作台", "AI 语音工作台", "产品知识库", "创意案例库", "内容监测", "脚本历史", "数据中心"]) {
+  for (const label of ["AI 创作工作台", "爆款洞察", "创意复刻", "内容合规", "视频洞察", "AI分镜导演工作台", "AI配音工作台", "产品知识库", "创意案例库", "内容监测", "脚本历史", "数据中心"]) {
     assert.ok(navigation.includes(label));
     assert.ok(sidebar.includes(label));
   }
-  assert.ok(navigation.includes("Project Asset Library"));
-  assert.ok(sidebar.includes("项目资产库"));
+  assert.ok(navigation.includes("项目素材库"));
+  assert.ok(sidebar.includes("项目素材库"));
 });
 
 test("E-G recent work, metrics and global search use existing state sources", () => {

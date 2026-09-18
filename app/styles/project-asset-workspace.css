@@ -2,3 +2,4 @@
 @media(max-width:1280px){.paw-layout{grid-template-columns:minmax(0,1fr) 320px}.paw-toolbar{grid-template-columns:1fr 1fr 1fr}.paw-search{grid-column:1/-1}}
 @media(max-width:980px){.paw-layout{grid-template-columns:1fr}.paw-side{position:static;max-height:none;grid-template-columns:1fr 1fr}.paw-grid{grid-template-columns:repeat(auto-fill,minmax(190px,1fr))}}
 @media(max-width:720px){.paw-heading{align-items:flex-start;flex-direction:column}.paw-project-context{width:100%}.paw-toolbar{grid-template-columns:1fr 1fr}.paw-search{grid-column:1/-1}.paw-side{grid-template-columns:1fr}.paw-grid{grid-template-columns:1fr 1fr}.paw-card-body dl{grid-template-columns:1fr}.paw-tabs{max-width:100%;overflow:auto}}
+.paw-empty button{margin-top:16px;border:0;border-radius:9px;background:#6d58e8;color:#fff;padding:10px 15px;font-size:9px;font-weight:800;cursor:pointer}

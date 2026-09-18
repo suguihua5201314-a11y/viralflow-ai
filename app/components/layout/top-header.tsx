@@ -47,7 +47,7 @@ export default function TopHeader({ active, aiConnected, teamConnected, saveStat
       <div className={`vf-global-save ${saveState}`} role="status" aria-live="polite"><i />{saveState==="saving"?"正在保存...":"已保存 ✓"}</div>
       <div className={`vf-service-state ${aiConnected ? "is-online" : ""}`}><i />{aiConnected ? "AI 服务正常" : "本地稳定模式"}</div>
       <div className={`vf-team-state ${teamConnected ? "is-online" : ""}`}>{teamConnected ? "团队已同步" : "团队未连接"}</div>
-      <div className="vf-user"><span>VF</span><div><b>苏苏团队</b><small>内容管理员</small></div></div>
+      <div className="vf-user"><span>VF</span><div><b>苏苏团队</b><small>内容管理</small></div></div>
     </div>
   </header>;
 }

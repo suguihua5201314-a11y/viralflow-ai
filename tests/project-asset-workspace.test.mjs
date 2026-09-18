@@ -16,7 +16,7 @@ test("Step 7.0-C 1: Assets 与 Script History 使用独立 routing", () => {
   assert.match(navigation, /"assets"/);
   assert.match(page, /active === "assets"/);
   assert.match(page, /active === "history"/);
-  assert.match(sidebar, /id:"assets".*label:"Assets"/);
+  assert.match(sidebar, /id:"assets".*label:"素材库"/);
   assert.match(sidebar, /id: "history".*label: "脚本历史"/);
 });
 
@@ -36,14 +36,14 @@ test("Step 7.0-C 4/5: currentProjectId 是唯一项目来源且切换会重新�
 });
 
 test("Step 7.0-C 6/7: Source 只由现有 sourceReference 分类", () => {
-  assert.match(assets, /sourceReference\?\.type === "director-shot" \? "Director Shot" : "AI 图片创作"/);
+  assert.match(assets, /sourceReference\?\.type === "director-shot" \? "导演分镜" : "AI图片创作"/);
   assert.match(workspace, /imageAssetSource\(asset\)/);
 });
 
 test("Step 7.0-C 8: 同 Shot Current 由 shotId 与 createdAt 推导", () => {
   assert.match(assets, /currentDirectorAssetIds/);
   assert.match(assets, /Date\.parse\(asset\.createdAt\) > Date\.parse\(latest\.createdAt\)/);
-  assert.match(workspace, /currentIds\.has\(asset\.id\).*Current/s);
+  assert.match(workspace, /currentIds\.has\(asset\.id\).*当前版本/s);
   assert.doesNotMatch(memory, /currentAsset|imageAssets|shotImages/);
 });
 
@@ -56,15 +56,15 @@ test("Step 7.0-C 9/10: Draft 与 Regenerate 保留 sourceReference", () => {
 });
 
 test("Step 7.0-C 11: Inspector 展示完整真实 metadata", () => {
-  for (const field of ["Model", "Provider", "Ratio", "Style", "Camera", "Created At", "Project", "Source", "Shot ID", "Source Block ID", "Request ID"]) assert.match(workspace, new RegExp(field));
-  for (const action of ["View Large", "Copy Prompt", "Use Prompt", "Regenerate", "Go to Director Shot"]) assert.match(workspace, new RegExp(action));
+  for (const field of ["模型", "服务商", "比例", "风格", "镜头", "创建时间", "项目", "来源", "分镜 ID", "来源区块 ID", "请求 ID"]) assert.match(workspace, new RegExp(field));
+  for (const action of ["查看大图", "复制提示词", "使用提示词", "重新生成", "返回导演分镜"]) assert.match(workspace, new RegExp(action));
   assert.doesNotMatch(workspace, /Set as Current Shot Image|Delete Asset/);
 });
 
 test("Step 7.0-C 12: Asset Library 提供真实 Search、Filter 与 Tabs", () => {
-  for (const tab of ["All", "Images", "References", "Voice", "Video"]) assert.match(workspace, new RegExp(`label: "${tab}"`));
-  for (const filter of ["Source 筛选", "Shot 筛选", "Model 筛选", "Created Time 筛选"]) assert.match(workspace, new RegExp(filter));
-  assert.match(workspace, /搜索 Prompt、Shot ID、Source/);
+  for (const tab of ["全部", "图片", "参考素材", "声音", "视频"]) assert.match(workspace, new RegExp(`label: "${tab}"`));
+  for (const filter of ["来源筛选", "分镜筛选", "模型筛选", "创建时间筛选"]) assert.match(workspace, new RegExp(filter));
+  assert.match(workspace, /搜索提示词、分镜 ID、来源/);
   assert.match(workspace, /tab === "references" && !asset\.metadata\?\.sourceReference/);
 });
 
@@ -95,7 +95,7 @@ test("Step 7.0-C.1: Prompt 长度在调用 API 前完成前端校验", () => {
   const validationIndex = workspace.indexOf("promptValue.length > MAX_PROMPT_LENGTH");
   const fetchIndex = workspace.indexOf('fetch("/api/images/generate"', validationIndex);
   assert.ok(validationIndex >= 0 && fetchIndex > validationIndex, "长度校验必须发生在 POST 之前");
-  assert.match(workspace, /Prompt 最多支持 \$\{MAX_PROMPT_LENGTH\} 个字符/);
+  assert.match(workspace, /提示词最多支持 \$\{MAX_PROMPT_LENGTH\} 个字符/);
   assert.match(workspace, /prompt\.length > MAX_PROMPT_LENGTH/);
   assert.match(workspace, /\{prompt\.length\} \/ \{MAX_PROMPT_LENGTH\}/);
 });

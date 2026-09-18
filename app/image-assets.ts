@@ -45,7 +45,7 @@ export function assetsForProject(assets: ImageAsset[], projectId: string | null)
 }
 
 export function imageAssetSource(asset: ImageAsset) {
-  return asset.metadata?.sourceReference?.type === "director-shot" ? "Director Shot" : "AI 图片创作";
+  return asset.metadata?.sourceReference?.type === "director-shot" ? "导演分镜" : "AI图片创作";
 }
 
 export function currentDirectorAssetIds(assets: ImageAsset[]) {
