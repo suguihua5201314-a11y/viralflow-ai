@@ -38,6 +38,7 @@ const cameras: Array<{ value: ImageGenerationRequest["camera"]; label: string }>
   { value: "Close Up", label: "特写" }, { value: "Macro", label: "微距" }, { value: "Wide Shot", label: "广角" }, { value: "Handheld", label: "手持" },
 ];
 const ratios: ImageGenerationRequest["ratio"][] = ["9:16", "1:1", "16:9"];
+const MAX_PROMPT_LENGTH = 2000;
 const tabs: Array<{ id: AssetTab; label: string }> = [
   { id: "all", label: "All" }, { id: "images", label: "Images" }, { id: "references", label: "References" },
   { id: "voice", label: "Voice" }, { id: "video", label: "Video" },
@@ -125,9 +126,15 @@ export default function ProjectAssetWorkspace({ mode, projects, currentProjectId
   }, []);
 
   async function generateImage(promptOverride?: string, referenceOverride?: ImageSourceReference | null, settingsOverride?: Pick<ImageAsset, "imageType" | "style" | "camera" | "ratio" | "provider">) {
-    const requestedPrompt = promptOverride?.trim() || prompt.trim();
+    const promptValue = promptOverride ?? prompt;
+    const requestedPrompt = promptValue.trim();
     const preservedReference = referenceOverride === undefined ? sourceReference : referenceOverride;
     const generation = settingsOverride || { imageType, style, camera, ratio, provider: selectedProvider };
+    if (promptValue.length > MAX_PROMPT_LENGTH) {
+      setStatus("error");
+      setError({ type: "validation_error", message: `Prompt 最多支持 ${MAX_PROMPT_LENGTH} 个字符`, retryable: false });
+      return;
+    }
     if (!requestedPrompt || !currentProjectId || status === "loading") return;
     setStatus("loading"); setError(null);
     try {
@@ -221,11 +228,11 @@ export default function ProjectAssetWorkspace({ mode, projects, currentProjectId
         {mode === "images" && <section className="paw-composer">
           <header><span>LIGHTWEIGHT COMPOSER</span><h3>Image Composer</h3><p>{project ? `Project · ${project.name}` : "No active project"}</p></header>
           {sourceReference && <div className="paw-shot-context"><div><span>SHOT CONTEXT</span><b>{sourceReference.shotId}</b><small>{sourceReference.sourceBlockId}</small></div><button type="button" onClick={() => setSourceReference(null)}>清除</button></div>}
-          <label>Prompt<textarea aria-label="图片描述" rows={5} maxLength={2000} value={prompt} onChange={event => { setPrompt(event.target.value); setStatus("idle"); setError(null); }} placeholder="描述主体、场景、光线、构图与商业氛围…" /><small>{prompt.length} / 2000</small></label>
+          <label>Prompt<textarea aria-label="图片描述" rows={5} maxLength={MAX_PROMPT_LENGTH} value={prompt} onChange={event => { const nextPrompt = event.target.value; const tooLong = nextPrompt.length > MAX_PROMPT_LENGTH; setPrompt(nextPrompt); setStatus(tooLong ? "error" : "idle"); setError(tooLong ? { type: "validation_error", message: `Prompt 最多支持 ${MAX_PROMPT_LENGTH} 个字符`, retryable: false } : null); }} placeholder="描述主体、场景、光线、构图与商业氛围…" /><small>{prompt.length} / {MAX_PROMPT_LENGTH}</small></label>
           <div className="paw-composer-row"><label>Type<select value={imageType} onChange={event => setImageType(event.target.value as typeof imageType)}>{imageTypes.map(item => <option value={item.value} key={item.value}>{item.label}</option>)}</select></label><label>Model<select aria-label="图片模型" value={selectedProvider} onChange={event => setSelectedProvider(event.target.value as ImageProviderId)}>{providerState.providers.length ? providerState.providers.map(item => <option value={item.id} key={item.id} disabled={!item.configured}>{item.label}{item.configured ? "" : "（未配置）"}</option>) : <option value="doubao-image">豆包图片模型</option>}</select></label></div>
           <div className="paw-composer-row"><label>Style<select value={style} onChange={event => setStyle(event.target.value as typeof style)}>{styles.map(item => <option value={item.value} key={item.value}>{item.label}</option>)}</select></label><label>Camera<select value={camera} onChange={event => setCamera(event.target.value as typeof camera)}>{cameras.map(item => <option value={item.value} key={item.value}>{item.label}</option>)}</select></label></div>
           <fieldset><legend>Ratio</legend>{ratios.map(value => <button type="button" className={ratio === value ? "active" : ""} key={value} onClick={() => setRatio(value)}>{value}</button>)}</fieldset>
-          <button className="paw-generate" type="button" disabled={!prompt.trim() || !currentProjectId || status === "loading" || !selectedProviderState?.configured} onClick={() => void generateImage()}>{status === "loading" ? <><i className="image-spinner" /> Generating...</> : status === "success" ? "Generated ✓" : status === "error" ? "Retry Generation ↻" : "Generate Image ↗"}</button>
+          <button className="paw-generate" type="button" disabled={!prompt.trim() || prompt.length > MAX_PROMPT_LENGTH || !currentProjectId || status === "loading" || !selectedProviderState?.configured} onClick={() => void generateImage()}>{status === "loading" ? <><i className="image-spinner" /> Generating...</> : status === "success" ? "Generated ✓" : status === "error" ? "Retry Generation ↻" : "Generate Image ↗"}</button>
           {!selectedProviderState?.configured && <p className="paw-config-hint">图片模型尚未配置或状态仍在读取。</p>}
           {error && <div className="paw-error" role="alert"><b>{status === "error" ? "生成失败" : "保存提醒"}</b><p>{error.message}</p>{error.retryable && <button type="button" onClick={() => void generateImage()}>Retry</button>}</div>}
         </section>}
