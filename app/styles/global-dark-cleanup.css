@@ -1,13 +1,13 @@
 /* Step 5.3.4 follow-up — final shared dark-theme safety net.
    Visual overrides only: no application state, engine, API or data behavior. */
 :root {
-  --vf-app-bg: #070b13;
-  --vf-app-surface: #0e1624;
-  --vf-app-surface-2: #121c2c;
+  --vf-app-bg: #080b14;
+  --vf-app-surface: #111827;
+  --vf-app-surface-2: #141d2d;
   --vf-app-surface-3: #172235;
   --vf-app-input: #09111d;
-  --vf-app-border: rgba(139, 155, 190, .16);
-  --vf-app-border-strong: rgba(139, 155, 190, .25);
+  --vf-app-border: #27324a;
+  --vf-app-border-strong: #34425f;
   --vf-app-text: #edf2ff;
   --vf-app-text-2: #a8b3c7;
   --vf-app-muted: #68758b;
@@ -17,6 +17,21 @@
 }
 
 html, body, .vf-app-shell, .vf-app-main, .vf-workspace { background: var(--vf-app-bg) !important; color: var(--vf-app-text); }
+
+/* Creative-workspace chrome: keep the whole product on one dark canvas. */
+body .vf-top-header {
+  border-color: var(--vf-app-border) !important;
+  background: rgba(8, 11, 20, .94) !important;
+  color: var(--vf-app-text) !important;
+  box-shadow: 0 12px 34px rgba(0, 0, 0, .22) !important;
+}
+body .vf-header-title h1 { color: var(--vf-app-text) !important; }
+body .vf-header-title p, body .vf-breadcrumb { color: var(--vf-app-text-2) !important; }
+body .vf-service-state, body .vf-team-state, body .vf-icon-button {
+  border-color: var(--vf-app-border) !important;
+  background: var(--vf-app-surface) !important;
+  color: var(--vf-app-text-2) !important;
+}
 
 /* Shared controls: remove native/light browser rendering everywhere in a workspace. */
 .vf-workspace :where(input:not([type="checkbox"]):not([type="radio"]), textarea, select),

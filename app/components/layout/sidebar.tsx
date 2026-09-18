@@ -34,7 +34,7 @@ const groups: Array<{ label: string; items: Array<{ id: ActiveView; icon: string
   ] },
 ];
 const projectItems:Array<{id:ActiveView;icon:string;label:string}>=[
-  {id:"breakdown",icon:"◇",label:"爆款分析"},{id:"replicate",icon:"◎",label:"爆款复刻"},{id:"create",icon:"▤",label:"脚本创作"},{id:"director",icon:"◉",label:"AI分镜导演"},{id:"images",icon:"▧",label:"图片创作"},{id:"assets",icon:"◫",label:"素材库"},{id:"voice",icon:"♫",label:"AI配音"},{id:"projects",icon:"▣",label:"项目大脑"},
+  {id:"breakdown",icon:"◇",label:"爆款研究"},{id:"replicate",icon:"◎",label:"内容策划"},{id:"create",icon:"▤",label:"脚本创作"},{id:"director",icon:"◉",label:"AI分镜导演"},{id:"images",icon:"▧",label:"视觉创作"},{id:"assets",icon:"◫",label:"素材管理"},{id:"voice",icon:"♫",label:"声音制作"},{id:"projects",icon:"▣",label:"项目大脑"},
 ];
 
 export default function Sidebar({ active, onNavigate, onHistory, counts, teamConnected, onTeamToggle, project }: SidebarProps) {

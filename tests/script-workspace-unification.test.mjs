@@ -11,7 +11,7 @@ const css=read("../app/styles/script-workspace.css");
 
 test("Script and Director share project navigation without changing Director workspace",()=>{
   assert.match(sidebar,/active==="director"\|\|active==="create"/);
-  for(const label of ["脚本创作","爆款分析","爆款复刻","AI分镜导演","图片创作","AI配音","素材库","项目大脑"]) assert.ok(sidebar.includes(`label:"${label}"`));
+  for(const label of ["脚本创作","爆款研究","内容策划","AI分镜导演","视觉创作","声音制作","素材管理","项目大脑"]) assert.ok(sidebar.includes(`label:"${label}"`));
   assert.match(page,/active==="create"\?"vf-project-mode vf-script-mode"/);
 });
 

@@ -10,7 +10,7 @@ const workspace = read("../app/project-asset-workspace.tsx");
 const assets = read("../app/image-assets.ts");
 
 test("Step 7.0-C.3: Project Sidebar 使用统一中文产品语言", () => {
-  for (const label of ["爆款分析", "爆款复刻", "脚本创作", "AI分镜导演", "图片创作", "素材库", "AI配音", "项目大脑"]) {
+  for (const label of ["爆款研究", "内容策划", "脚本创作", "AI分镜导演", "视觉创作", "素材管理", "声音制作", "项目大脑"]) {
     assert.ok(sidebar.includes(`label:"${label}"`), label);
   }
   assert.match(sidebar, /AI短视频创作工作台/);
@@ -18,7 +18,7 @@ test("Step 7.0-C.3: Project Sidebar 使用统一中文产品语言", () => {
 });
 
 test("Step 7.0-C.3: Images 与 Assets 标题、操作和状态完成中文化", () => {
-  for (const label of ["AI图片创作工作台", "项目素材库", "素材详情", "图片生成器", "查看大图", "复制提示词", "使用提示词", "重新生成", "返回导演分镜", "生成图片", "重新尝试", "生成中", "生成成功", "生成失败"]) {
+  for (const label of ["AI图片创作工作台", "项目素材库", "素材预览", "图片生成器", "查看大图", "复制提示词", "使用提示词", "重新生成", "返回导演分镜", "生成图片", "重新尝试", "生成中", "生成成功", "生成失败"]) {
     assert.ok(`${navigation}\n${workspace}`.includes(label), label);
   }
   for (const legacy of ["Project Asset Library", "Asset Inspector", "Image Composer", "Generate Image", "Retry Generation", "Go to Director Shot"]) {
@@ -28,7 +28,7 @@ test("Step 7.0-C.3: Images 与 Assets 标题、操作和状态完成中文化", 
 
 test("Step 7.0-C.3: 素材分类、筛选、空状态和 Tabs 使用业务中文", () => {
   assert.match(assets, /"导演分镜" : "AI图片创作"/);
-  for (const label of ["全部来源", "全部分镜", "全部模型", "全部时间", "全部", "图片", "参考素材", "声音", "视频", "当前版本", "开始创建第一个视觉素材", "视频功能即将开放"]) {
+  for (const label of ["全部来源", "全部分镜", "全部模型", "全部时间", "全部", "图片", "参考素材", "声音", "视频", "当前版本", "开始创建视觉素材", "视频功能即将开放"]) {
     assert.match(workspace, new RegExp(label));
   }
 });

@@ -204,24 +204,26 @@ export default function ProjectAssetWorkspace({ mode, projects, currentProjectId
               <div className="paw-card-body"><div><span className={reference ? "director" : "studio"}>{imageAssetSource(asset)}</span><small>{reference?.shotId || "未关联分镜"}</small></div><p>{shortPrompt(asset.prompt)}</p><dl><div><dt>模型</dt><dd>{asset.model}</dd></div><div><dt>服务商</dt><dd>{asset.provider}</dd></div></dl><time>{new Date(asset.createdAt).toLocaleString("zh-CN")}</time></div>
             </button>;
           })}
-        </div> : <div className="paw-empty"><span>▧</span><h3>{projectAssets.length ? "没有符合条件的素材" : "开始创建第一个视觉素材"}</h3><p>{projectAssets.length ? "调整搜索或筛选条件查看其他真实素材。" : <>你可以从 AI分镜导演生成图片，<br />或者输入创意描述创建新的视觉素材。</>}</p>{!projectAssets.length && <button type="button" onClick={() => onNavigate("images")}>开始生成图片</button>}</div>}
+        </div> : <div className="paw-empty"><span>✨</span><h3>{projectAssets.length ? "没有符合条件的素材" : "开始创建视觉素材"}</h3>{projectAssets.length ? <p>调整搜索或筛选条件查看其他真实素材。</p> : <><p>选择适合当前创作流程的方式，建立项目视觉语言。</p><ul><li>从 AI分镜导演生成</li><li>输入提示词生成</li><li>使用参考素材生成</li></ul></>}{!projectAssets.length && <button type="button" onClick={() => onNavigate("images")}>开始生成图片</button>}</div>}
       </main>
 
       <aside className="paw-side">
         <section className="paw-inspector">
-          <header><div><span>素材信息</span><h3>素材详情</h3></div>{selectedAsset && <small>{selectedAsset.id}</small>}</header>
+          <header><div><span>创作者面板</span><h3>素材预览</h3></div>{selectedAsset && <small>{selectedAsset.id}</small>}</header>
           {selectedAsset ? <>
             <button className="paw-inspector-image" type="button" onClick={() => setShowLarge(true)}><Image src={selectedAsset.imageUrl} alt={selectedAsset.prompt} fill sizes="360px" unoptimized /><span>查看大图 ↗</span></button>
+            <div className="paw-creative-context"><div><span>用途</span><b>{selectedAsset.metadata?.sourceReference?.shotId ? `分镜 ${selectedAsset.metadata.sourceReference.shotId}` : "项目视觉素材"}</b></div><div><span>来源</span><b>{imageAssetSource(selectedAsset)}</b></div></div>
             <div className="paw-prompt"><span>提示词</span><p>{selectedAsset.prompt}</p></div>
-            <dl className="paw-metadata">
+            <div className="paw-actions paw-creator-actions">{mode === "images" && <button className="primary" type="button" disabled={status === "loading"} onClick={() => { usePrompt(selectedAsset); void generateImage(selectedAsset.prompt, selectedAsset.metadata?.sourceReference || null, selectedAsset); }}>重新生成</button>}<button type="button" disabled title="视频创作即将开放">生成视频</button><button type="button" onClick={() => void copyPrompt(selectedAsset)}>{copied ? "已复制 ✓" : "复制提示词"}</button></div>
+            <details className="paw-advanced-metadata"><summary>高级信息</summary><dl className="paw-metadata">
               <div><dt>模型</dt><dd>{selectedAsset.model}</dd></div><div><dt>服务商</dt><dd>{selectedAsset.provider}</dd></div>
               <div><dt>比例</dt><dd>{selectedAsset.ratio}</dd></div><div><dt>风格</dt><dd>{selectedAsset.style}</dd></div>
               <div><dt>镜头</dt><dd>{selectedAsset.camera}</dd></div><div><dt>创建时间</dt><dd>{new Date(selectedAsset.createdAt).toLocaleString("zh-CN")}</dd></div>
               <div><dt>项目</dt><dd>{project?.name || selectedAsset.projectId}</dd></div><div><dt>来源</dt><dd>{imageAssetSource(selectedAsset)}</dd></div>
               <div><dt>分镜 ID</dt><dd>{selectedAsset.metadata?.sourceReference?.shotId || "—"}</dd></div><div><dt>来源区块 ID</dt><dd>{selectedAsset.metadata?.sourceReference?.sourceBlockId || "—"}</dd></div>
               <div><dt>请求 ID</dt><dd>{selectedAsset.metadata?.requestId || "—"}</dd></div>
-            </dl>
-            <div className="paw-actions"><button type="button" onClick={() => setShowLarge(true)}>查看大图</button><button type="button" onClick={() => void copyPrompt(selectedAsset)}>{copied ? "已复制 ✓" : "复制提示词"}</button><button type="button" onClick={() => usePrompt(selectedAsset)}>使用提示词</button>{mode === "images" && <button type="button" disabled={status === "loading"} onClick={() => { usePrompt(selectedAsset); void generateImage(selectedAsset.prompt, selectedAsset.metadata?.sourceReference || null, selectedAsset); }}>重新生成</button>}{selectedAsset.metadata?.sourceReference && <button type="button" onClick={() => onNavigate("director")}>返回导演分镜</button>}</div>
+            </dl></details>
+            <div className="paw-actions paw-secondary-actions"><button type="button" onClick={() => setShowLarge(true)}>查看大图</button><button type="button" onClick={() => usePrompt(selectedAsset)}>使用提示词</button>{selectedAsset.metadata?.sourceReference && <button type="button" onClick={() => onNavigate("director")}>返回导演分镜</button>}</div>
           </> : <div className="paw-inspector-empty"><span>◎</span><p>选择一张素材，查看详情与复用操作。</p></div>}
         </section>
 

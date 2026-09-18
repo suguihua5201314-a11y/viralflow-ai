@@ -16,7 +16,7 @@ test("Step 7.0-C 1: Assets 与 Script History 使用独立 routing", () => {
   assert.match(navigation, /"assets"/);
   assert.match(page, /active === "assets"/);
   assert.match(page, /active === "history"/);
-  assert.match(sidebar, /id:"assets".*label:"素材库"/);
+  assert.match(sidebar, /id:"assets".*label:"素材管理"/);
   assert.match(sidebar, /id: "history".*label: "脚本历史"/);
 });
 

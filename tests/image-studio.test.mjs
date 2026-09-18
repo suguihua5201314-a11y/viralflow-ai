@@ -12,7 +12,7 @@ const memory = fs.readFileSync(new URL("../app/project-memory.ts", import.meta.u
 const navigation = fs.readFileSync(new URL("../app/navigation.ts", import.meta.url), "utf8");
 
 test("A: AI 图片工作台升级为 Project Creative Board", () => {
-  for (const value of ["AI图片创作工作台", "素材详情", "图片生成器", "当前项目", "搜索提示词、分镜 ID、来源", "开始创建第一个视觉素材"]) assert.match(studio + workspace + navigation, new RegExp(value));
+  for (const value of ["AI图片创作工作台", "素材预览", "图片生成器", "当前项目", "搜索提示词、分镜 ID、来源", "开始创建视觉素材"]) assert.match(studio + workspace + navigation, new RegExp(value));
   for (const value of ["产品图", "UGC", "广告素材", "生活场景", "真实摄影", "高端商业", "电影质感", "特写", "微距", "广角", "手持"]) assert.match(workspace, new RegExp(value));
 });
 

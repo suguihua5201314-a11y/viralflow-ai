@@ -181,3 +181,14 @@ body .vr-setup,body .vr-main,body .vr-intel-rail{padding:20px!important}
   .studio-column,.va-source,.va-intel,.vr-setup,.plan-sidebar,.shot-inspector{position:static!important;max-height:none!important}
   .project-card-grid{grid-template-columns:1fr}
 }
+
+/* Creative-workspace readability floor. Keep dense tools readable without 11–12px body copy. */
+body .vf-workspace{font-size:14px!important}
+body .vf-workspace.vf-workspace :where(p,li,label,button,input,select,textarea,dd){font-size:14px!important}
+body .vf-workspace.vf-workspace :where(small,dt,time,.eyebrow,[class*="kicker"],[class*="caption"]){font-size:13px!important;line-height:1.5!important}
+body .vf-workspace.vf-workspace :where(h2){font-size:18px!important}
+body .vf-workspace.vf-workspace :where(h3){font-size:16px!important}
+body .vf-workspace.vf-workspace>header :where(h1,h2),body .vf-workspace.vf-workspace .studio-titlebar h1,body .vf-workspace.vf-workspace .vr-command-head h1{font-size:24px!important}
+body .vf-top-header .vf-header-title h1{font-size:24px!important}
+body .vf-sidebar .vf-brand small,body .vf-sidebar .vf-nav-group>p,body .vf-sidebar .vf-team-card span,body .vf-sidebar .vf-team-card p,body .vf-sidebar .vf-team-card button{font-size:13px!important}
+body .vf-sidebar .vf-nav-group nav button{font-size:14px!important;min-height:42px!important}
