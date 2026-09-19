@@ -293,7 +293,7 @@ export default function Home() {
       const recent = history.filter(item => item.product === form.product && item.language === form.language).slice(0, 6).map(({title,hook,narration,creativeAngle,scenario,proofMechanism,cta,product,language}) => ({title,hook,narration,creativeAngle,scenario,proofMechanism,cta,product,language}));
       const productKnowledge=productProfiles.find(item=>item.id===selectedProductId&&item.name.trim().toLowerCase()===form.product.trim().toLowerCase());
       const sellingPointKnowledge=pointLibrary.filter(item=>item.product.trim().toLowerCase()===form.product.trim().toLowerCase());
-      const res = await fetch("/api/scripts", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ ...form, ...controls, outputCount:1, productKnowledge, sellingPointKnowledge, referenceScript: referenceScript || undefined, recent, nonce: Date.now() + Math.random() }) });
+      const res = await fetch("/api/scripts", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ ...form, ...controls, outputCount:1, projectId:projectMemory.workspace.currentProjectId, productKnowledge, sellingPointKnowledge, referenceScript: referenceScript || undefined, recent, nonce: Date.now() + Math.random() }) });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "生成失败");
       if(data.provider)setLastProviderRun(data.provider);
@@ -308,7 +308,7 @@ export default function Home() {
       const recent = history.filter(item=>item.product===form.product&&item.language===form.language).slice(0,6).map(({title,hook,narration,creativeAngle,scenario,proofMechanism,cta,product,language}) => ({title,hook,narration,creativeAngle,scenario,proofMechanism,cta,product,language}));
       const productKnowledge=productProfiles.find(item=>item.id===selectedProductId&&item.name.trim().toLowerCase()===form.product.trim().toLowerCase());
       const sellingPointKnowledge=pointLibrary.filter(item=>item.product.trim().toLowerCase()===form.product.trim().toLowerCase());
-      const res=await fetch("/api/scripts",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({...form,...controls,outputCount:5,productKnowledge,sellingPointKnowledge,referenceScript:referenceScript||undefined,recent,nonce:Date.now()+Math.random()})});
+      const res=await fetch("/api/scripts",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({...form,...controls,outputCount:5,projectId:projectMemory.workspace.currentProjectId,productKnowledge,sellingPointKnowledge,referenceScript:referenceScript||undefined,recent,nonce:Date.now()+Math.random()})});
       const data=await res.json(); if(!res.ok)throw new Error(data.error||"生成失败");
       if(data.providerRuns?.[0])setLastProviderRun(data.providerRuns[0]);
       const scripts=(data.scripts || (data.script?[data.script]:[])) as Script[]; if(scripts.length!==5)throw new Error("赛马生成结果不完整");

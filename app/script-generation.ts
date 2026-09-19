@@ -27,6 +27,7 @@ export type StrategyPayload = {
 
 export type StructuredScript = {
   title: string; hook: string; narration: string;
+  product?:string;language?:string;country?:string;alternateHooks?:string[];
   creativeAngle?: string; hookType?: string; framework?: string; style?: string;
   conflict?: string; productReveal?: string; proof?: string; sellingPoints?: string;
   cta?: string; shootingSuggestion?: string; scenario?: string;

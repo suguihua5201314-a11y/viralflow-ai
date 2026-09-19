@@ -1,5 +1,5 @@
 import { frameworkCatalog } from "../../frameworks";
-import { buildCreativeConcepts, buildStrategyDirectives, normalizeStructuredScript, runDiversityRetries, validateStrategyIntent, type CreativeConcept, type StructuredScript } from "../../script-generation";
+import { assessDiversity, buildCreativeConcepts, buildStrategyDirectives, normalizeStructuredScript, runDiversityRetries, validateStrategyIntent, type CreativeConcept, type StructuredScript } from "../../script-generation";
 import { buildKnowledgeContext, findFactViolations, renderKnowledgeContext, type MemoryScript, type ProductKnowledge, type SellingPointKnowledge } from "../../knowledge-context";
 import { getGenerationComplianceKnowledge } from "../../compliance-rules";
 import { CloudflareStorageUnavailableError } from "../../../db/cloudflare-runtime";
@@ -7,11 +7,13 @@ import { runTeamDataAction } from "../../team-data-adapter";
 import {callProvider,DEFAULT_PROVIDER,getProviderStatuses,ProviderCallError} from "../../provider-router";
 import type {ProviderErrorType,ProviderId,ProviderRunMetadata} from "../../provider-types";
 import {validateScriptLanguage} from "../../language-guard";
+import {resolveScriptEngineMode,runScriptQualityEngine} from "../../script-quality/engine";
 
 export const runtime="nodejs";
+export const maxDuration=180;
 
 type RecentScript = MemoryScript;
-type Payload = { product: string; sellingPoints: string; audience: string; country: string; language: string; style: string; framework?: string; duration: string; offer: string; referenceScript?: string; nonce?: number; recent?: RecentScript[]; platform?:string; additionalRequirements?:string; creationMode?:string; hookStrategy?:string; creativity?:string; outputCount?:number; creativeConcept?:CreativeConcept; productKnowledge?:ProductKnowledge; sellingPointKnowledge?:SellingPointKnowledge[]; provider?:ProviderId };
+type Payload = { product: string; sellingPoints: string; audience: string; country: string; language: string; style: string; framework?: string; duration: string; offer: string; referenceScript?: string; nonce?: number; recent?: RecentScript[]; platform?:string; additionalRequirements?:string; creationMode?:string; hookStrategy?:string; creativity?:string; outputCount?:number; creativeConcept?:CreativeConcept; productKnowledge?:ProductKnowledge; sellingPointKnowledge?:SellingPointKnowledge[]; provider?:ProviderId;projectId?:string;requestId?:string };
 type Pack = { hooks: string[]; intros: string[]; proofs: string[]; demos: string[]; benefits: string[]; ctas: string[] };
 
 class ProviderGenerationError extends Error {
@@ -534,6 +536,19 @@ Creativity：${p.creativity || "平衡"}
   if(strategyViolations.length)throw new ProviderGenerationError("strategy_validation_error",`Provider未执行策略意图:${strategyViolations.join("；")}`);
   return {script:normalizeStructuredScript({ ...generated, title:generated.title || `${p.product}｜${selectedFramework}`, product:p.product, language:p.language, country:p.country, style:p.style, hook:generated.scenes[0]?.line || generated.hook, alternateHooks:generated.alternateHooks.slice(0,2), narration, scenes:generated.scenes, aiGenerated:true }, p, p.creativeConcept),responseTimeMs:providerResult.responseTimeMs};
 }
+
+function validateQualityScript(p:Payload,recent:RecentScript[],script:StructuredScript){
+  if(!Array.isArray(script.scenes)||script.scenes.length<4)throw new ProviderGenerationError("schema_validation_error","Quality Writer镜头结构无效");
+  const narration=script.scenes.map(scene=>scene.line.trim()).filter(Boolean).join("\n");
+  const languageValidation=validateScriptLanguage({...script,narration},p.language);
+  if(!languageValidation.passed)throw new ProviderGenerationError("language_validation_error","Quality Writer输出语言不一致");
+  const knowledgeContext=buildRequestKnowledge({...p,creativeConcept:script.concept},recent,script.concept);
+  const factSurface=[script.title,script.creativeAngle,script.hook,script.conflict,script.productReveal,script.proof,script.sellingPoints,script.cta,script.shootingSuggestion,...(script.alternateHooks||[]),...script.scenes.flatMap(scene=>[scene.visual,scene.line,scene.edit])].filter(Boolean).join("\n");
+  if(findFactViolations(factSurface,knowledgeContext).length)throw new ProviderGenerationError("fact_validation_error","Quality Writer生成了越界事实");
+  const strategyViolations=validateStrategyIntent({hook:script.hook,scenes:script.scenes,creationMode:p.creationMode,hookStrategy:p.hookStrategy});
+  if(strategyViolations.length)throw new ProviderGenerationError("strategy_validation_error","Quality Writer未执行策略意图");
+}
+
 export async function GET() {
   const providers=getProviderStatuses();return Response.json({scripts:[],aiConnected:providers[DEFAULT_PROVIDER].configured,provider:providers[DEFAULT_PROVIDER].label,providers,defaultProvider:DEFAULT_PROVIDER});
 }
@@ -559,11 +574,27 @@ export async function POST(request: Request) {
       }
     }
     const p = body as Payload;
+    const engineMode=resolveScriptEngineMode();
     if(p.provider&&!(["deepseek","doubao","openai"] as const).includes(p.provider))return Response.json({error:"未知 Provider"},{status:400});
-    if(p.provider==="openai")return Response.json({error:"GPT 未配置，本阶段不会发送 OpenAI 请求。",provider:{providerRequested:"openai",providerUsed:"local",aiGenerated:false,fallbackUsed:false,providerErrorType:"missing_field",responseTimeMs:null,languageRepairAttempted:false}},{status:503});
+    if(engineMode==="legacy"&&p.provider==="openai"&&!getProviderStatuses().openai.configured)return Response.json({error:"GPT 未配置，本阶段不会发送 OpenAI 请求。",provider:{providerRequested:"openai",providerUsed:"local",aiGenerated:false,fallbackUsed:false,providerErrorType:"missing_field",responseTimeMs:null,languageRepairAttempted:false}},{status:503});
     if (!p.product?.trim() || !p.sellingPoints?.trim()) return Response.json({ error: "请填写产品名称和核心卖点。" }, { status: 400 });
     if (p.referenceScript !== undefined && p.referenceScript.trim().length < 30) return Response.json({ error: "请粘贴完整的爆款参考文案，至少30个字。" }, { status: 400 });
     const recent = (p.recent ?? []).slice(0, 6);
+    if(engineMode==="quality"){
+      const qualityContext=buildRequestKnowledge(p,recent);
+      const quality=await runScriptQualityEngine({...p,knowledgePrompt:renderKnowledgeContext(qualityContext),requestId:p.requestId,projectId:p.projectId},{validateFinal:script=>validateQualityScript(p,recent,script)});
+      if(quality.status==="success"){
+        const scripts=quality.scripts.map((script,index)=>({...script,id:Date.now()+index,createdAt:new Date().toISOString()}));
+        if(Number(p.outputCount)===5){
+          const concepts=scripts.map(script=>script.concept).filter(Boolean);
+          const sellingPointPriorities=scripts.map((script,index)=>({id:script.concept?.id||String.fromCharCode(65+index),primary:script.sellingPoints||"",secondary:[],optional:[]}));
+          return Response.json({scripts,concepts,sellingPointPriorities,knowledge:qualityContext.metadata,diversity:{...assessDiversity(scripts),conceptDiversityPassed:true},providerRuns:scripts.map(({providerRequested,providerUsed,aiGenerated,fallbackUsed,providerErrorType,responseTimeMs,languageRepairAttempted})=>({providerRequested,providerUsed,aiGenerated,fallbackUsed,providerErrorType,responseTimeMs,languageRepairAttempted})),quality:quality.metadata,engineMode},{status:201});
+        }
+        const generated=scripts[0];
+        const provider={providerRequested:generated.providerRequested,providerUsed:generated.providerUsed,aiGenerated:generated.aiGenerated,fallbackUsed:generated.fallbackUsed,providerErrorType:generated.providerErrorType,responseTimeMs:generated.responseTimeMs,languageRepairAttempted:generated.languageRepairAttempted};
+        return Response.json({script:generated,knowledge:qualityContext.metadata,sellingPointPriority:qualityContext.sellingPointPriority,provider,quality:quality.metadata,engineMode},{status:201});
+      }
+    }
     if (Number(p.outputCount) === 5) {
       const concepts=buildCreativeConcepts(p,5);
       const scripts=[];
