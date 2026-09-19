@@ -2,14 +2,14 @@ import { randomUUID } from "node:crypto";
 import { callProvider, getProviderStatuses, type ProviderRequest, type ProviderResponse } from "../provider-router";
 import type { ProviderId, ProviderStatus } from "../provider-types";
 import { normalizeStructuredScript, textSimilarity, type CreativeConcept, type StructuredScript } from "../script-generation";
-import { getScriptQualityFewShots } from "./few-shots";
+import { buildFewShotQuery, fewShotSimilarityIssues, getScriptQualityFewShots, type FewShotQuery, type ScriptQualityFewShot } from "./few-shots";
 import { creativeMessages, criticMessages, rewriteMessages, writerMessages } from "./prompts";
 import type { CriticIssue, CriticResult, QualityCreativeConcept, ScriptQualityInput, ScriptQualityMetadata, ScriptQualityResult, WriterDraft } from "./types";
 
 export const QUALITY_STAGE_TIMEOUTS={creative:30_000,writer:45_000,critic:30_000,rewrite:35_000} as const;
 type ProviderCaller=(request:ProviderRequest)=>Promise<ProviderResponse>;
 type StatusReader=()=>Record<ProviderId,ProviderStatus>;
-type Dependencies={call?:ProviderCaller;statuses?:StatusReader;requestId?:()=>string;validateFinal?:(script:StructuredScript)=>void};
+type Dependencies={call?:ProviderCaller;statuses?:StatusReader;requestId?:()=>string;validateFinal?:(script:StructuredScript)=>void;selectFewShots?:(query:FewShotQuery)=>ScriptQualityFewShot[]};
 
 export function resolveScriptEngineMode(value=process.env.SCRIPT_ENGINE_MODE){return value?.trim().toLowerCase()==="quality"?"quality" as const:"legacy" as const;}
 
@@ -79,14 +79,14 @@ export async function runScriptQualityEngine(input:ScriptQualityInput,deps:Depen
     if(!assessConceptDiversity(concepts).passed)throw new Error("creative_similarity_high");
     const selected=Number(input.outputCount)===5?concepts:[concepts[0]];
     const scripts=await Promise.all(selected.map(async concept=>{
-      const fewShots=getScriptQualityFewShots({market:input.country,language:input.language});
+      const fewShots=(deps.selectFewShots||getScriptQualityFewShots)(buildFewShotQuery(input,concept));
       const writer=await caller({provider:"openai",messages:writerMessages(input,concept,fewShots),temperature:.8,topP:.9,maxTokens:4200,timeoutMs:QUALITY_STAGE_TIMEOUTS.writer});
       metadata.writer.push({provider:"openai",model:statuses.openai.model,latencyMs:writer.responseTimeMs});
       let draft=parseObject<WriterDraft>(writer.content);if(!validDraft(draft))throw new Error("writer_schema_invalid");
       const criticCall=await caller({provider:"openai",messages:criticMessages(input,concept,draft,concepts),temperature:.3,topP:.8,maxTokens:2200,timeoutMs:QUALITY_STAGE_TIMEOUTS.critic});
       metadata.critic.push({provider:"openai",model:statuses.openai.model,latencyMs:criticCall.responseTimeMs});
       const critique=parseObject<CriticResult>(criticCall.content);if(!validCritic(critique))throw new Error("critic_schema_invalid");
-      const deterministic=deterministicQualityIssues(draft);const combined:CriticResult={pass:critique.pass&&deterministic.length===0,issues:[...critique.issues,...deterministic],preserve:critique.preserve};
+      const deterministic=[...deterministicQualityIssues(draft),...fewShotSimilarityIssues(draft,fewShots)];const combined:CriticResult={pass:critique.pass&&deterministic.length===0,issues:[...critique.issues,...deterministic],preserve:critique.preserve};
       let rewriteLatency=0;
       if(!combined.pass||combined.issues.some(issue=>issue.severity!=="low")){
         metadata.rewriteTriggered=true;
@@ -96,6 +96,7 @@ export async function runScriptQualityEngine(input:ScriptQualityInput,deps:Depen
         rewriteLatency=rewrite.responseTimeMs;
         if(!preservesRequiredContent(draft,rewritten,combined.preserve))throw new Error("rewrite_preserve_failed");
         if(deterministicQualityIssues(rewritten).some(issue=>issue.severity==="high"))throw new Error("rewrite_guard_failed");
+        if(fewShotSimilarityIssues(rewritten,fewShots).length)throw new Error("few_shot_similarity_guard_failed");
         draft=rewritten;
       }
       return toPublicScript(input,concept,draft,writer.responseTimeMs+criticCall.responseTimeMs+rewriteLatency);

@@ -1,19 +1,10 @@
-export type ScriptQualityFewShot = {
-  id:string;
-  market:string;
-  language:string;
-  productCategory:string;
-  approvedBy:string;
-  input:string;
-  output:string;
-};
+export { scriptQualityFewShotLibrary } from "./library";
+export { buildFewShotQuery, fewShotSimilarityIssues, inferProductCategory, MIN_RELEVANCE_SCORE, scoreFewShot, selectScriptQualityFewShots } from "./select";
+export type { FewShotQuery, FewShotSelectionOptions, FewShotStatus, ScriptQualityFewShot } from "./types";
 
-// Intentionally empty until a human-approved TikTok UGC example library exists.
-const approvedFewShots:ScriptQualityFewShot[]=[];
+import { selectScriptQualityFewShots } from "./select";
+import type { FewShotQuery, FewShotSelectionOptions } from "./types";
 
-export function getScriptQualityFewShots(input:{market:string;language:string;productCategory?:string},limit=2){
-  return approvedFewShots
-    .filter(item=>item.market===input.market&&item.language===input.language&&(!input.productCategory||item.productCategory===input.productCategory))
-    .slice(0,Math.max(0,limit));
+export function getScriptQualityFewShots(query:FewShotQuery,options:FewShotSelectionOptions={}){
+  return selectScriptQualityFewShots(query,options);
 }
-

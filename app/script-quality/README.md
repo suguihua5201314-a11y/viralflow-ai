@@ -26,5 +26,6 @@ Timeout budget:
 
 Five-script Writer/Critic paths run concurrently after the single Creative stage, keeping the bounded worst-case stage path near 140 seconds plus application overhead.
 
-`few-shots/index.ts` intentionally contains an empty, configurable registry. Only human-approved examples should be added later.
+## Curated few-shots
 
+The Writer can receive up to three compact reference examples selected by deterministic metadata scoring. Production selection only uses `approved` entries with a relevance score of at least 10, so it may naturally use 0, 1, or 2 examples rather than padding with unrelated material. References never enter the Critic prompt, and a post-Writer similarity guard can request one targeted rewrite when wording or shot order is copied too closely.

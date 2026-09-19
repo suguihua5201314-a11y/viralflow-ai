@@ -26,7 +26,7 @@ export type WriterDraft = {
 };
 
 export type CriticIssue = {
-  type:"hook"|"tone"|"shootability"|"proof"|"fact"|"compliance"|"diversity";
+  type:"hook"|"tone"|"shootability"|"proof"|"fact"|"compliance"|"diversity"|"few_shot_similarity";
   severity:"low"|"medium"|"high";
   location:string;
   problem:string;
