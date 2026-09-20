@@ -9,7 +9,6 @@ const header = readFileSync(new URL("../app/components/layout/top-header.tsx", i
 const navigation = readFileSync(new URL("../app/navigation.ts", import.meta.url), "utf8");
 const styles = readFileSync(new URL("../app/styles/dashboard.css", import.meta.url), "utf8");
 const metrics = readFileSync(new URL("../app/dashboard-metrics.ts", import.meta.url), "utf8");
-const darkWorkspaces = readFileSync(new URL("../app/styles/dark-workspaces.css", import.meta.url), "utf8");
 
 test("A-D Dashboard is the default and every renamed entry keeps a real ActiveView", () => {
   assert.match(page, /useState<ActiveView>\("dashboard"\)/);
@@ -41,19 +40,15 @@ test("E-G recent work, metrics and global search use existing state sources", ()
   assert.doesNotMatch(dashboard, /86\.7万|4,328|2\.35亿|增长百分比|模型额度/);
 });
 
-test("K-L layout has desktop and compact breakpoints without decorative dead controls", () => {
+test("K-L layout has light Creative OS surfaces and responsive breakpoints", () => {
   assert.match(styles, /@media\(max-width:1280px\)/);
   assert.match(styles, /@media\(max-width:800px\)/);
   assert.match(styles, /@media\(min-width:1680px\)/);
-  assert.match(styles, /--vf-app-bg:#070b14/);
-  assert.match(styles, /--vf-surface-1:#0d1320/);
+  assert.match(styles, /background:\s*var\(--vf-bg\)/);
+  assert.match(styles, /background:\s*var\(--vf-surface\)/);
   assert.match(styles, /prefers-reduced-motion/);
   assert.match(styles, /vf-intelligence-rail/);
-  assert.match(darkWorkspaces, /shared dark application workspace surfaces/);
-  assert.match(darkWorkspaces, /\.script-studio/);
-  assert.match(darkWorkspaces, /\.va-shell/);
-  assert.match(darkWorkspaces, /\.vr-shell/);
-  assert.match(darkWorkspaces, /\.director-studio/);
+  assert.doesNotMatch(styles, /#070b14|#0d1320|#111827|--vf-dark/);
   assert.doesNotMatch(header, /aria-label="帮助"/);
   assert.match(header, /role="listbox"/);
   assert.match(header, /event\.metaKey \|\| event\.ctrlKey/);
