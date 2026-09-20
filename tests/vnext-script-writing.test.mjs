@@ -16,10 +16,14 @@ test("vNext Script starts with a writing header instead of the legacy editor too
   assert.match(css, /\.os-script-studio \.os-studio-editor-head \{\s*display: none/);
 });
 
-test("vNext Script is a bounded document with Hook, spoken copy, Proof and timeline", () => {
-  for (const marker of ["vnext-script-canvas", "vnext-hook-block", "vnext-spoken-script", "vnext-proof-block", "vnext-shot-timeline", "vnext-cta-block"]) assert.match(document, new RegExp(marker));
+test("vNext Script separates the writing document from the shot breakdown", () => {
+  for (const marker of ["vnext-script-canvas", "vnext-script-view-tabs", "vnext-script-text-view", "vnext-shot-breakdown", "vnext-proof-note", "vnext-inline-toolbar"]) assert.match(document, new RegExp(marker));
+  assert.match(document, /脚本文本/);
+  assert.match(document, /镜头拆解/);
   assert.match(css, /max-width: 860px/);
-  assert.match(css, /\.vnext-spoken-script > p[^}]*font-size: 17px/s);
+  assert.match(css, /\.vnext-writing-block-body p[^}]*font-size: 17px/s);
+  assert.match(css, /\.creative-block-editor[^}]*display: none/s);
+  assert.match(css, /\.creative-race-details[^}]*display: none/s);
 });
 
 test("vNext Script keeps real generation, rewrite, version and Director behavior", () => {
@@ -30,6 +34,9 @@ test("vNext Script keeps real generation, rewrite, version and Director behavior
 test("vNext Script assistant is visually writing-first and settings stay collapsible", () => {
   assert.match(css, /AI 创作助手/);
   assert.match(css, /os-assistant-script-actions button[^}]*border-radius: 999px/s);
-  assert.match(studio, /InspectorSection title="创作需求"/);
-  assert.doesNotMatch(studio, /InspectorSection title="创作需求" open/);
+  assert.match(studio, /InspectorSection title="当前创意" open/);
+  assert.match(studio, /InspectorSection title="AI 优化" open/);
+  assert.match(studio, /InspectorSection title="脚本检查"/);
+  assert.match(studio, /InspectorSection title="创作设置"/);
+  assert.doesNotMatch(studio, /InspectorSection title="创作设置" open/);
 });
