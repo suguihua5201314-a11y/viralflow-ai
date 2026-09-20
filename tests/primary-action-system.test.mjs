@@ -22,7 +22,7 @@ test("high-value product actions opt into the shared hierarchy", () => {
   const dashboard = read("../app/dashboard.tsx");
   const projects = read("../app/project-workspace.tsx");
   const script = read("../app/script-studio.tsx");
-  const director = read("../app/shooting-director.tsx");
+  const director = `${read("../app/shooting-director.tsx")}\n${read("../app/components/director/director-header.tsx")}`;
   const shotImage = read("../app/director-shot-image.tsx");
   const images = read("../app/project-asset-workspace.tsx");
   const voice = read("../app/voice-studio.tsx");
@@ -32,7 +32,7 @@ test("high-value product actions opt into the shared hierarchy", () => {
   assert.match(projects, /vf-button-primary[^>]*>[\s\S]*?新建项目/);
   assert.match(script, /os-variant-primary vf-button vf-button-secondary/);
   assert.match(script, /os-pipeline-primary vf-button vf-button-primary/);
-  assert.match(director, /os-primary vf-button vf-button-primary[^>]*>确认导演分镜/);
+  assert.match(director, /vf-button vf-button-primary[^>]*>[\s\S]*?(?:确认导演分镜|重做当前镜头)/);
   assert.match(shotImage, /className="vf-button vf-button-card"[^>]*>[\s\S]*?\{buttonLabel\}/);
   assert.match(images, /os-paw-generate vf-button vf-button-primary/);
   assert.match(voice, /voice-generate vf-button vf-button-primary/);

@@ -1,108 +1,2402 @@
 "use client";
 import DirectorWorkspace from "./components/director/director-workspace";
+import DirectorHeader from "./components/director/director-header";
+import StoryboardCanvas from "./components/director/storyboard-canvas";
+import DirectorAssistant from "./components/director/director-assistant";
 import { Inspector } from "./components/workspace/workspace";
 import Image from "next/image";
-import {useEffect,useMemo,useRef,useState} from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import WorkspaceState from "./components/ui/workspace-state";
 import ConfirmDialog from "./components/ui/confirm-dialog";
-import {notifyWorkspace} from "./components/ui/workspace-feedback";
-import {cameraAngleValues,cameraMovementValues,directorContextId,framingValues,scriptBlocks,type DirectorRequest,type DirectorResult,type DirectorShot} from "./director-core";
-import {autoRebalance,checkDirectorIntegrity,createDirectorVersion,deleteShot,duplicateShot,insertShot,plannedDuration,recalculateTimeline,reorderShots,workspaceShots,type DirectorVersion,type WorkspaceShot} from "./director-workspace";
+import { notifyWorkspace } from "./components/ui/workspace-feedback";
+import {
+  cameraAngleValues,
+  cameraMovementValues,
+  directorContextId,
+  framingValues,
+  scriptBlocks,
+  type DirectorRequest,
+  type DirectorResult,
+  type DirectorShot,
+} from "./director-core";
+import {
+  autoRebalance,
+  checkDirectorIntegrity,
+  createDirectorVersion,
+  deleteShot,
+  duplicateShot,
+  insertShot,
+  plannedDuration,
+  recalculateTimeline,
+  reorderShots,
+  workspaceShots,
+  type DirectorVersion,
+  type WorkspaceShot,
+} from "./director-workspace";
 import DirectorShotImage from "./director-shot-image";
-import {buildShotImagePrompt} from "./director-image";
-import type {ShotIntelligenceBatchResult,ShotIntelligenceEvaluation,ShotIntelligenceScores} from "./director-intelligence";
-import {readImageAssets} from "./image-assets";
+import { buildShotImagePrompt } from "./director-image";
+import type {
+  ShotIntelligenceBatchResult,
+  ShotIntelligenceEvaluation,
+  ShotIntelligenceScores,
+} from "./director-intelligence";
+import { readImageAssets } from "./image-assets";
 
-type Props={input:DirectorRequest|null;currentProjectId:string|null;initialWorkspace?:unknown;onNavigate?:(view:"create"|"history"|"replicate"|"images")=>void;onChange?:(value:unknown)=>void};
-type RewritePreview={mode:"replace"|"insert";index:number;before:WorkspaceShot;after:WorkspaceShot;metadata:{providerUsed:string;fallbackUsed:boolean;factGuardPassed:boolean}};
-type IntelligenceStatus="idle"|"loading"|"success"|"error"|"stale";
-type ShotIntelligenceState={status:IntelligenceStatus;evaluation?:ShotIntelligenceEvaluation;error?:string};
-type PersistedDirectorWorkspace={result:DirectorResult;shots:WorkspaceShot[];listStatus?:"Draft"|"Confirmed";selectedShot?:number|null;intelligence?:Record<string,ShotIntelligenceState>;intelligenceMetadata?:ShotIntelligenceBatchResult["metadata"]|null};
-const scoreItems:Array<[keyof ShotIntelligenceScores,string]>=[["hookStrength","HOOK"],["visualImpact","VISUAL"],["productProof","PROOF"],["conversionPotential","CONVERSION"]];
-const intelligenceAverage=(evaluation?:ShotIntelligenceEvaluation)=>evaluation?Math.round(scoreItems.reduce((sum,[key])=>sum+evaluation.scores[key],0)/scoreItems.length):0;
-const scoreTone=(score:number)=>score>=85?"excellent":score>=70?"good":score>=50?"attention":"weak";
-const presets=["更有视觉冲击","更 TikTok 原生","更容易拍","更强 Proof","更自然 KOC","换景别","换场景","自定义要求"];
-const editable:Array<[keyof WorkspaceShot,string,"text"|"textarea"|"number"|"framing"|"angle"|"movement"]>=[
- ["duration","时长","number"],["framing","景别","framing"],["cameraAngle","机位","angle"],["cameraMovement","运镜","movement"],["visualDescription","画面描述","textarea"],["talentAction","模特动作","textarea"],["productAction","产品动作","textarea"],["dialogue","现场台词","textarea"],["voiceover","口播","textarea"],["onScreenText","屏幕字幕","textarea"],["props","道具（；分隔）","text"],["environment","拍摄环境","text"],["proofRequirement","证明要求","textarea"],["transition","转场","text"],["editingNotes","导演备注 / 剪辑","textarea"],["audioSfx","音效","text"]
+type Props = {
+  input: DirectorRequest | null;
+  currentProjectId: string | null;
+  initialWorkspace?: unknown;
+  onNavigate?: (view: "create" | "history" | "replicate" | "images") => void;
+  onChange?: (value: unknown) => void;
+};
+type RewritePreview = {
+  mode: "replace" | "insert";
+  index: number;
+  before: WorkspaceShot;
+  after: WorkspaceShot;
+  metadata: {
+    providerUsed: string;
+    fallbackUsed: boolean;
+    factGuardPassed: boolean;
+  };
+};
+type IntelligenceStatus = "idle" | "loading" | "success" | "error" | "stale";
+type ShotIntelligenceState = {
+  status: IntelligenceStatus;
+  evaluation?: ShotIntelligenceEvaluation;
+  error?: string;
+};
+type PersistedDirectorWorkspace = {
+  result: DirectorResult;
+  shots: WorkspaceShot[];
+  listStatus?: "Draft" | "Confirmed";
+  selectedShot?: number | null;
+  intelligence?: Record<string, ShotIntelligenceState>;
+  intelligenceMetadata?: ShotIntelligenceBatchResult["metadata"] | null;
+};
+const scoreItems: Array<[keyof ShotIntelligenceScores, string]> = [
+  ["hookStrength", "HOOK"],
+  ["visualImpact", "VISUAL"],
+  ["productProof", "PROOF"],
+  ["conversionPotential", "CONVERSION"],
 ];
-const stageLabel=(value:string)=>({HOOK:"开场钩子",BODY:"正文",CONFLICT:"冲突",PROOF:"证明镜头",SELLING_POINT:"卖点",PRODUCT_REVEAL:"产品出场",CTA:"行动引导"}[value]||value.replaceAll("_"," "));
-const statusLabel=(value:string)=>({Draft:"草稿",Confirmed:"已确认",Shot:"已拍摄",Retake:"重拍"}[value]||value);
-const integrityLabel=(value:string)=>value==="Complete"?"完整":"需要处理";
-const cameraLabel=(value:string)=>({"Extreme Close-Up":"超特写","Close-Up":"特写","Medium Close-Up":"中近景",Medium:"中景",Wide:"全景","Over-the-Shoulder":"越肩镜头","Top-Down":"俯拍","Product Macro":"产品微距","Eye Level":"平视","High Angle":"高机位","Low Angle":"低机位","Side Angle":"侧面机位","45 Degree":"45度机位",Static:"固定", "Push In":"推进","Pull Out":"拉远",Pan:"横摇",Tilt:"竖摇",Handheld:"手持",Tracking:"跟拍"}[value]||value);
-const videoPromptDraft=(shot:WorkspaceShot)=>`${cameraLabel(shot.cameraMovement)}短视频，${shot.talentAction||shot.productAction}，${shot.duration.toFixed(1)}秒，${shot.transition}`;
-const emptyFrom=(basis:WorkspaceShot):WorkspaceShot=>({...basis,shotId:"manual",sourceBlockId:`manual:${Date.now().toString(36)}`,stage:"BODY",purpose:"Transition / Support",shotType:"Action Shot",visualDescription:"",productAction:"",talentAction:"",dialogue:"",voiceover:"",onScreenText:"",proofRequirement:"",duration:1.5,props:[],locked:false,status:"Draft"});
-const creativeDirections=(evaluation:ShotIntelligenceEvaluation)=>[
- {label:"视觉冲击",instruction:`强化视觉冲击：${evaluation.suggestion.visualUpgrade}`},
- {label:"产品证明",instruction:`强化可拍摄的产品证明，只使用已有产品事实：${evaluation.suggestion.missing}`},
- {label:"转化表达",instruction:`强化用户利益与转化表达：${evaluation.suggestion.conversionUpgrade}`},
- {label:"TikTok 原生",instruction:`在不改变产品事实的前提下，让镜头更像 TikTok 原生内容，并落实：${evaluation.suggestion.visualUpgrade}`},
- {label:"低成本可拍",instruction:`把建议改成更容易真实拍摄的执行方向：${evaluation.suggestion.missing}`}
+const intelligenceAverage = (evaluation?: ShotIntelligenceEvaluation) =>
+  evaluation
+    ? Math.round(
+        scoreItems.reduce((sum, [key]) => sum + evaluation.scores[key], 0) /
+          scoreItems.length,
+      )
+    : 0;
+const scoreTone = (score: number) =>
+  score >= 85
+    ? "excellent"
+    : score >= 70
+      ? "good"
+      : score >= 50
+        ? "attention"
+        : "weak";
+const presets = [
+  "更有视觉冲击",
+  "更 TikTok 原生",
+  "更容易拍",
+  "更强 Proof",
+  "更自然 KOC",
+  "换景别",
+  "换场景",
+  "自定义要求",
 ];
-const restoredWorkspace=(value:unknown):PersistedDirectorWorkspace|null=>{if(!value||typeof value!=="object")return null;const candidate=value as Partial<PersistedDirectorWorkspace>;return candidate.result&&Array.isArray(candidate.shots)?candidate as PersistedDirectorWorkspace:null;};
+const editable: Array<
+  [
+    keyof WorkspaceShot,
+    string,
+    "text" | "textarea" | "number" | "framing" | "angle" | "movement",
+  ]
+> = [
+  ["duration", "时长", "number"],
+  ["framing", "景别", "framing"],
+  ["cameraAngle", "机位", "angle"],
+  ["cameraMovement", "运镜", "movement"],
+  ["visualDescription", "画面描述", "textarea"],
+  ["talentAction", "模特动作", "textarea"],
+  ["productAction", "产品动作", "textarea"],
+  ["dialogue", "现场台词", "textarea"],
+  ["voiceover", "口播", "textarea"],
+  ["onScreenText", "屏幕字幕", "textarea"],
+  ["props", "道具（；分隔）", "text"],
+  ["environment", "拍摄环境", "text"],
+  ["proofRequirement", "证明要求", "textarea"],
+  ["transition", "转场", "text"],
+  ["editingNotes", "导演备注 / 剪辑", "textarea"],
+  ["audioSfx", "音效", "text"],
+];
+const stageLabel = (value: string) =>
+  ({
+    HOOK: "开场钩子",
+    BODY: "正文",
+    CONFLICT: "冲突",
+    PROOF: "证明镜头",
+    SELLING_POINT: "卖点",
+    PRODUCT_REVEAL: "产品出场",
+    CTA: "行动引导",
+  })[value] || value.replaceAll("_", " ");
+const statusLabel = (value: string) =>
+  ({ Draft: "草稿", Confirmed: "已确认", Shot: "已拍摄", Retake: "重拍" })[
+    value
+  ] || value;
+const integrityLabel = (value: string) =>
+  value === "Complete" ? "完整" : "需要处理";
+const cameraLabel = (value: string) =>
+  ({
+    "Extreme Close-Up": "超特写",
+    "Close-Up": "特写",
+    "Medium Close-Up": "中近景",
+    Medium: "中景",
+    Wide: "全景",
+    "Over-the-Shoulder": "越肩镜头",
+    "Top-Down": "俯拍",
+    "Product Macro": "产品微距",
+    "Eye Level": "平视",
+    "High Angle": "高机位",
+    "Low Angle": "低机位",
+    "Side Angle": "侧面机位",
+    "45 Degree": "45度机位",
+    Static: "固定",
+    "Push In": "推进",
+    "Pull Out": "拉远",
+    Pan: "横摇",
+    Tilt: "竖摇",
+    Handheld: "手持",
+    Tracking: "跟拍",
+  })[value] || value;
+const videoPromptDraft = (shot: WorkspaceShot) =>
+  `${cameraLabel(shot.cameraMovement)}短视频，${shot.talentAction || shot.productAction}，${shot.duration.toFixed(1)}秒，${shot.transition}`;
+const emptyFrom = (basis: WorkspaceShot): WorkspaceShot => ({
+  ...basis,
+  shotId: "manual",
+  sourceBlockId: `manual:${Date.now().toString(36)}`,
+  stage: "BODY",
+  purpose: "Transition / Support",
+  shotType: "Action Shot",
+  visualDescription: "",
+  productAction: "",
+  talentAction: "",
+  dialogue: "",
+  voiceover: "",
+  onScreenText: "",
+  proofRequirement: "",
+  duration: 1.5,
+  props: [],
+  locked: false,
+  status: "Draft",
+});
+const creativeDirections = (evaluation: ShotIntelligenceEvaluation) => [
+  {
+    label: "视觉冲击",
+    instruction: `强化视觉冲击：${evaluation.suggestion.visualUpgrade}`,
+  },
+  {
+    label: "产品证明",
+    instruction: `强化可拍摄的产品证明，只使用已有产品事实：${evaluation.suggestion.missing}`,
+  },
+  {
+    label: "转化表达",
+    instruction: `强化用户利益与转化表达：${evaluation.suggestion.conversionUpgrade}`,
+  },
+  {
+    label: "TikTok 原生",
+    instruction: `在不改变产品事实的前提下，让镜头更像 TikTok 原生内容，并落实：${evaluation.suggestion.visualUpgrade}`,
+  },
+  {
+    label: "低成本可拍",
+    instruction: `把建议改成更容易真实拍摄的执行方向：${evaluation.suggestion.missing}`,
+  },
+];
+const restoredWorkspace = (
+  value: unknown,
+): PersistedDirectorWorkspace | null => {
+  if (!value || typeof value !== "object") return null;
+  const candidate = value as Partial<PersistedDirectorWorkspace>;
+  return candidate.result && Array.isArray(candidate.shots)
+    ? (candidate as PersistedDirectorWorkspace)
+    : null;
+};
 
-function AssistantShotPreview({shot,projectId,demo=false}:{shot:WorkspaceShot;projectId:string|null;demo?:boolean}){
- const [imageUrl,setImageUrl]=useState("");
- useEffect(()=>{const asset=readImageAssets().find(item=>item.projectId===projectId&&item.metadata?.sourceReference?.shotId===shot.shotId);setImageUrl(asset?.imageUrl||"");},[projectId,shot.shotId]);
- return <i className={`os-assistant-shot-preview ${demo?"demo":""}`} style={demo?{"--demo-position":`${Math.min(3,Math.max(0,shot.order-1))*33.333}%`} as React.CSSProperties:undefined}>{imageUrl?<Image src={imageUrl} alt={`Shot ${shot.order}`} fill sizes="64px" unoptimized/>:demo?null:<b>{String(shot.order).padStart(2,"0")}</b>}</i>;
+function AssistantShotPreview({
+  shot,
+  projectId,
+  demo = false,
+}: {
+  shot: WorkspaceShot;
+  projectId: string | null;
+  demo?: boolean;
+}) {
+  const [imageUrl, setImageUrl] = useState("");
+  useEffect(() => {
+    const asset = readImageAssets().find(
+      (item) =>
+        item.projectId === projectId &&
+        item.metadata?.sourceReference?.shotId === shot.shotId,
+    );
+    setImageUrl(asset?.imageUrl || "");
+  }, [projectId, shot.shotId]);
+  return (
+    <i
+      className={`os-assistant-shot-preview ${demo ? "demo" : ""}`}
+      style={
+        demo
+          ? ({
+              "--demo-position": `${Math.min(3, Math.max(0, shot.order - 1)) * 33.333}%`,
+            } as React.CSSProperties)
+          : undefined
+      }
+    >
+      {imageUrl ? (
+        <Image
+          src={imageUrl}
+          alt={`Shot ${shot.order}`}
+          fill
+          sizes="64px"
+          unoptimized
+        />
+      ) : demo ? null : (
+        <b>{String(shot.order).padStart(2, "0")}</b>
+      )}
+    </i>
+  );
 }
 
-function ShotCard({shot,input,visualStyle,projectId,selected,intelligence,onAnalyze,onSelect,onToggleLock,onDuplicate,onDelete,onRegenerate,onOpenImageStudio,onDragStart,onDrop}:{shot:WorkspaceShot;input:DirectorRequest;visualStyle:string;projectId:string|null;selected:boolean;intelligence:ShotIntelligenceState|undefined;onAnalyze:()=>void;onSelect:()=>void;onToggleLock:()=>void;onDuplicate:()=>void;onDelete:()=>void;onRegenerate:()=>void;onOpenImageStudio:()=>void;onDragStart:()=>void;onDrop:()=>void}){
- const [expanded,setExpanded]=useState(false);
- return <article id={`director-${shot.shotId}`} className={`os-director-shot-card os-workspace ${selected?"selected":""}`} draggable onDragStart={onDragStart} onDragOver={event=>event.preventDefault()} onDrop={onDrop}>
-  <header><button className="os-shot-drag" aria-label="拖动排序">⠿</button><div onClick={onSelect}><small>SHOT {String(shot.order).padStart(2,"0")}</small><b>{stageLabel(shot.stage)}</b><span>{shot.startTime.toFixed(1)}–{shot.endTime.toFixed(1)}秒 · {statusLabel(shot.status)}</span></div><nav><button onClick={onToggleLock} aria-label={shot.locked?"解锁镜头":"锁定镜头"}>{shot.locked?"🔒":"🔓"}</button><button onClick={onSelect}>{selected?"正在编辑":"编辑"}</button><details><summary>⋯</summary><menu><button onClick={onRegenerate}>AI 重新生成</button><button onClick={onDuplicate}>复制镜头</button><button className="os-danger" onClick={onDelete}>删除镜头</button></menu></details></nav></header>
-  <div className="os-shot-card-body"><DirectorShotImage shot={shot} input={input} visualStyle={visualStyle} projectId={projectId} onNavigate={onOpenImageStudio}/><div className="os-shot-card-content"><section className="os-director-visual" onClick={onSelect}><small>{shot.shotType} · {shot.duration.toFixed(1)}S</small><h3>{shot.dialogue||shot.voiceover||shot.onScreenText||stageLabel(shot.stage)}</h3><p>{shot.visualDescription||"尚未填写可执行画面"}</p><em>{cameraLabel(shot.cameraMovement)}</em></section>
-  <section className={`os-shot-intelligence-rail ${intelligence?.status||"idle"}`} aria-label={`镜头 ${shot.order} Intelligence Score`}>
-   {intelligence?.status==="success"&&intelligence.evaluation?scoreItems.map(([key,label])=><article key={key} className={scoreTone(intelligence.evaluation!.scores[key])} style={{"--ring":`${intelligence.evaluation!.scores[key]}%`} as React.CSSProperties}><span>{label}</span><b>{intelligence.evaluation!.scores[key]}</b><i style={{"--score":`${intelligence.evaluation!.scores[key]}%`} as React.CSSProperties}/></article>):<button type="button" disabled={intelligence?.status==="loading"} onClick={event=>{event.stopPropagation();onAnalyze();}}>{intelligence?.status==="loading"?<><i className="os-intelligence-spinner"/>AI 分析中...</>:intelligence?.status==="error"?"分析失败 · 重试":intelligence?.status==="stale"?"镜头已变化 · 重新分析":"✦ 分析镜头"}</button>}
-  </section>
-  <div className="os-shot-production-grid"><article><b>Camera</b><p>{cameraLabel(shot.framing)} · {cameraLabel(shot.cameraAngle)}</p></article><article><b>Movement</b><p>{cameraLabel(shot.cameraMovement)}</p></article><article><b>Action</b><p>{shot.talentAction||shot.productAction||"—"}</p></article><article className="os-shot-proof"><b>Proof</b><p>{shot.proofRequirement||"当前镜头无需独立证明"}</p></article></div>
-  <div className="os-director-shot-tags"><span>{cameraLabel(shot.framing)}</span><span>{cameraLabel(shot.cameraAngle)}</span><span>{cameraLabel(shot.cameraMovement)}</span><span>{shot.sourceBlockId}</span></div>
-  </div></div>
-  <button className="os-shot-expand" onClick={()=>setExpanded(value=>!value)}>{expanded?"收起摄影 / 道具 / 剪辑 / 连贯性":"展开摄影 / 道具 / 剪辑 / 连贯性"}</button>
-  {expanded?<><dl className="os-director-shot-grid"><div><dt>产品动作</dt><dd>{shot.productAction||"—"}</dd></div><div><dt>屏幕字幕</dt><dd>{shot.onScreenText||"—"}</dd></div><div><dt>道具 / 环境</dt><dd>{shot.props.join("、")||"—"}<br/>{shot.environment}</dd></div><div><dt>转场 / 剪辑</dt><dd>{shot.transition}<br/>{shot.editingNotes}</dd></div><div><dt>音效</dt><dd>{shot.audioSfx||"—"}</dd></div><div><dt>连贯性</dt><dd>{shot.continuityNotes||"—"}</dd></div></dl><section className="os-future-prompt-grid"><article><span>VIDEO PROMPT · FUTURE</span><p>{videoPromptDraft(shot)}</p><button disabled title="本阶段不接入视频生成">视频生成尚未接入</button></article></section></>:null}
- </article>;
+function ShotCard({
+  shot,
+  input,
+  visualStyle,
+  projectId,
+  selected,
+  intelligence,
+  onAnalyze,
+  onSelect,
+  onToggleLock,
+  onDuplicate,
+  onDelete,
+  onRegenerate,
+  onOpenImageStudio,
+  onDragStart,
+  onDrop,
+}: {
+  shot: WorkspaceShot;
+  input: DirectorRequest;
+  visualStyle: string;
+  projectId: string | null;
+  selected: boolean;
+  intelligence: ShotIntelligenceState | undefined;
+  onAnalyze: () => void;
+  onSelect: () => void;
+  onToggleLock: () => void;
+  onDuplicate: () => void;
+  onDelete: () => void;
+  onRegenerate: () => void;
+  onOpenImageStudio: () => void;
+  onDragStart: () => void;
+  onDrop: () => void;
+}) {
+  const [expanded, setExpanded] = useState(false);
+  return (
+    <article
+      id={`director-${shot.shotId}`}
+      className={`os-director-shot-card os-workspace ${selected ? "selected" : ""}`}
+      draggable
+      onDragStart={onDragStart}
+      onDragOver={(event) => event.preventDefault()}
+      onDrop={onDrop}
+    >
+      <header>
+        <button className="os-shot-drag" aria-label="拖动排序">
+          ⠿
+        </button>
+        <div onClick={onSelect}>
+          <small>SHOT {String(shot.order).padStart(2, "0")}</small>
+          <b>{stageLabel(shot.stage)}</b>
+          <span>
+            {shot.startTime.toFixed(1)}–{shot.endTime.toFixed(1)}秒 ·{" "}
+            {statusLabel(shot.status)}
+          </span>
+        </div>
+        <nav>
+          <button
+            onClick={onToggleLock}
+            aria-label={shot.locked ? "解锁镜头" : "锁定镜头"}
+          >
+            {shot.locked ? "🔒" : "🔓"}
+          </button>
+          <button onClick={onSelect}>{selected ? "正在编辑" : "编辑"}</button>
+          <details>
+            <summary>⋯</summary>
+            <menu>
+              <button onClick={onRegenerate}>AI 重新生成</button>
+              <button onClick={onDuplicate}>复制镜头</button>
+              <button className="os-danger" onClick={onDelete}>
+                删除镜头
+              </button>
+            </menu>
+          </details>
+        </nav>
+      </header>
+      <div className="os-shot-card-body">
+        <DirectorShotImage
+          shot={shot}
+          input={input}
+          visualStyle={visualStyle}
+          projectId={projectId}
+          onNavigate={onOpenImageStudio}
+        />
+        <div className="os-shot-card-content">
+          <section className="os-director-visual" onClick={onSelect}>
+            <small>
+              {shot.shotType} · {shot.duration.toFixed(1)}S
+            </small>
+            <h3>
+              {shot.dialogue ||
+                shot.voiceover ||
+                shot.onScreenText ||
+                stageLabel(shot.stage)}
+            </h3>
+            <p>{shot.visualDescription || "尚未填写可执行画面"}</p>
+            <em>{cameraLabel(shot.cameraMovement)}</em>
+          </section>
+          <section
+            className={`os-shot-intelligence-rail ${intelligence?.status || "idle"}`}
+            aria-label={`镜头 ${shot.order} Intelligence Score`}
+          >
+            {intelligence?.status === "success" && intelligence.evaluation ? (
+              scoreItems.map(([key, label]) => (
+                <article
+                  key={key}
+                  className={scoreTone(intelligence.evaluation!.scores[key])}
+                  style={
+                    {
+                      "--ring": `${intelligence.evaluation!.scores[key]}%`,
+                    } as React.CSSProperties
+                  }
+                >
+                  <span>{label}</span>
+                  <b>{intelligence.evaluation!.scores[key]}</b>
+                  <i
+                    style={
+                      {
+                        "--score": `${intelligence.evaluation!.scores[key]}%`,
+                      } as React.CSSProperties
+                    }
+                  />
+                </article>
+              ))
+            ) : (
+              <button
+                type="button"
+                disabled={intelligence?.status === "loading"}
+                onClick={(event) => {
+                  event.stopPropagation();
+                  onAnalyze();
+                }}
+              >
+                {intelligence?.status === "loading" ? (
+                  <>
+                    <i className="os-intelligence-spinner" />
+                    AI 分析中...
+                  </>
+                ) : intelligence?.status === "error" ? (
+                  "分析失败 · 重试"
+                ) : intelligence?.status === "stale" ? (
+                  "镜头已变化 · 重新分析"
+                ) : (
+                  "✦ 分析镜头"
+                )}
+              </button>
+            )}
+          </section>
+          <div className="os-shot-production-grid">
+            <article>
+              <b>Camera</b>
+              <p>
+                {cameraLabel(shot.framing)} · {cameraLabel(shot.cameraAngle)}
+              </p>
+            </article>
+            <article>
+              <b>Movement</b>
+              <p>{cameraLabel(shot.cameraMovement)}</p>
+            </article>
+            <article>
+              <b>Action</b>
+              <p>{shot.talentAction || shot.productAction || "—"}</p>
+            </article>
+            <article className="os-shot-proof">
+              <b>Proof</b>
+              <p>{shot.proofRequirement || "当前镜头无需独立证明"}</p>
+            </article>
+          </div>
+          <div className="os-director-shot-tags">
+            <span>{cameraLabel(shot.framing)}</span>
+            <span>{cameraLabel(shot.cameraAngle)}</span>
+            <span>{cameraLabel(shot.cameraMovement)}</span>
+            <span>{shot.sourceBlockId}</span>
+          </div>
+        </div>
+      </div>
+      <button
+        className="os-shot-expand"
+        onClick={() => setExpanded((value) => !value)}
+      >
+        {expanded
+          ? "收起摄影 / 道具 / 剪辑 / 连贯性"
+          : "展开摄影 / 道具 / 剪辑 / 连贯性"}
+      </button>
+      {expanded ? (
+        <>
+          <dl className="os-director-shot-grid">
+            <div>
+              <dt>产品动作</dt>
+              <dd>{shot.productAction || "—"}</dd>
+            </div>
+            <div>
+              <dt>屏幕字幕</dt>
+              <dd>{shot.onScreenText || "—"}</dd>
+            </div>
+            <div>
+              <dt>道具 / 环境</dt>
+              <dd>
+                {shot.props.join("、") || "—"}
+                <br />
+                {shot.environment}
+              </dd>
+            </div>
+            <div>
+              <dt>转场 / 剪辑</dt>
+              <dd>
+                {shot.transition}
+                <br />
+                {shot.editingNotes}
+              </dd>
+            </div>
+            <div>
+              <dt>音效</dt>
+              <dd>{shot.audioSfx || "—"}</dd>
+            </div>
+            <div>
+              <dt>连贯性</dt>
+              <dd>{shot.continuityNotes || "—"}</dd>
+            </div>
+          </dl>
+          <section className="os-future-prompt-grid">
+            <article>
+              <span>VIDEO PROMPT · FUTURE</span>
+              <p>{videoPromptDraft(shot)}</p>
+              <button disabled title="本阶段不接入视频生成">
+                视频生成尚未接入
+              </button>
+            </article>
+          </section>
+        </>
+      ) : null}
+    </article>
+  );
 }
 
-export default function ShootingDirector({input,currentProjectId,initialWorkspace,onNavigate,onChange}:Props){
- const initial=restoredWorkspace(initialWorkspace);
- const [talent]=useState("单人手模 / KOC"),[environment]=useState("同一张整洁桌面"),[result,setResult]=useState<DirectorResult|null>(()=>initial?.result||null),[shots,setShots]=useState<WorkspaceShot[]>(()=>initial?.shots||[]),[busy,setBusy]=useState(false),[error,setError]=useState(""),[selected,setSelected]=useState<number|null>(()=>initial?.selectedShot??(initial?.shots.length?0:null)),[preset,setPreset]=useState(presets[0]),[instruction,setInstruction]=useState(""),[preview,setPreview]=useState<RewritePreview|null>(null),[undo,setUndo]=useState<{index:number;shot:WorkspaceShot}|null>(null),[versions,setVersions]=useState<DirectorVersion[]>([]),[listStatus,setListStatus]=useState<"Draft"|"Confirmed">(()=>initial?.listStatus||"Draft"),[rebalance,setRebalance]=useState<{beforePlanned:number;afterPlanned:number;target:number;delta:number}|null>(null),[showArchived,setShowArchived]=useState(false),[pendingDelete,setPendingDelete]=useState<number|null>(null),[intelligence,setIntelligence]=useState<Record<string,ShotIntelligenceState>>(()=>initial?.intelligence||{}),[intelligenceMetadata,setIntelligenceMetadata]=useState<ShotIntelligenceBatchResult["metadata"]|null>(()=>initial?.intelligenceMetadata||null);
- const dragged=useRef<number|null>(null),currentContextId=input?directorContextId(input):"",target=input?.context.targetDuration||30,planned=plannedDuration(shots),delta=Math.round((planned-target)*10)/10,contextChanged=Boolean(result&&result.metadata.contextId!==currentContextId);
- useEffect(()=>{const restored=restoredWorkspace(initialWorkspace);setResult(restored?.result||null);setShots(restored?.shots||[]);setListStatus(restored?.listStatus||"Draft");setSelected(restored?.selectedShot??(restored?.shots.length?0:null));setIntelligence(restored?.intelligence||{});setIntelligenceMetadata(restored?.intelligenceMetadata||null);setError("");setPreview(null);},[currentProjectId,initialWorkspace]);
- const sourceIds=useMemo(()=>input?scriptBlocks(input.script).map(block=>block.id):[],[input]);
- const contextMessages=useMemo(()=>result?.metadata.contextIntegrity.issues.map(issue=>`${issue.message}${issue.value?`：${issue.value}`:""}`)||[],[result]);
- const integrity=useMemo(()=>checkDirectorIntegrity(shots,target,input?.context.sellingPoints||"",sourceIds,contextMessages),[shots,target,input?.context.sellingPoints,sourceIds,contextMessages]);
- function commit(next:WorkspaceShot[]){const updated=recalculateTimeline(next.map(x=>({...x,status:"Draft"})));setShots(updated);setIntelligence(previous=>{const nextIntelligence=Object.fromEntries(updated.map(shot=>[shot.shotId,previous[shot.shotId]?.evaluation?{...previous[shot.shotId],status:"stale" as const}:{status:"idle" as const}]));onChange?.({result,shots:updated,listStatus:"Draft",selectedShot:selected,intelligence:nextIntelligence,intelligenceMetadata,updatedAt:new Date().toISOString()});return nextIntelligence;});setListStatus("Draft");setRebalance(null);}
- async function analyzeShots(targetShots:WorkspaceShot[],force=false,neighbors?:{previousShot?:WorkspaceShot;nextShot?:WorkspaceShot}){if(!input||!result||!targetShots.length||contextChanged)return;const ids=targetShots.map(shot=>shot.shotId);setIntelligence(previous=>({...previous,...Object.fromEntries(ids.map(id=>[id,{...previous[id],status:"loading" as const,error:""}]))}));try{const compactNeighbor=(shot?:WorkspaceShot)=>shot?{stage:shot.stage,purpose:shot.purpose,visualDescription:shot.visualDescription}:undefined;const response=await fetch("/api/director",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({...input,action:"evaluate-shots",contextId:result.metadata.contextId,directorPlan:result.directorPlan,shots:targetShots,previousShot:compactNeighbor(neighbors?.previousShot),nextShot:compactNeighbor(neighbors?.nextShot),force})});const data=await response.json() as ShotIntelligenceBatchResult&{error?:string};if(!response.ok)throw new Error(data.error||"Shot Intelligence 暂时不可用");setIntelligence(previous=>{const next={...previous,...Object.fromEntries(data.evaluations.map(evaluation=>[evaluation.shotId,{status:"success" as const,evaluation}]))};onChange?.({result,shots,listStatus,selectedShot:selected,intelligence:next,intelligenceMetadata:data.metadata,updatedAt:new Date().toISOString()});return next;});setIntelligenceMetadata(data.metadata);}catch(caught){const message=caught instanceof Error?caught.message:"Shot Intelligence 暂时不可用";setIntelligence(previous=>({...previous,...Object.fromEntries(ids.map(id=>[id,{...previous[id],status:"error" as const,error:message}]))}));}}
- function analyzeCurrent(index:number,force=true){void analyzeShots([shots[index]],force,{previousShot:shots[index-1],nextShot:shots[index+1]});}
- async function generate(){if(!input||busy)return;setBusy(true);setError("");try{const response=await fetch("/api/director",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({...input,action:"generate",settings:{...input.settings,talent,environment,provider:"doubao"}})});const data=await response.json();if(!response.ok)throw new Error(data.error||"Director生成失败");if(result&&contextChanged){const archived=createDirectorVersion(versions,result.metadata.contextId,result.directorPlan,shots,listStatus);setVersions(value=>[...value,archived]);}const generatedShots=workspaceShots(data.shots);setResult(data);setShots(generatedShots);setIntelligence({});setIntelligenceMetadata(null);setSelected(generatedShots.length?0:null);setPreview(null);setShowArchived(false);setListStatus("Draft");onChange?.({result:data,shots:generatedShots,listStatus:"Draft",selectedShot:generatedShots.length?0:null,intelligence:{},intelligenceMetadata:null,updatedAt:new Date().toISOString()});window.setTimeout(()=>void analyzeGenerated(data,generatedShots),0);}catch(e){setError(e instanceof Error?e.message:"Director生成失败");}finally{setBusy(false);}}
- async function analyzeGenerated(generatedResult:DirectorResult,generatedShots:WorkspaceShot[]){if(!input||!generatedShots.length)return;const ids=generatedShots.map(shot=>shot.shotId);setIntelligence(Object.fromEntries(ids.map(id=>[id,{status:"loading" as const}])));try{const response=await fetch("/api/director",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({...input,action:"evaluate-shots",contextId:generatedResult.metadata.contextId,directorPlan:generatedResult.directorPlan,shots:generatedShots})});const data=await response.json() as ShotIntelligenceBatchResult&{error?:string};if(!response.ok)throw new Error(data.error||"Shot Intelligence 暂时不可用");const next=Object.fromEntries(data.evaluations.map(evaluation=>[evaluation.shotId,{status:"success" as const,evaluation}]));setIntelligence(next);setIntelligenceMetadata(data.metadata);onChange?.({result:generatedResult,shots:generatedShots,listStatus:"Draft",selectedShot:generatedShots.length?0:null,intelligence:next,intelligenceMetadata:data.metadata,updatedAt:new Date().toISOString()});}catch(caught){const message=caught instanceof Error?caught.message:"Shot Intelligence 暂时不可用";setIntelligence(Object.fromEntries(ids.map(id=>[id,{status:"error" as const,error:message}])));}}
- async function requestCandidate(index:number,action:"regenerate-shot"|"suggest-shot",requestedInstruction=instruction){if(!input||!result||busy||contextChanged)return null;const current=shots[index]||shots.at(-1);if(!current)return null;if(action==="regenerate-shot"&&current.locked&&!window.confirm("当前镜头已锁定。确认主动重新生成这个镜头？"))return null;setBusy(true);setError("");try{const block=scriptBlocks(input.script).find(x=>x.id===current.sourceBlockId);const response=await fetch("/api/director",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({...input,action,contextId:result.metadata.contextId,currentShot:current,previousShot:shots[index-1],nextShot:shots[index+1],directorPlan:result.directorPlan,sourceBlock:block,preset,instruction:requestedInstruction})});const data=await response.json();if(!response.ok)throw new Error(data.error||"镜头生成失败");return{...data.candidate,locked:false,status:"Draft",metadata:data.metadata};}catch(e){setError(e instanceof Error?e.message:"镜头生成失败");return null;}finally{setBusy(false);}}
- async function regenerate(index:number){const candidate=await requestCandidate(index,"regenerate-shot");if(candidate)setPreview({mode:"replace",index,before:structuredClone(shots[index]),after:candidate,metadata:candidate.metadata});}
- async function regenerateWithDirection(index:number,direction:string){const candidate=await requestCandidate(index,"regenerate-shot",direction);if(candidate)setPreview({mode:"replace",index,before:structuredClone(shots[index]),after:candidate,metadata:candidate.metadata});}
- async function suggest(index:number,requestedInstruction=instruction){const candidate=await requestCandidate(index,"suggest-shot",requestedInstruction);if(candidate)setPreview({mode:"insert",index,before:structuredClone(shots[index]),after:candidate,metadata:candidate.metadata});}
- async function rebuildUnlocked(){if(!input||!result||busy||contextChanged)return;const indexes=shots.map((shot,index)=>shot.locked?-1:index).filter(index=>index>=0);setBusy(true);setError("");try{const blocks=scriptBlocks(input.script);const candidates=await Promise.all(indexes.map(async index=>{const response=await fetch("/api/director",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({...input,action:"regenerate-shot",contextId:result.metadata.contextId,currentShot:shots[index],previousShot:shots[index-1],nextShot:shots[index+1],directorPlan:result.directorPlan,sourceBlock:blocks.find(x=>x.id===shots[index].sourceBlockId),preset:"保持上下镜头连续，重做未锁定镜头",instruction})});if(!response.ok)return null;return(response.json() as Promise<{candidate:DirectorShot}>);}));const next=shots.map((shot,index)=>{const position=indexes.indexOf(index),data=position>=0?candidates[position]:null;return data?{...data.candidate,locked:false,status:"Draft" as const}:shot;});commit(next);}catch{setError("部分镜头重做失败，当前 Director 已保留");}finally{setBusy(false);}}
- function acceptPreview(){if(!preview)return;const {metadata:_,...candidate}=preview.after as WorkspaceShot&{metadata?:unknown};void _;if(preview.mode==="insert"){commit(insertShot(shots,preview.index,candidate));setSelected(preview.index+1);}else{setUndo({index:preview.index,shot:preview.before});commit(shots.map((shot,index)=>index===preview.index?{...candidate,locked:shot.locked,status:"Draft"}:shot));}setPreview(null);}
- function updateShot(index:number,key:keyof WorkspaceShot,value:string|number|string[]){commit(shots.map((shot,i)=>i===index?{...shot,[key]:value}:shot));}
- function remove(index:number){setPendingDelete(index);}
- function confirmDelete(){if(pendingDelete===null)return;commit(deleteShot(shots,pendingDelete));setSelected(null);setPendingDelete(null);notifyWorkspace("镜头已删除",{detail:"导演完整性检查已同步更新",tone:"info"});}
- function addManual(index:number){const basis=shots[index]||shots.at(-1);if(!basis)return;commit(insertShot(shots,index,emptyFrom(basis)));setSelected(index+1);}
- function doRebalance(){const summary=autoRebalance(shots,target);commit(summary.shots);setRebalance(summary);}
- function saveVersion(){if(!result)return;const version=createDirectorVersion(versions,result.metadata.contextId,result.directorPlan,shots,listStatus);setVersions(value=>[...value,version]);notifyWorkspace("导演版本已保存");}
- function confirmList(){setShots(value=>value.map(shot=>({...shot,status:"Confirmed"})));setListStatus("Confirmed");notifyWorkspace("导演分镜已确认",{detail:`共 ${shots.length} 个真实镜头记录`});}
- function selectShot(index:number){setSelected(index);onChange?.({result,shots,listStatus,selectedShot:index,intelligence,intelligenceMetadata,updatedAt:new Date().toISOString()});}
- function scrollToShot(index:number){selectShot(index);document.getElementById(`director-${shots[index].shotId}`)?.scrollIntoView({behavior:"smooth",block:"center"});}
- function repairIntegrity(code:string){if(code==="duration_mismatch"){doRebalance();return;}if(code==="source_block_invalid"){const index=shots.findIndex(shot=>!sourceIds.includes(shot.sourceBlockId)&&!shot.sourceBlockId.startsWith("manual:"));if(index>=0)scrollToShot(index);return;}const ctaIndex=Math.max(0,shots.findIndex(shot=>/CTA/i.test(shot.stage))-1);const index=code==="reveal_missing"?Math.min(1,shots.length-1):ctaIndex;const direction=code==="reveal_missing"?"补充一个产品出场镜头，只使用当前脚本与产品资料。":"补充一个能直接拍摄的卖点证明镜头，只验证当前脚本与产品资料已有事实。";void suggest(index,direction);}
- if(result&&contextChanged)return <section className="os-director-studio os-director-workspace"><header><div><p className="os-eyebrow">AI 拍摄导演 · 上下文检查</p><h1>检测到当前脚本已变化</h1><p>旧导演工作台已隔离，不会作为当前脚本的镜头继续编辑。</p></div><div className="os-status os-needs"><i/> 上下文已变化</div></header><div className="os-context-change-gate"><div><span>当前脚本</span><h2>{input?.script.title||"当前脚本"}</h2><p>上下文 ID：{currentContextId}</p></div><div><span>现有导演方案</span><h2>{result.directorPlan.creativeIntent}</h2><p>上下文 ID：{result.metadata.contextId}</p></div><footer><button className="os-primary vf-button vf-button-primary" disabled={busy} onClick={generate}>{busy?"正在生成…":"为当前脚本生成新导演方案"}</button><button onClick={()=>setShowArchived(value=>!value)}>{showArchived?"收起旧导演方案":"返回旧导演方案（只读）"}</button></footer></div>{showArchived?<section className="os-archived-director"><header><b>旧导演方案 · 只读</b><span>{shots.length} 个镜头 · {plannedDuration(shots)}秒</span></header>{shots.map(shot=><article key={shot.shotId}><b>镜头 {String(shot.order).padStart(2,"0")} · {stageLabel(shot.stage)}</b><p>{shot.visualDescription}</p><small>{shot.sourceBlockId}</small></article>)}</section>:null}{error?<p className="os-director-error">{error}</p>:null}</section>;
- return <section className="os-director-studio os-director-workspace os-director-production-workspace"><header><div><p className="os-eyebrow">STORYBOARD DIRECTOR</p><h1>AI 分镜导演工作台</h1><p>导演策略 · Storyboard 画布 · Shot 检查器</p></div><div className="os-status"><i/> {busy?"AI 正在处理":selected!==null?"镜头编辑中":`${statusLabel(listStatus)} · 已保存`}</div></header>
-  {!result?<><div className="os-workspace-topbar os-director-empty-topbar"><div><span>{input?.script.title||"当前项目"}</span><b>Storyboard · 尚未生成</b></div><section><article><small>目标时长</small><strong>{target}秒</strong></article><article><small>镜头数量</small><strong>0</strong></article></section></div><div className="os-workspace-shell os-director-empty-workspace"><main className="os-shot-workspace os-storyboard-canvas"><div className="os-storyboard-heading"><div><span>分镜画布</span><h2>可执行镜头板</h2><p>导演方案生成后，Shot 将直接出现在这里。</p></div></div><div className="os-storyboard-empty-canvas" aria-busy={busy}>{busy?<WorkspaceState kind="loading" title="正在规划镜头与时长" description="AI 正在生成镜头目的、画面、动作、证明方式与拍摄建议。" steps={["读取采用脚本与产品事实","规划镜头结构与目标时长","生成可执行动作与证明建议"]} />:error?<WorkspaceState kind="error" icon="!" title="导演方案生成失败" description={error} primary={{label:"重新生成",onClick:generate,disabled:!input}} />:<WorkspaceState icon="◉" title="还没有导演方案" description={input?"当前脚本已就绪，生成后将直接进入 Storyboard Workspace。":"选择一个脚本开始导演规划。"} primary={input?{label:"生成导演方案",onClick:generate}:{label:"选择脚本",onClick:()=>onNavigate?.("create")}} secondary={{label:"查看历史脚本",onClick:()=>onNavigate?.("history")}} />}</div></main><aside className="os-shot-inspector os-director-assistant"><header className="os-assistant-title"><div><span>AI 副导演</span><h3>等待 Storyboard</h3></div></header><div className="os-inspector-empty"><b>AI 副导演</b><h3>生成镜头后开始协作</h3><p>这里将显示当前 Shot、综合评分、四项 Intelligence Score 与 AI 优化建议。</p><dl><div><dt>当前镜头</dt><dd>—</dd></div><div><dt>综合评分</dt><dd>—</dd></div><div><dt>Storyboard</dt><dd>待生成</dd></div></dl></div></aside></div></>:<>
-   <div className="os-workspace-topbar"><div><span>{input?.script.title}</span><b>{statusLabel(listStatus)} · {integrityLabel(integrity.status)}</b></div><section><article><small>目标时长</small><strong>{target}秒</strong></article><article><small>计划时长</small><strong>{planned}秒</strong></article><article className={Math.abs(delta)>.5?"warn":""}><small>时长差</small><strong>{delta>0?"+":""}{delta}秒</strong></article><article><small>镜头数量</small><strong>{shots.length}</strong></article><article><small>拍摄复杂度</small><strong>{result.directorPlan.shootingComplexity}</strong></article><article><small>AI 服务</small><strong>{result.metadata.providerUsed}</strong></article></section><nav><button onClick={doRebalance}>重新平衡时长</button><button onClick={saveVersion}>保存导演版本</button><button className="os-primary vf-button vf-button-primary" onClick={confirmList}>确认导演分镜</button></nav></div>
-   <DirectorWorkspace shots={shots} selected={selected} onSelect={selectShot} onReorder={(from,to)=>commit(reorderShots(shots,from,to))} preview={shot=><AssistantShotPreview shot={shot} projectId={currentProjectId}/>} brief={<aside className="os-plan-sidebar os-director-brief-panel"><header><span>DIRECTOR BRIEF</span><h2>{input?.script.title||"当前导演项目"}</h2><p>{result.directorPlan.creativeIntent}</p></header><dl className="os-director-brief-data"><div><dt>Project</dt><dd>{input?.script.title||"当前项目"}</dd></div><div><dt>Product</dt><dd>{input?.context.product}</dd></div><div><dt>Market</dt><dd>{input?.context.market}</dd></div><div><dt>Language</dt><dd>{input?.context.language}</dd></div><div><dt>Platform</dt><dd>{input?.context.platform}</dd></div><div><dt>Duration</dt><dd>{target} 秒</dd></div><div><dt>Audience</dt><dd>{input?.context.audience}</dd></div><div><dt>Creative Style</dt><dd>{input?.context.creativeMode}</dd></div><div><dt>Video Goal</dt><dd>{input?.context.creativeAngle||input?.script.title}</dd></div></dl>{[["开场钩子",result.directorPlan.hookExecution],["节奏策略",result.directorPlan.pacingStrategy],["证明策略",result.directorPlan.proofStrategy],["产品出场",result.directorPlan.productRevealStrategy]].map(([label,value])=><details key={label}><summary>{label}</summary><p>{value}</p></details>)}<article className={integrity.status==="Complete"?"integrity-ok":"integrity-warn"}><b>完整性检查 · {integrityLabel(integrity.status)}</b>{integrity.issues.length?integrity.issues.map((issue,index)=><div key={`${issue.code}-${index}`}><p>• {issue.message}</p><button disabled={busy} onClick={()=>repairIntegrity(issue.code)}>{issue.code==="duration_mismatch"?"自动平衡时长":issue.code==="source_block_invalid"?"定位问题镜头":issue.code==="reveal_missing"?"AI 建议补充产品出场镜头":"AI 建议补充证明镜头"}</button></div>):<p>当前脚本、产品、来源段落、时长与时间轴均一致。</p>}</article></aside>} inspector={<Inspector title="分镜检查器">   <aside className="os-shot-inspector os-director-assistant"><header className="os-assistant-title"><div><span>AI 副导演</span><h3>{selected===null?"选择镜头开始创作":`Shot ${String(selected+1).padStart(2,"0")} · ${busy?"建议生成中":"正在编辑"}`}</h3></div>{selected!==null?<button onClick={()=>setSelected(null)}>×</button>:null}</header>{busy?<WorkspaceState kind="loading" title="正在处理真实镜头上下文" description="建议返回前不会显示为已完成。" steps={["读取当前镜头与相邻镜头","核对产品事实与证明要求","生成修改候选"]}/>:selected===null||!shots[selected]?<div className="os-inspector-empty"><b>AI 副导演</b><h3>选择一个镜头进行编辑与分析</h3><p>选中 Storyboard Shot 后，可查看真实建议并修改现有镜头字段。</p><dl><div><dt>镜头数量</dt><dd>{shots.length}</dd></div><div><dt>时长</dt><dd>{planned}秒 / {target}秒</dd></div><div><dt>已锁定</dt><dd>{shots.filter(shot=>shot.locked).length}</dd></div><div><dt>完整性</dt><dd>{integrityLabel(integrity.status)}</dd></div></dl></div>:<><section className="os-assistant-current-shot"><span>当前镜头</span><div><AssistantShotPreview shot={shots[selected]} projectId={currentProjectId}/><p><b>{shots[selected].dialogue||shots[selected].voiceover||stageLabel(shots[selected].stage)}</b><small>{shots[selected].startTime.toFixed(1)} – {shots[selected].endTime.toFixed(1)} 秒</small></p></div></section><details className={`os-assistant-intelligence ${intelligence[shots[selected].shotId]?.status||"idle"}`}><summary>镜头评分</summary><header><div><b>镜头分析</b></div><strong className="os-assistant-score-ring" style={{"--score-angle":`${(intelligence[shots[selected].shotId]?.evaluation?intelligenceAverage(intelligence[shots[selected].shotId].evaluation):0)*3.6}deg`} as React.CSSProperties}><i>{intelligence[shots[selected].shotId]?.evaluation?intelligenceAverage(intelligence[shots[selected].shotId].evaluation):"—"}</i><small>综合评分</small></strong></header>{intelligence[shots[selected].shotId]?.status==="success"&&intelligence[shots[selected].shotId].evaluation?<><div className="os-assistant-score-grid">{scoreItems.map(([key,label])=><article key={key} className={scoreTone(intelligence[shots[selected].shotId].evaluation!.scores[key])}><span>{label}</span><b>{intelligence[shots[selected].shotId].evaluation!.scores[key]}</b><i style={{"--score":`${intelligence[shots[selected].shotId].evaluation!.scores[key]}%`} as React.CSSProperties}/></article>)}</div><small>{intelligenceMetadata?.providerUsed==="cache"?"Fingerprint Cache":"AI 实时分析"} · {new Date(intelligence[shots[selected].shotId].evaluation!.evaluatedAt).toLocaleTimeString("zh-CN",{hour:"2-digit",minute:"2-digit"})}</small></>:<div className="os-assistant-analysis-state"><p>{intelligence[shots[selected].shotId]?.status==="loading"?"AI 正在读取当前镜头与相邻镜头…":intelligence[shots[selected].shotId]?.status==="error"?intelligence[shots[selected].shotId].error:"当前镜头尚未分析，运行 Intelligence 后查看评分和建议。"}</p><button disabled={intelligence[shots[selected].shotId]?.status==="loading"} onClick={()=>analyzeCurrent(selected)}>{intelligence[shots[selected].shotId]?.status==="loading"?"AI 分析中...":"分析当前镜头"}</button></div>}</details><section className="os-assistant-suggestions"><details open><summary>场景</summary><p>{shots[selected].environment||"沿用当前导演方案的主拍摄环境"}</p></details><details open><summary>镜头语言</summary><p>{cameraLabel(shots[selected].framing)} · {cameraLabel(shots[selected].cameraAngle)} · {cameraLabel(shots[selected].cameraMovement)}</p></details><details><summary>Proof 设计</summary><p>{shots[selected].proofRequirement||"当前镜头没有独立 Proof 要求；不要额外添加未经产品知识支持的证明。"}</p></details><details><summary>视觉优化</summary><p>{shots[selected].editingNotes||shots[selected].continuityNotes||"保持动作、产品与相邻镜头连续。"}</p></details><details><summary>合规提醒</summary><p>{integrity.status==="Complete"?"当前镜头仍需只使用脚本与产品知识中的事实。":integrity.issues[0]?.message}</p></details></section>{intelligence[shots[selected].shotId]?.evaluation?<details className="os-assistant-ai-suggestions"><summary>AI 优化建议</summary><header><button disabled={intelligence[shots[selected].shotId]?.status==="loading"} onClick={()=>analyzeCurrent(selected,true)}>重新分析当前镜头</button></header><article><b>当前问题</b><p>{intelligence[shots[selected].shotId].evaluation!.suggestion.missing}</p></article><article><b>视觉优化</b><p>{intelligence[shots[selected].shotId].evaluation!.suggestion.visualUpgrade}</p></article><article><b>转化优化</b><p>{intelligence[shots[selected].shotId].evaluation!.suggestion.conversionUpgrade}</p></article><details><summary>✦ 生成 5 个创意方向</summary><div>{creativeDirections(intelligence[shots[selected].shotId].evaluation!).map(direction=><button key={direction.label} disabled={busy} onClick={()=>void regenerateWithDirection(selected,direction.instruction)}><span>{direction.label}</span><small>生成修改前后对比</small></button>)}</div></details></details>:null}<nav className="os-inspector-actions"><button onClick={()=>setShots(value=>value.map((shot,index)=>index===selected?{...shot,locked:!shot.locked}:shot))}>{shots[selected].locked?"解锁":"锁定"}</button><button onClick={()=>regenerate(selected)}>AI 重新生成</button><button onClick={()=>commit(duplicateShot(shots,selected))}>复制镜头</button><button className="os-danger" onClick={()=>remove(selected)}>删除镜头</button></nav><label className="os-inspector-status">Shot 状态<select value={shots[selected].status} onChange={event=>updateShot(selected,"status",event.target.value)}><option value="Draft">草稿</option><option value="Confirmed">已确认</option><option value="Shot">已拍摄</option><option value="Retake">重拍</option></select></label><details className="os-assistant-editor" open><summary>编辑镜头字段</summary><div className="os-inspector-fields">{editable.map(([key,label,type])=><label key={key}>{label}{type==="framing"||type==="angle"||type==="movement"?<select value={String(shots[selected][key])} onChange={e=>updateShot(selected,key,e.target.value)}>{(type==="framing"?framingValues:type==="angle"?cameraAngleValues:cameraMovementValues).map(value=><option key={value} value={value}>{cameraLabel(value)}</option>)}</select>:type==="textarea"?<textarea value={String(shots[selected][key]||"")} onChange={e=>updateShot(selected,key,e.target.value)}/>:<input type={type} step={type==="number"?.1:undefined} value={Array.isArray(shots[selected][key])?(shots[selected][key] as string[]).join("；"):String(shots[selected][key]||"")} onChange={e=>updateShot(selected,key,key==="props"?e.target.value.split(/[；;]+/).filter(Boolean):type==="number"?Number(e.target.value):e.target.value)}/>}</label>)}</div></details><section className="os-ai-shot-panel"><b>修改要求 / AI 重新生成</b><select value={preset} onChange={e=>setPreset(e.target.value)}>{presets.map(value=><option key={value}>{value}</option>)}</select><textarea placeholder="可以用中文输入要求；目标台词与字幕仍保持脚本设定语言。" value={instruction} onChange={e=>setInstruction(e.target.value)}/><button disabled={busy} onClick={()=>regenerate(selected)}>生成修改前后对比</button></section><details className="creative-section"><summary>Advanced · 图片与视频提示词</summary><section className="os-prompt-reserve"><article><span>Image Prompt</span><p>{input?buildShotImagePrompt(shots[selected],input,result.directorPlan.visualStyle):""}</p></article><article><span>Video Prompt</span><p>{videoPromptDraft(shots[selected])}</p></article><small>图片生成已集成到对应 Shot Card；本阶段不调用视频模型。</small></section></details></>}</aside></Inspector>}>
-
-    <main className="os-shot-workspace os-storyboard-canvas"><div className="os-storyboard-heading"><div><span>分镜画布</span><h2>可执行镜头板</h2><p>{shots.length} 个镜头 · {planned} 秒 · 来源于当前 Script Blocks</p></div></div><div className="os-workspace-actions"><div><b>{shots.filter(x=>x.locked).length} 个已锁定</b><span>锁定镜头不会被批量重做或自动调整时长</span></div><button disabled={busy} onClick={rebuildUnlocked}>{busy?"AI 正在处理…":"✦ AI 重做未锁定镜头"}</button>{undo?<button onClick={()=>{commit(shots.map((shot,index)=>index===undo.index?undo.shot:shot));setUndo(null);}}>撤销最近一次修改</button>:null}</div>{error?<p className="os-director-error">{error}</p>:null}
-     <div className="os-director-shot-list">{input?shots.map((shot,index)=>selected!==null && selected!==index ? null : selected===null && index!==0 ? null : <div className="os-shot-row" key={shot.shotId}><ShotCard shot={shot} input={input} visualStyle={result.directorPlan.visualStyle} projectId={currentProjectId} selected={selected===index} intelligence={intelligence[shot.shotId]} onAnalyze={()=>analyzeCurrent(index)} onSelect={()=>selectShot(index)} onToggleLock={()=>setShots(value=>value.map((item,i)=>i===index?{...item,locked:!item.locked}:item))} onDuplicate={()=>commit(duplicateShot(shots,index))} onDelete={()=>remove(index)} onRegenerate={()=>regenerate(index)} onOpenImageStudio={()=>onNavigate?.("images")} onDragStart={()=>{dragged.current=index;}} onDrop={()=>{if(dragged.current!==null){commit(reorderShots(shots,dragged.current,index));dragged.current=null;}}}/><div className="os-add-shot"><button onClick={()=>addManual(index)}>＋ 添加空白镜头</button><button disabled={busy} onClick={()=>suggest(index)}>✦ AI 建议镜头</button></div></div>):null}</div>
-    </main>
-
-   </DirectorWorkspace>
-   <section className={`os-director-timeline ${integrity.status==="Needs Attention"?"needs-attention":""}`}><header><b>镜头时间轴</b><span>0秒 → {planned}秒 · 目标 {target}秒</span></header><div>{shots.map((shot,index)=><button key={shot.shotId} style={{flexGrow:Math.max(.5,shot.duration)}} className={[selected===index?"selected":"",shot.locked?"locked":"",shot.status.toLowerCase(),integrity.status==="Needs Attention"?"attention":""].filter(Boolean).join(" ")} onClick={()=>scrollToShot(index)}><b>{String(index+1).padStart(2,"0")}</b><span>{shot.duration}秒 · {stageLabel(shot.stage)}</span></button>)}</div>{rebalance?<p>调整前 {rebalance.beforePlanned}秒 → 调整后 {rebalance.afterPlanned}秒 · 目标 {rebalance.target}秒 · 差值 {rebalance.delta}秒</p>:null}</section>
-   {preview?<div className="os-rewrite-modal"><div><header><div><span>AI 镜头修改 · 修改前 / 修改后</span><h2>{preview.mode==="insert"?"新增镜头预览":`镜头 ${String(preview.index+1).padStart(2,"0")}`}</h2></div><button onClick={()=>setPreview(null)}>×</button></header><section><article><b>修改前</b><p>{preview.before.visualDescription}</p><small>{cameraLabel(preview.before.framing)} · {cameraLabel(preview.before.cameraMovement)}</small><p>{preview.before.proofRequirement}</p></article><article><b>修改后</b><p>{preview.after.visualDescription}</p><small>{cameraLabel(preview.after.framing)} · {cameraLabel(preview.after.cameraMovement)}</small><p>{preview.after.proofRequirement}</p></article></section><footer><span>AI 服务 {preview.metadata.providerUsed} · 事实保护 {preview.metadata.factGuardPassed?"通过":"需要检查"} · 安全回退 {preview.metadata.fallbackUsed?"是":"否"}</span><button onClick={()=>setPreview(null)}>拒绝</button><button className="os-primary vf-button vf-button-primary" onClick={acceptPreview}>接受</button></footer></div></div>:null}
-  </>}<ConfirmDialog open={pendingDelete!==null} title={pendingDelete===null?"删除镜头":`删除镜头 ${String(pendingDelete+1).padStart(2,"0")}？`} description="删除后不会自动恢复缺失的开场、证明或行动引导，完整性检查会重新计算。" confirmLabel="确认删除" tone="danger" onCancel={()=>setPendingDelete(null)} onConfirm={confirmDelete}/></section>;
+export default function ShootingDirector({
+  input,
+  currentProjectId,
+  initialWorkspace,
+  onNavigate,
+  onChange,
+}: Props) {
+  const initial = restoredWorkspace(initialWorkspace);
+  const [talent] = useState("单人手模 / KOC"),
+    [environment] = useState("同一张整洁桌面"),
+    [result, setResult] = useState<DirectorResult | null>(
+      () => initial?.result || null,
+    ),
+    [shots, setShots] = useState<WorkspaceShot[]>(() => initial?.shots || []),
+    [busy, setBusy] = useState(false),
+    [error, setError] = useState(""),
+    [selected, setSelected] = useState<number | null>(
+      () => initial?.selectedShot ?? (initial?.shots.length ? 0 : null),
+    ),
+    [preset, setPreset] = useState(presets[0]),
+    [instruction, setInstruction] = useState(""),
+    [preview, setPreview] = useState<RewritePreview | null>(null),
+    [undo, setUndo] = useState<{ index: number; shot: WorkspaceShot } | null>(
+      null,
+    ),
+    [versions, setVersions] = useState<DirectorVersion[]>([]),
+    [listStatus, setListStatus] = useState<"Draft" | "Confirmed">(
+      () => initial?.listStatus || "Draft",
+    ),
+    [rebalance, setRebalance] = useState<{
+      beforePlanned: number;
+      afterPlanned: number;
+      target: number;
+      delta: number;
+    } | null>(null),
+    [showArchived, setShowArchived] = useState(false),
+    [pendingDelete, setPendingDelete] = useState<number | null>(null),
+    [intelligence, setIntelligence] = useState<
+      Record<string, ShotIntelligenceState>
+    >(() => initial?.intelligence || {}),
+    [intelligenceMetadata, setIntelligenceMetadata] = useState<
+      ShotIntelligenceBatchResult["metadata"] | null
+    >(() => initial?.intelligenceMetadata || null);
+  const dragged = useRef<number | null>(null),
+    currentContextId = input ? directorContextId(input) : "",
+    target = input?.context.targetDuration || 30,
+    planned = plannedDuration(shots),
+    delta = Math.round((planned - target) * 10) / 10,
+    contextChanged = Boolean(
+      result && result.metadata.contextId !== currentContextId,
+    );
+  useEffect(() => {
+    const restored = restoredWorkspace(initialWorkspace);
+    setResult(restored?.result || null);
+    setShots(restored?.shots || []);
+    setListStatus(restored?.listStatus || "Draft");
+    setSelected(restored?.selectedShot ?? (restored?.shots.length ? 0 : null));
+    setIntelligence(restored?.intelligence || {});
+    setIntelligenceMetadata(restored?.intelligenceMetadata || null);
+    setError("");
+    setPreview(null);
+  }, [currentProjectId, initialWorkspace]);
+  const sourceIds = useMemo(
+    () => (input ? scriptBlocks(input.script).map((block) => block.id) : []),
+    [input],
+  );
+  const contextMessages = useMemo(
+    () =>
+      result?.metadata.contextIntegrity.issues.map(
+        (issue) => `${issue.message}${issue.value ? `：${issue.value}` : ""}`,
+      ) || [],
+    [result],
+  );
+  const integrity = useMemo(
+    () =>
+      checkDirectorIntegrity(
+        shots,
+        target,
+        input?.context.sellingPoints || "",
+        sourceIds,
+        contextMessages,
+      ),
+    [shots, target, input?.context.sellingPoints, sourceIds, contextMessages],
+  );
+  const activeIndex = selected ?? (shots.length ? 0 : null);
+  const activeShot = activeIndex === null ? null : shots[activeIndex] || null;
+  const activeIntelligence = activeShot
+    ? intelligence[activeShot.shotId]
+    : undefined;
+  function commit(next: WorkspaceShot[]) {
+    const updated = recalculateTimeline(
+      next.map((x) => ({ ...x, status: "Draft" })),
+    );
+    setShots(updated);
+    setIntelligence((previous) => {
+      const nextIntelligence = Object.fromEntries(
+        updated.map((shot) => [
+          shot.shotId,
+          previous[shot.shotId]?.evaluation
+            ? { ...previous[shot.shotId], status: "stale" as const }
+            : { status: "idle" as const },
+        ]),
+      );
+      onChange?.({
+        result,
+        shots: updated,
+        listStatus: "Draft",
+        selectedShot: selected,
+        intelligence: nextIntelligence,
+        intelligenceMetadata,
+        updatedAt: new Date().toISOString(),
+      });
+      return nextIntelligence;
+    });
+    setListStatus("Draft");
+    setRebalance(null);
+  }
+  async function analyzeShots(
+    targetShots: WorkspaceShot[],
+    force = false,
+    neighbors?: { previousShot?: WorkspaceShot; nextShot?: WorkspaceShot },
+  ) {
+    if (!input || !result || !targetShots.length || contextChanged) return;
+    const ids = targetShots.map((shot) => shot.shotId);
+    setIntelligence((previous) => ({
+      ...previous,
+      ...Object.fromEntries(
+        ids.map((id) => [
+          id,
+          { ...previous[id], status: "loading" as const, error: "" },
+        ]),
+      ),
+    }));
+    try {
+      const compactNeighbor = (shot?: WorkspaceShot) =>
+        shot
+          ? {
+              stage: shot.stage,
+              purpose: shot.purpose,
+              visualDescription: shot.visualDescription,
+            }
+          : undefined;
+      const response = await fetch("/api/director", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          ...input,
+          action: "evaluate-shots",
+          contextId: result.metadata.contextId,
+          directorPlan: result.directorPlan,
+          shots: targetShots,
+          previousShot: compactNeighbor(neighbors?.previousShot),
+          nextShot: compactNeighbor(neighbors?.nextShot),
+          force,
+        }),
+      });
+      const data = (await response.json()) as ShotIntelligenceBatchResult & {
+        error?: string;
+      };
+      if (!response.ok)
+        throw new Error(data.error || "Shot Intelligence 暂时不可用");
+      setIntelligence((previous) => {
+        const next = {
+          ...previous,
+          ...Object.fromEntries(
+            data.evaluations.map((evaluation) => [
+              evaluation.shotId,
+              { status: "success" as const, evaluation },
+            ]),
+          ),
+        };
+        onChange?.({
+          result,
+          shots,
+          listStatus,
+          selectedShot: selected,
+          intelligence: next,
+          intelligenceMetadata: data.metadata,
+          updatedAt: new Date().toISOString(),
+        });
+        return next;
+      });
+      setIntelligenceMetadata(data.metadata);
+    } catch (caught) {
+      const message =
+        caught instanceof Error
+          ? caught.message
+          : "Shot Intelligence 暂时不可用";
+      setIntelligence((previous) => ({
+        ...previous,
+        ...Object.fromEntries(
+          ids.map((id) => [
+            id,
+            { ...previous[id], status: "error" as const, error: message },
+          ]),
+        ),
+      }));
+    }
+  }
+  function analyzeCurrent(index: number, force = true) {
+    void analyzeShots([shots[index]], force, {
+      previousShot: shots[index - 1],
+      nextShot: shots[index + 1],
+    });
+  }
+  async function generate() {
+    if (!input || busy) return;
+    setBusy(true);
+    setError("");
+    try {
+      const response = await fetch("/api/director", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          ...input,
+          action: "generate",
+          settings: {
+            ...input.settings,
+            talent,
+            environment,
+            provider: "doubao",
+          },
+        }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "Director生成失败");
+      if (result && contextChanged) {
+        const archived = createDirectorVersion(
+          versions,
+          result.metadata.contextId,
+          result.directorPlan,
+          shots,
+          listStatus,
+        );
+        setVersions((value) => [...value, archived]);
+      }
+      const generatedShots = workspaceShots(data.shots);
+      setResult(data);
+      setShots(generatedShots);
+      setIntelligence({});
+      setIntelligenceMetadata(null);
+      setSelected(generatedShots.length ? 0 : null);
+      setPreview(null);
+      setShowArchived(false);
+      setListStatus("Draft");
+      onChange?.({
+        result: data,
+        shots: generatedShots,
+        listStatus: "Draft",
+        selectedShot: generatedShots.length ? 0 : null,
+        intelligence: {},
+        intelligenceMetadata: null,
+        updatedAt: new Date().toISOString(),
+      });
+      window.setTimeout(() => void analyzeGenerated(data, generatedShots), 0);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Director生成失败");
+    } finally {
+      setBusy(false);
+    }
+  }
+  async function analyzeGenerated(
+    generatedResult: DirectorResult,
+    generatedShots: WorkspaceShot[],
+  ) {
+    if (!input || !generatedShots.length) return;
+    const ids = generatedShots.map((shot) => shot.shotId);
+    setIntelligence(
+      Object.fromEntries(ids.map((id) => [id, { status: "loading" as const }])),
+    );
+    try {
+      const response = await fetch("/api/director", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          ...input,
+          action: "evaluate-shots",
+          contextId: generatedResult.metadata.contextId,
+          directorPlan: generatedResult.directorPlan,
+          shots: generatedShots,
+        }),
+      });
+      const data = (await response.json()) as ShotIntelligenceBatchResult & {
+        error?: string;
+      };
+      if (!response.ok)
+        throw new Error(data.error || "Shot Intelligence 暂时不可用");
+      const next = Object.fromEntries(
+        data.evaluations.map((evaluation) => [
+          evaluation.shotId,
+          { status: "success" as const, evaluation },
+        ]),
+      );
+      setIntelligence(next);
+      setIntelligenceMetadata(data.metadata);
+      onChange?.({
+        result: generatedResult,
+        shots: generatedShots,
+        listStatus: "Draft",
+        selectedShot: generatedShots.length ? 0 : null,
+        intelligence: next,
+        intelligenceMetadata: data.metadata,
+        updatedAt: new Date().toISOString(),
+      });
+    } catch (caught) {
+      const message =
+        caught instanceof Error
+          ? caught.message
+          : "Shot Intelligence 暂时不可用";
+      setIntelligence(
+        Object.fromEntries(
+          ids.map((id) => [id, { status: "error" as const, error: message }]),
+        ),
+      );
+    }
+  }
+  async function requestCandidate(
+    index: number,
+    action: "regenerate-shot" | "suggest-shot",
+    requestedInstruction = instruction,
+  ) {
+    if (!input || !result || busy || contextChanged) return null;
+    const current = shots[index] || shots.at(-1);
+    if (!current) return null;
+    if (
+      action === "regenerate-shot" &&
+      current.locked &&
+      !window.confirm("当前镜头已锁定。确认主动重新生成这个镜头？")
+    )
+      return null;
+    setBusy(true);
+    setError("");
+    try {
+      const block = scriptBlocks(input.script).find(
+        (x) => x.id === current.sourceBlockId,
+      );
+      const response = await fetch("/api/director", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          ...input,
+          action,
+          contextId: result.metadata.contextId,
+          currentShot: current,
+          previousShot: shots[index - 1],
+          nextShot: shots[index + 1],
+          directorPlan: result.directorPlan,
+          sourceBlock: block,
+          preset,
+          instruction: requestedInstruction,
+        }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "镜头生成失败");
+      return {
+        ...data.candidate,
+        locked: false,
+        status: "Draft",
+        metadata: data.metadata,
+      };
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "镜头生成失败");
+      return null;
+    } finally {
+      setBusy(false);
+    }
+  }
+  async function regenerate(index: number) {
+    const candidate = await requestCandidate(index, "regenerate-shot");
+    if (candidate)
+      setPreview({
+        mode: "replace",
+        index,
+        before: structuredClone(shots[index]),
+        after: candidate,
+        metadata: candidate.metadata,
+      });
+  }
+  async function regenerateWithDirection(index: number, direction: string) {
+    const candidate = await requestCandidate(
+      index,
+      "regenerate-shot",
+      direction,
+    );
+    if (candidate)
+      setPreview({
+        mode: "replace",
+        index,
+        before: structuredClone(shots[index]),
+        after: candidate,
+        metadata: candidate.metadata,
+      });
+  }
+  async function suggest(index: number, requestedInstruction = instruction) {
+    const candidate = await requestCandidate(
+      index,
+      "suggest-shot",
+      requestedInstruction,
+    );
+    if (candidate)
+      setPreview({
+        mode: "insert",
+        index,
+        before: structuredClone(shots[index]),
+        after: candidate,
+        metadata: candidate.metadata,
+      });
+  }
+  async function rebuildUnlocked() {
+    if (!input || !result || busy || contextChanged) return;
+    const indexes = shots
+      .map((shot, index) => (shot.locked ? -1 : index))
+      .filter((index) => index >= 0);
+    setBusy(true);
+    setError("");
+    try {
+      const blocks = scriptBlocks(input.script);
+      const candidates = await Promise.all(
+        indexes.map(async (index) => {
+          const response = await fetch("/api/director", {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({
+              ...input,
+              action: "regenerate-shot",
+              contextId: result.metadata.contextId,
+              currentShot: shots[index],
+              previousShot: shots[index - 1],
+              nextShot: shots[index + 1],
+              directorPlan: result.directorPlan,
+              sourceBlock: blocks.find(
+                (x) => x.id === shots[index].sourceBlockId,
+              ),
+              preset: "保持上下镜头连续，重做未锁定镜头",
+              instruction,
+            }),
+          });
+          if (!response.ok) return null;
+          return response.json() as Promise<{ candidate: DirectorShot }>;
+        }),
+      );
+      const next = shots.map((shot, index) => {
+        const position = indexes.indexOf(index),
+          data = position >= 0 ? candidates[position] : null;
+        return data
+          ? { ...data.candidate, locked: false, status: "Draft" as const }
+          : shot;
+      });
+      commit(next);
+    } catch {
+      setError("部分镜头重做失败，当前 Director 已保留");
+    } finally {
+      setBusy(false);
+    }
+  }
+  function acceptPreview() {
+    if (!preview) return;
+    const { metadata: _, ...candidate } = preview.after as WorkspaceShot & {
+      metadata?: unknown;
+    };
+    void _;
+    if (preview.mode === "insert") {
+      commit(insertShot(shots, preview.index, candidate));
+      setSelected(preview.index + 1);
+    } else {
+      setUndo({ index: preview.index, shot: preview.before });
+      commit(
+        shots.map((shot, index) =>
+          index === preview.index
+            ? { ...candidate, locked: shot.locked, status: "Draft" }
+            : shot,
+        ),
+      );
+    }
+    setPreview(null);
+  }
+  function updateShot(
+    index: number,
+    key: keyof WorkspaceShot,
+    value: string | number | string[],
+  ) {
+    commit(
+      shots.map((shot, i) => (i === index ? { ...shot, [key]: value } : shot)),
+    );
+  }
+  function remove(index: number) {
+    setPendingDelete(index);
+  }
+  function confirmDelete() {
+    if (pendingDelete === null) return;
+    commit(deleteShot(shots, pendingDelete));
+    setSelected(null);
+    setPendingDelete(null);
+    notifyWorkspace("镜头已删除", {
+      detail: "导演完整性检查已同步更新",
+      tone: "info",
+    });
+  }
+  function addManual(index: number) {
+    const basis = shots[index] || shots.at(-1);
+    if (!basis) return;
+    commit(insertShot(shots, index, emptyFrom(basis)));
+    setSelected(index + 1);
+  }
+  function doRebalance() {
+    const summary = autoRebalance(shots, target);
+    commit(summary.shots);
+    setRebalance(summary);
+  }
+  function saveVersion() {
+    if (!result) return;
+    const version = createDirectorVersion(
+      versions,
+      result.metadata.contextId,
+      result.directorPlan,
+      shots,
+      listStatus,
+    );
+    setVersions((value) => [...value, version]);
+    notifyWorkspace("导演版本已保存");
+  }
+  function confirmList() {
+    setShots((value) =>
+      value.map((shot) => ({ ...shot, status: "Confirmed" })),
+    );
+    setListStatus("Confirmed");
+    notifyWorkspace("导演分镜已确认", {
+      detail: `共 ${shots.length} 个真实镜头记录`,
+    });
+  }
+  function selectShot(index: number) {
+    setSelected(index);
+    onChange?.({
+      result,
+      shots,
+      listStatus,
+      selectedShot: index,
+      intelligence,
+      intelligenceMetadata,
+      updatedAt: new Date().toISOString(),
+    });
+  }
+  function scrollToShot(index: number) {
+    selectShot(index);
+    document
+      .getElementById(`director-${shots[index].shotId}`)
+      ?.scrollIntoView({ behavior: "smooth", block: "center" });
+  }
+  function repairIntegrity(code: string) {
+    if (code === "duration_mismatch") {
+      doRebalance();
+      return;
+    }
+    if (code === "source_block_invalid") {
+      const index = shots.findIndex(
+        (shot) =>
+          !sourceIds.includes(shot.sourceBlockId) &&
+          !shot.sourceBlockId.startsWith("manual:"),
+      );
+      if (index >= 0) scrollToShot(index);
+      return;
+    }
+    const ctaIndex = Math.max(
+      0,
+      shots.findIndex((shot) => /CTA/i.test(shot.stage)) - 1,
+    );
+    const index =
+      code === "reveal_missing" ? Math.min(1, shots.length - 1) : ctaIndex;
+    const direction =
+      code === "reveal_missing"
+        ? "补充一个产品出场镜头，只使用当前脚本与产品资料。"
+        : "补充一个能直接拍摄的卖点证明镜头，只验证当前脚本与产品资料已有事实。";
+    void suggest(index, direction);
+  }
+  if (result && contextChanged)
+    return (
+      <section className="os-director-studio os-director-workspace">
+        <header>
+          <div>
+            <p className="os-eyebrow">AI 拍摄导演 · 上下文检查</p>
+            <h1>检测到当前脚本已变化</h1>
+            <p>旧导演工作台已隔离，不会作为当前脚本的镜头继续编辑。</p>
+          </div>
+          <div className="os-status os-needs">
+            <i /> 上下文已变化
+          </div>
+        </header>
+        <div className="os-context-change-gate">
+          <div>
+            <span>当前脚本</span>
+            <h2>{input?.script.title || "当前脚本"}</h2>
+            <p>上下文 ID：{currentContextId}</p>
+          </div>
+          <div>
+            <span>现有导演方案</span>
+            <h2>{result.directorPlan.creativeIntent}</h2>
+            <p>上下文 ID：{result.metadata.contextId}</p>
+          </div>
+          <footer>
+            <button
+              className="os-primary vf-button vf-button-primary"
+              disabled={busy}
+              onClick={generate}
+            >
+              {busy ? "正在生成…" : "为当前脚本生成新导演方案"}
+            </button>
+            <button onClick={() => setShowArchived((value) => !value)}>
+              {showArchived ? "收起旧导演方案" : "返回旧导演方案（只读）"}
+            </button>
+          </footer>
+        </div>
+        {showArchived ? (
+          <section className="os-archived-director">
+            <header>
+              <b>旧导演方案 · 只读</b>
+              <span>
+                {shots.length} 个镜头 · {plannedDuration(shots)}秒
+              </span>
+            </header>
+            {shots.map((shot) => (
+              <article key={shot.shotId}>
+                <b>
+                  镜头 {String(shot.order).padStart(2, "0")} ·{" "}
+                  {stageLabel(shot.stage)}
+                </b>
+                <p>{shot.visualDescription}</p>
+                <small>{shot.sourceBlockId}</small>
+              </article>
+            ))}
+          </section>
+        ) : null}
+        {error ? <p className="os-director-error">{error}</p> : null}
+      </section>
+    );
+  return (
+    <section className="os-director-studio os-director-workspace os-director-production-workspace">
+      <header>
+        <div>
+          <p className="os-eyebrow">STORYBOARD DIRECTOR</p>
+          <h1>AI 分镜导演工作台</h1>
+          <p>导演策略 · Storyboard 画布 · Shot 检查器</p>
+        </div>
+        <div className="os-status">
+          <i />{" "}
+          {busy
+            ? "AI 正在处理"
+            : selected !== null
+              ? "镜头编辑中"
+              : `${statusLabel(listStatus)} · 已保存`}
+        </div>
+      </header>
+      {!result ? (
+        <>
+          <div className="os-workspace-topbar os-director-empty-topbar">
+            <div>
+              <span>{input?.script.title || "当前项目"}</span>
+              <b>Storyboard · 尚未生成</b>
+            </div>
+            <section>
+              <article>
+                <small>目标时长</small>
+                <strong>{target}秒</strong>
+              </article>
+              <article>
+                <small>镜头数量</small>
+                <strong>0</strong>
+              </article>
+            </section>
+          </div>
+          <div className="os-workspace-shell os-director-empty-workspace">
+            <main className="os-shot-workspace os-storyboard-canvas">
+              <div className="os-storyboard-heading">
+                <div>
+                  <span>分镜画布</span>
+                  <h2>可执行镜头板</h2>
+                  <p>导演方案生成后，Shot 将直接出现在这里。</p>
+                </div>
+              </div>
+              <div className="os-storyboard-empty-canvas" aria-busy={busy}>
+                {busy ? (
+                  <WorkspaceState
+                    kind="loading"
+                    title="正在规划镜头与时长"
+                    description="AI 正在生成镜头目的、画面、动作、证明方式与拍摄建议。"
+                    steps={[
+                      "读取采用脚本与产品事实",
+                      "规划镜头结构与目标时长",
+                      "生成可执行动作与证明建议",
+                    ]}
+                  />
+                ) : error ? (
+                  <WorkspaceState
+                    kind="error"
+                    icon="!"
+                    title="导演方案生成失败"
+                    description={error}
+                    primary={{
+                      label: "重新生成",
+                      onClick: generate,
+                      disabled: !input,
+                    }}
+                  />
+                ) : (
+                  <WorkspaceState
+                    icon="◉"
+                    title="还没有导演方案"
+                    description={
+                      input
+                        ? "当前脚本已就绪，生成后将直接进入 Storyboard Workspace。"
+                        : "选择一个脚本开始导演规划。"
+                    }
+                    primary={
+                      input
+                        ? { label: "生成导演方案", onClick: generate }
+                        : {
+                            label: "选择脚本",
+                            onClick: () => onNavigate?.("create"),
+                          }
+                    }
+                    secondary={{
+                      label: "查看历史脚本",
+                      onClick: () => onNavigate?.("history"),
+                    }}
+                  />
+                )}
+              </div>
+            </main>
+            <aside className="os-shot-inspector os-director-assistant">
+              <header className="os-assistant-title">
+                <div>
+                  <span>AI 副导演</span>
+                  <h3>等待 Storyboard</h3>
+                </div>
+              </header>
+              <div className="os-inspector-empty">
+                <b>AI 副导演</b>
+                <h3>生成镜头后开始协作</h3>
+                <p>
+                  这里将显示当前 Shot、综合评分、四项 Intelligence Score 与 AI
+                  优化建议。
+                </p>
+                <dl>
+                  <div>
+                    <dt>当前镜头</dt>
+                    <dd>—</dd>
+                  </div>
+                  <div>
+                    <dt>综合评分</dt>
+                    <dd>—</dd>
+                  </div>
+                  <div>
+                    <dt>Storyboard</dt>
+                    <dd>待生成</dd>
+                  </div>
+                </dl>
+              </div>
+            </aside>
+          </div>
+        </>
+      ) : (
+        <>
+          <DirectorHeader
+            project={input?.script.title || "当前导演项目"}
+            market={input?.context.market || ""}
+            platform={input?.context.platform || "TikTok"}
+            shotCount={shots.length}
+            plannedDuration={planned}
+            selectedShot={activeIndex}
+            busy={busy}
+            saved={listStatus === "Confirmed"}
+            canRegenerate={
+              Boolean(activeShot) || shots.some((shot) => !shot.locked)
+            }
+            onRegenerate={() =>
+              activeIndex === null ? rebuildUnlocked() : regenerate(activeIndex)
+            }
+            onSave={saveVersion}
+            onRebalance={doRebalance}
+            onConfirm={confirmList}
+          />
+          {input ? (
+            <DirectorWorkspace
+              shots={shots}
+              selected={activeIndex}
+              onSelect={selectShot}
+              onReorder={(from, to) => commit(reorderShots(shots, from, to))}
+              preview={(shot) => (
+                <AssistantShotPreview
+                  shot={shot}
+                  projectId={currentProjectId}
+                />
+              )}
+              onToggleLock={(index) =>
+                setShots((value) =>
+                  value.map((shot, shotIndex) =>
+                    shotIndex === index
+                      ? { ...shot, locked: !shot.locked }
+                      : shot,
+                  ),
+                )
+              }
+              onDuplicate={(index) => commit(duplicateShot(shots, index))}
+              onDelete={remove}
+              inspector={
+                <DirectorAssistant
+                  title={
+                    activeShot
+                      ? `Shot ${String(activeShot.order).padStart(2, "0")}`
+                      : "选择镜头开始创作"
+                  }
+                  strategy={
+                    activeShot ? (
+                      <dl className="vnext-director-key-values">
+                        <div>
+                          <dt>镜头目的</dt>
+                          <dd>
+                            {activeShot.purpose || stageLabel(activeShot.stage)}
+                          </dd>
+                        </div>
+                        <div>
+                          <dt>Scene</dt>
+                          <dd>
+                            {activeShot.environment || "沿用当前导演场景"}
+                          </dd>
+                        </div>
+                        <div>
+                          <dt>Visual Goal</dt>
+                          <dd>{activeShot.visualDescription}</dd>
+                        </div>
+                        <div>
+                          <dt>Product Interaction</dt>
+                          <dd>
+                            {activeShot.productAction ||
+                              "当前镜头无独立产品动作"}
+                          </dd>
+                        </div>
+                      </dl>
+                    ) : (
+                      <p>从左侧选择一个 Shot。</p>
+                    )
+                  }
+                  camera={
+                    activeShot ? (
+                      <dl className="vnext-director-key-values">
+                        <div>
+                          <dt>景别</dt>
+                          <dd>{cameraLabel(activeShot.framing)}</dd>
+                        </div>
+                        <div>
+                          <dt>Camera</dt>
+                          <dd>{cameraLabel(activeShot.cameraAngle)}</dd>
+                        </div>
+                        <div>
+                          <dt>Movement</dt>
+                          <dd>{cameraLabel(activeShot.cameraMovement)}</dd>
+                        </div>
+                        <div>
+                          <dt>Framing</dt>
+                          <dd>
+                            {activeShot.onScreenText || "主体位于画面视觉中心"}
+                          </dd>
+                        </div>
+                        <div>
+                          <dt>Duration</dt>
+                          <dd>{activeShot.duration.toFixed(1)} 秒</dd>
+                        </div>
+                      </dl>
+                    ) : (
+                      <p>选择镜头后查看摄影设计。</p>
+                    )
+                  }
+                  proof={
+                    activeShot ? (
+                      <dl className="vnext-director-key-values">
+                        <div>
+                          <dt>Claim</dt>
+                          <dd>
+                            {activeShot.proofRequirement ||
+                              "当前镜头无独立 Proof 要求"}
+                          </dd>
+                        </div>
+                        <div>
+                          <dt>Visual Evidence</dt>
+                          <dd>
+                            {activeShot.productAction ||
+                              activeShot.talentAction ||
+                              activeShot.visualDescription}
+                          </dd>
+                        </div>
+                        <div>
+                          <dt>Proof Risk</dt>
+                          <dd>
+                            {integrity.status === "Complete"
+                              ? "只使用脚本与产品知识中的事实"
+                              : integrity.issues[0]?.message}
+                          </dd>
+                        </div>
+                      </dl>
+                    ) : (
+                      <p>当前没有可检查的 Proof。</p>
+                    )
+                  }
+                  check={
+                    <div className="vnext-director-check">
+                      <p
+                        className={
+                          integrity.status === "Complete"
+                            ? "is-ok"
+                            : "is-warning"
+                        }
+                      >
+                        {integrity.status === "Complete"
+                          ? "✓ 导演方案完整"
+                          : `△ ${integrity.issues.length} 项需要处理`}
+                      </p>
+                      {activeIntelligence?.evaluation ? (
+                        scoreItems.map(([key, label]) => (
+                          <p key={key}>
+                            <span>{label}</span>
+                            <small>
+                              {activeIntelligence.evaluation!.scores[key]} / 100
+                            </small>
+                          </p>
+                        ))
+                      ) : (
+                        <button
+                          type="button"
+                          disabled={
+                            !activeShot ||
+                            activeIntelligence?.status === "loading"
+                          }
+                          onClick={() =>
+                            activeIndex !== null && analyzeCurrent(activeIndex)
+                          }
+                        >
+                          {activeIntelligence?.status === "loading"
+                            ? "AI 分析中…"
+                            : "分析当前镜头"}
+                        </button>
+                      )}
+                      {integrity.issues.slice(0, 3).map((issue) => (
+                        <button
+                          type="button"
+                          key={issue.code}
+                          onClick={() => repairIntegrity(issue.code)}
+                        >
+                          △ {issue.message}
+                        </button>
+                      ))}
+                    </div>
+                  }
+                  advanced={
+                    activeShot && activeIndex !== null ? (
+                      <div className="vnext-director-advanced">
+                        <label>
+                          Shot 状态
+                          <select
+                            value={activeShot.status}
+                            onChange={(event) =>
+                              updateShot(
+                                activeIndex,
+                                "status",
+                                event.target.value,
+                              )
+                            }
+                          >
+                            <option value="Draft">草稿</option>
+                            <option value="Confirmed">已确认</option>
+                            <option value="Shot">已拍摄</option>
+                            <option value="Retake">重拍</option>
+                          </select>
+                        </label>
+                        {editable.map(([key, label, type]) => (
+                          <label key={key}>
+                            {label}
+                            {type === "framing" ||
+                            type === "angle" ||
+                            type === "movement" ? (
+                              <select
+                                value={String(activeShot[key])}
+                                onChange={(event) =>
+                                  updateShot(
+                                    activeIndex,
+                                    key,
+                                    event.target.value,
+                                  )
+                                }
+                              >
+                                {(type === "framing"
+                                  ? framingValues
+                                  : type === "angle"
+                                    ? cameraAngleValues
+                                    : cameraMovementValues
+                                ).map((value) => (
+                                  <option key={value} value={value}>
+                                    {cameraLabel(value)}
+                                  </option>
+                                ))}
+                              </select>
+                            ) : type === "textarea" ? (
+                              <textarea
+                                value={String(activeShot[key] || "")}
+                                onChange={(event) =>
+                                  updateShot(
+                                    activeIndex,
+                                    key,
+                                    event.target.value,
+                                  )
+                                }
+                              />
+                            ) : (
+                              <input
+                                type={type}
+                                step={type === "number" ? 0.1 : undefined}
+                                value={
+                                  Array.isArray(activeShot[key])
+                                    ? (activeShot[key] as string[]).join("；")
+                                    : String(activeShot[key] || "")
+                                }
+                                onChange={(event) =>
+                                  updateShot(
+                                    activeIndex,
+                                    key,
+                                    key === "props"
+                                      ? event.target.value
+                                          .split(/[；;]+/)
+                                          .filter(Boolean)
+                                      : type === "number"
+                                        ? Number(event.target.value)
+                                        : event.target.value,
+                                  )
+                                }
+                              />
+                            )}
+                          </label>
+                        ))}
+                        <article>
+                          <span>Image Prompt</span>
+                          <p>
+                            {buildShotImagePrompt(
+                              activeShot,
+                              input,
+                              result.directorPlan.visualStyle,
+                            )}
+                          </p>
+                        </article>
+                        <article>
+                          <span>Video Prompt</span>
+                          <p>{videoPromptDraft(activeShot)}</p>
+                        </article>
+                      </div>
+                    ) : (
+                      <p>选择镜头后查看高级字段。</p>
+                    )
+                  }
+                  suggestions={
+                    activeIntelligence?.evaluation ? (
+                      <>
+                        {[
+                          activeIntelligence.evaluation.suggestion.missing,
+                          activeIntelligence.evaluation.suggestion
+                            .visualUpgrade,
+                          activeIntelligence.evaluation.suggestion
+                            .conversionUpgrade,
+                        ]
+                          .filter(Boolean)
+                          .slice(0, 3)
+                          .map((suggestion, index) => (
+                            <article key={`${suggestion}-${index}`}>
+                              <span>{String(index + 1).padStart(2, "0")}</span>
+                              <p>{suggestion}</p>
+                            </article>
+                          ))}
+                        <button
+                          type="button"
+                          disabled={activeIntelligence.status === "loading"}
+                          onClick={() =>
+                            activeIndex !== null &&
+                            analyzeCurrent(activeIndex, true)
+                          }
+                        >
+                          查看全部 / 重新分析
+                        </button>
+                      </>
+                    ) : null
+                  }
+                />
+              }
+            >
+              <StoryboardCanvas
+                shot={activeShot}
+                input={input}
+                visualStyle={result.directorPlan.visualStyle}
+                projectId={currentProjectId}
+                cameraLabel={cameraLabel}
+                stageLabel={stageLabel}
+                onNavigateImages={() => onNavigate?.("images")}
+              />
+            </DirectorWorkspace>
+          ) : null}
+          <div className="os-director-legacy-presentation" aria-hidden="true">
+            <div className="os-workspace-topbar">
+              <div>
+                <span>{input?.script.title}</span>
+                <b>
+                  {statusLabel(listStatus)} · {integrityLabel(integrity.status)}
+                </b>
+              </div>
+              <section>
+                <article>
+                  <small>目标时长</small>
+                  <strong>{target}秒</strong>
+                </article>
+                <article>
+                  <small>计划时长</small>
+                  <strong>{planned}秒</strong>
+                </article>
+                <article className={Math.abs(delta) > 0.5 ? "warn" : ""}>
+                  <small>时长差</small>
+                  <strong>
+                    {delta > 0 ? "+" : ""}
+                    {delta}秒
+                  </strong>
+                </article>
+                <article>
+                  <small>镜头数量</small>
+                  <strong>{shots.length}</strong>
+                </article>
+                <article>
+                  <small>拍摄复杂度</small>
+                  <strong>{result.directorPlan.shootingComplexity}</strong>
+                </article>
+                <article>
+                  <small>AI 服务</small>
+                  <strong>{result.metadata.providerUsed}</strong>
+                </article>
+              </section>
+              <nav>
+                <button onClick={doRebalance}>重新平衡时长</button>
+                <button onClick={saveVersion}>保存导演版本</button>
+                <button
+                  className="os-primary vf-button vf-button-primary"
+                  onClick={confirmList}
+                >
+                  确认导演分镜
+                </button>
+              </nav>
+            </div>
+            <DirectorWorkspace
+              shots={shots}
+              selected={selected}
+              onSelect={selectShot}
+              onReorder={(from, to) => commit(reorderShots(shots, from, to))}
+              preview={(shot) => (
+                <AssistantShotPreview
+                  shot={shot}
+                  projectId={currentProjectId}
+                />
+              )}
+              brief={
+                <aside className="os-plan-sidebar os-director-brief-panel">
+                  <header>
+                    <span>DIRECTOR BRIEF</span>
+                    <h2>{input?.script.title || "当前导演项目"}</h2>
+                    <p>{result.directorPlan.creativeIntent}</p>
+                  </header>
+                  <dl className="os-director-brief-data">
+                    <div>
+                      <dt>Project</dt>
+                      <dd>{input?.script.title || "当前项目"}</dd>
+                    </div>
+                    <div>
+                      <dt>Product</dt>
+                      <dd>{input?.context.product}</dd>
+                    </div>
+                    <div>
+                      <dt>Market</dt>
+                      <dd>{input?.context.market}</dd>
+                    </div>
+                    <div>
+                      <dt>Language</dt>
+                      <dd>{input?.context.language}</dd>
+                    </div>
+                    <div>
+                      <dt>Platform</dt>
+                      <dd>{input?.context.platform}</dd>
+                    </div>
+                    <div>
+                      <dt>Duration</dt>
+                      <dd>{target} 秒</dd>
+                    </div>
+                    <div>
+                      <dt>Audience</dt>
+                      <dd>{input?.context.audience}</dd>
+                    </div>
+                    <div>
+                      <dt>Creative Style</dt>
+                      <dd>{input?.context.creativeMode}</dd>
+                    </div>
+                    <div>
+                      <dt>Video Goal</dt>
+                      <dd>
+                        {input?.context.creativeAngle || input?.script.title}
+                      </dd>
+                    </div>
+                  </dl>
+                  {[
+                    ["开场钩子", result.directorPlan.hookExecution],
+                    ["节奏策略", result.directorPlan.pacingStrategy],
+                    ["证明策略", result.directorPlan.proofStrategy],
+                    ["产品出场", result.directorPlan.productRevealStrategy],
+                  ].map(([label, value]) => (
+                    <details key={label}>
+                      <summary>{label}</summary>
+                      <p>{value}</p>
+                    </details>
+                  ))}
+                  <article
+                    className={
+                      integrity.status === "Complete"
+                        ? "integrity-ok"
+                        : "integrity-warn"
+                    }
+                  >
+                    <b>完整性检查 · {integrityLabel(integrity.status)}</b>
+                    {integrity.issues.length ? (
+                      integrity.issues.map((issue, index) => (
+                        <div key={`${issue.code}-${index}`}>
+                          <p>• {issue.message}</p>
+                          <button
+                            disabled={busy}
+                            onClick={() => repairIntegrity(issue.code)}
+                          >
+                            {issue.code === "duration_mismatch"
+                              ? "自动平衡时长"
+                              : issue.code === "source_block_invalid"
+                                ? "定位问题镜头"
+                                : issue.code === "reveal_missing"
+                                  ? "AI 建议补充产品出场镜头"
+                                  : "AI 建议补充证明镜头"}
+                          </button>
+                        </div>
+                      ))
+                    ) : (
+                      <p>当前脚本、产品、来源段落、时长与时间轴均一致。</p>
+                    )}
+                  </article>
+                </aside>
+              }
+              inspector={
+                <Inspector title="分镜检查器">
+                  {" "}
+                  <aside className="os-shot-inspector os-director-assistant">
+                    <header className="os-assistant-title">
+                      <div>
+                        <span>AI 副导演</span>
+                        <h3>
+                          {selected === null
+                            ? "选择镜头开始创作"
+                            : `Shot ${String(selected + 1).padStart(2, "0")} · ${busy ? "建议生成中" : "正在编辑"}`}
+                        </h3>
+                      </div>
+                      {selected !== null ? (
+                        <button onClick={() => setSelected(null)}>×</button>
+                      ) : null}
+                    </header>
+                    {busy ? (
+                      <WorkspaceState
+                        kind="loading"
+                        title="正在处理真实镜头上下文"
+                        description="建议返回前不会显示为已完成。"
+                        steps={[
+                          "读取当前镜头与相邻镜头",
+                          "核对产品事实与证明要求",
+                          "生成修改候选",
+                        ]}
+                      />
+                    ) : selected === null || !shots[selected] ? (
+                      <div className="os-inspector-empty">
+                        <b>AI 副导演</b>
+                        <h3>选择一个镜头进行编辑与分析</h3>
+                        <p>
+                          选中 Storyboard Shot
+                          后，可查看真实建议并修改现有镜头字段。
+                        </p>
+                        <dl>
+                          <div>
+                            <dt>镜头数量</dt>
+                            <dd>{shots.length}</dd>
+                          </div>
+                          <div>
+                            <dt>时长</dt>
+                            <dd>
+                              {planned}秒 / {target}秒
+                            </dd>
+                          </div>
+                          <div>
+                            <dt>已锁定</dt>
+                            <dd>
+                              {shots.filter((shot) => shot.locked).length}
+                            </dd>
+                          </div>
+                          <div>
+                            <dt>完整性</dt>
+                            <dd>{integrityLabel(integrity.status)}</dd>
+                          </div>
+                        </dl>
+                      </div>
+                    ) : (
+                      <>
+                        <section className="os-assistant-current-shot">
+                          <span>当前镜头</span>
+                          <div>
+                            <AssistantShotPreview
+                              shot={shots[selected]}
+                              projectId={currentProjectId}
+                            />
+                            <p>
+                              <b>
+                                {shots[selected].dialogue ||
+                                  shots[selected].voiceover ||
+                                  stageLabel(shots[selected].stage)}
+                              </b>
+                              <small>
+                                {shots[selected].startTime.toFixed(1)} –{" "}
+                                {shots[selected].endTime.toFixed(1)} 秒
+                              </small>
+                            </p>
+                          </div>
+                        </section>
+                        <details
+                          className={`os-assistant-intelligence ${intelligence[shots[selected].shotId]?.status || "idle"}`}
+                        >
+                          <summary>镜头评分</summary>
+                          <header>
+                            <div>
+                              <b>镜头分析</b>
+                            </div>
+                            <strong
+                              className="os-assistant-score-ring"
+                              style={
+                                {
+                                  "--score-angle": `${(intelligence[shots[selected].shotId]?.evaluation ? intelligenceAverage(intelligence[shots[selected].shotId].evaluation) : 0) * 3.6}deg`,
+                                } as React.CSSProperties
+                              }
+                            >
+                              <i>
+                                {intelligence[shots[selected].shotId]
+                                  ?.evaluation
+                                  ? intelligenceAverage(
+                                      intelligence[shots[selected].shotId]
+                                        .evaluation,
+                                    )
+                                  : "—"}
+                              </i>
+                              <small>综合评分</small>
+                            </strong>
+                          </header>
+                          {intelligence[shots[selected].shotId]?.status ===
+                            "success" &&
+                          intelligence[shots[selected].shotId].evaluation ? (
+                            <>
+                              <div className="os-assistant-score-grid">
+                                {scoreItems.map(([key, label]) => (
+                                  <article
+                                    key={key}
+                                    className={scoreTone(
+                                      intelligence[shots[selected].shotId]
+                                        .evaluation!.scores[key],
+                                    )}
+                                  >
+                                    <span>{label}</span>
+                                    <b>
+                                      {
+                                        intelligence[shots[selected].shotId]
+                                          .evaluation!.scores[key]
+                                      }
+                                    </b>
+                                    <i
+                                      style={
+                                        {
+                                          "--score": `${intelligence[shots[selected].shotId].evaluation!.scores[key]}%`,
+                                        } as React.CSSProperties
+                                      }
+                                    />
+                                  </article>
+                                ))}
+                              </div>
+                              <small>
+                                {intelligenceMetadata?.providerUsed === "cache"
+                                  ? "Fingerprint Cache"
+                                  : "AI 实时分析"}{" "}
+                                ·{" "}
+                                {new Date(
+                                  intelligence[
+                                    shots[selected].shotId
+                                  ].evaluation!.evaluatedAt,
+                                ).toLocaleTimeString("zh-CN", {
+                                  hour: "2-digit",
+                                  minute: "2-digit",
+                                })}
+                              </small>
+                            </>
+                          ) : (
+                            <div className="os-assistant-analysis-state">
+                              <p>
+                                {intelligence[shots[selected].shotId]
+                                  ?.status === "loading"
+                                  ? "AI 正在读取当前镜头与相邻镜头…"
+                                  : intelligence[shots[selected].shotId]
+                                        ?.status === "error"
+                                    ? intelligence[shots[selected].shotId].error
+                                    : "当前镜头尚未分析，运行 Intelligence 后查看评分和建议。"}
+                              </p>
+                              <button
+                                disabled={
+                                  intelligence[shots[selected].shotId]
+                                    ?.status === "loading"
+                                }
+                                onClick={() => analyzeCurrent(selected)}
+                              >
+                                {intelligence[shots[selected].shotId]
+                                  ?.status === "loading"
+                                  ? "AI 分析中..."
+                                  : "分析当前镜头"}
+                              </button>
+                            </div>
+                          )}
+                        </details>
+                        <section className="os-assistant-suggestions">
+                          <details open>
+                            <summary>场景</summary>
+                            <p>
+                              {shots[selected].environment ||
+                                "沿用当前导演方案的主拍摄环境"}
+                            </p>
+                          </details>
+                          <details open>
+                            <summary>镜头语言</summary>
+                            <p>
+                              {cameraLabel(shots[selected].framing)} ·{" "}
+                              {cameraLabel(shots[selected].cameraAngle)} ·{" "}
+                              {cameraLabel(shots[selected].cameraMovement)}
+                            </p>
+                          </details>
+                          <details>
+                            <summary>Proof 设计</summary>
+                            <p>
+                              {shots[selected].proofRequirement ||
+                                "当前镜头没有独立 Proof 要求；不要额外添加未经产品知识支持的证明。"}
+                            </p>
+                          </details>
+                          <details>
+                            <summary>视觉优化</summary>
+                            <p>
+                              {shots[selected].editingNotes ||
+                                shots[selected].continuityNotes ||
+                                "保持动作、产品与相邻镜头连续。"}
+                            </p>
+                          </details>
+                          <details>
+                            <summary>合规提醒</summary>
+                            <p>
+                              {integrity.status === "Complete"
+                                ? "当前镜头仍需只使用脚本与产品知识中的事实。"
+                                : integrity.issues[0]?.message}
+                            </p>
+                          </details>
+                        </section>
+                        {intelligence[shots[selected].shotId]?.evaluation ? (
+                          <details className="os-assistant-ai-suggestions">
+                            <summary>AI 优化建议</summary>
+                            <header>
+                              <button
+                                disabled={
+                                  intelligence[shots[selected].shotId]
+                                    ?.status === "loading"
+                                }
+                                onClick={() => analyzeCurrent(selected, true)}
+                              >
+                                重新分析当前镜头
+                              </button>
+                            </header>
+                            <article>
+                              <b>当前问题</b>
+                              <p>
+                                {
+                                  intelligence[shots[selected].shotId]
+                                    .evaluation!.suggestion.missing
+                                }
+                              </p>
+                            </article>
+                            <article>
+                              <b>视觉优化</b>
+                              <p>
+                                {
+                                  intelligence[shots[selected].shotId]
+                                    .evaluation!.suggestion.visualUpgrade
+                                }
+                              </p>
+                            </article>
+                            <article>
+                              <b>转化优化</b>
+                              <p>
+                                {
+                                  intelligence[shots[selected].shotId]
+                                    .evaluation!.suggestion.conversionUpgrade
+                                }
+                              </p>
+                            </article>
+                            <details>
+                              <summary>✦ 生成 5 个创意方向</summary>
+                              <div>
+                                {creativeDirections(
+                                  intelligence[shots[selected].shotId]
+                                    .evaluation!,
+                                ).map((direction) => (
+                                  <button
+                                    key={direction.label}
+                                    disabled={busy}
+                                    onClick={() =>
+                                      void regenerateWithDirection(
+                                        selected,
+                                        direction.instruction,
+                                      )
+                                    }
+                                  >
+                                    <span>{direction.label}</span>
+                                    <small>生成修改前后对比</small>
+                                  </button>
+                                ))}
+                              </div>
+                            </details>
+                          </details>
+                        ) : null}
+                        <nav className="os-inspector-actions">
+                          <button
+                            onClick={() =>
+                              setShots((value) =>
+                                value.map((shot, index) =>
+                                  index === selected
+                                    ? { ...shot, locked: !shot.locked }
+                                    : shot,
+                                ),
+                              )
+                            }
+                          >
+                            {shots[selected].locked ? "解锁" : "锁定"}
+                          </button>
+                          <button onClick={() => regenerate(selected)}>
+                            AI 重新生成
+                          </button>
+                          <button
+                            onClick={() =>
+                              commit(duplicateShot(shots, selected))
+                            }
+                          >
+                            复制镜头
+                          </button>
+                          <button
+                            className="os-danger"
+                            onClick={() => remove(selected)}
+                          >
+                            删除镜头
+                          </button>
+                        </nav>
+                        <label className="os-inspector-status">
+                          Shot 状态
+                          <select
+                            value={shots[selected].status}
+                            onChange={(event) =>
+                              updateShot(selected, "status", event.target.value)
+                            }
+                          >
+                            <option value="Draft">草稿</option>
+                            <option value="Confirmed">已确认</option>
+                            <option value="Shot">已拍摄</option>
+                            <option value="Retake">重拍</option>
+                          </select>
+                        </label>
+                        <details className="os-assistant-editor" open>
+                          <summary>编辑镜头字段</summary>
+                          <div className="os-inspector-fields">
+                            {editable.map(([key, label, type]) => (
+                              <label key={key}>
+                                {label}
+                                {type === "framing" ||
+                                type === "angle" ||
+                                type === "movement" ? (
+                                  <select
+                                    value={String(shots[selected][key])}
+                                    onChange={(e) =>
+                                      updateShot(selected, key, e.target.value)
+                                    }
+                                  >
+                                    {(type === "framing"
+                                      ? framingValues
+                                      : type === "angle"
+                                        ? cameraAngleValues
+                                        : cameraMovementValues
+                                    ).map((value) => (
+                                      <option key={value} value={value}>
+                                        {cameraLabel(value)}
+                                      </option>
+                                    ))}
+                                  </select>
+                                ) : type === "textarea" ? (
+                                  <textarea
+                                    value={String(shots[selected][key] || "")}
+                                    onChange={(e) =>
+                                      updateShot(selected, key, e.target.value)
+                                    }
+                                  />
+                                ) : (
+                                  <input
+                                    type={type}
+                                    step={type === "number" ? 0.1 : undefined}
+                                    value={
+                                      Array.isArray(shots[selected][key])
+                                        ? (
+                                            shots[selected][key] as string[]
+                                          ).join("；")
+                                        : String(shots[selected][key] || "")
+                                    }
+                                    onChange={(e) =>
+                                      updateShot(
+                                        selected,
+                                        key,
+                                        key === "props"
+                                          ? e.target.value
+                                              .split(/[；;]+/)
+                                              .filter(Boolean)
+                                          : type === "number"
+                                            ? Number(e.target.value)
+                                            : e.target.value,
+                                      )
+                                    }
+                                  />
+                                )}
+                              </label>
+                            ))}
+                          </div>
+                        </details>
+                        <section className="os-ai-shot-panel">
+                          <b>修改要求 / AI 重新生成</b>
+                          <select
+                            value={preset}
+                            onChange={(e) => setPreset(e.target.value)}
+                          >
+                            {presets.map((value) => (
+                              <option key={value}>{value}</option>
+                            ))}
+                          </select>
+                          <textarea
+                            placeholder="可以用中文输入要求；目标台词与字幕仍保持脚本设定语言。"
+                            value={instruction}
+                            onChange={(e) => setInstruction(e.target.value)}
+                          />
+                          <button
+                            disabled={busy}
+                            onClick={() => regenerate(selected)}
+                          >
+                            生成修改前后对比
+                          </button>
+                        </section>
+                        <details className="creative-section">
+                          <summary>Advanced · 图片与视频提示词</summary>
+                          <section className="os-prompt-reserve">
+                            <article>
+                              <span>Image Prompt</span>
+                              <p>
+                                {input
+                                  ? buildShotImagePrompt(
+                                      shots[selected],
+                                      input,
+                                      result.directorPlan.visualStyle,
+                                    )
+                                  : ""}
+                              </p>
+                            </article>
+                            <article>
+                              <span>Video Prompt</span>
+                              <p>{videoPromptDraft(shots[selected])}</p>
+                            </article>
+                            <small>
+                              图片生成已集成到对应 Shot
+                              Card；本阶段不调用视频模型。
+                            </small>
+                          </section>
+                        </details>
+                      </>
+                    )}
+                  </aside>
+                </Inspector>
+              }
+            >
+              <main className="os-shot-workspace os-storyboard-canvas">
+                <div className="os-storyboard-heading">
+                  <div>
+                    <span>分镜画布</span>
+                    <h2>可执行镜头板</h2>
+                    <p>
+                      {shots.length} 个镜头 · {planned} 秒 · 来源于当前 Script
+                      Blocks
+                    </p>
+                  </div>
+                </div>
+                <div className="os-workspace-actions">
+                  <div>
+                    <b>{shots.filter((x) => x.locked).length} 个已锁定</b>
+                    <span>锁定镜头不会被批量重做或自动调整时长</span>
+                  </div>
+                  <button disabled={busy} onClick={rebuildUnlocked}>
+                    {busy ? "AI 正在处理…" : "✦ AI 重做未锁定镜头"}
+                  </button>
+                  {undo ? (
+                    <button
+                      onClick={() => {
+                        commit(
+                          shots.map((shot, index) =>
+                            index === undo.index ? undo.shot : shot,
+                          ),
+                        );
+                        setUndo(null);
+                      }}
+                    >
+                      撤销最近一次修改
+                    </button>
+                  ) : null}
+                </div>
+                {error ? <p className="os-director-error">{error}</p> : null}
+                <div className="os-director-shot-list">
+                  {input
+                    ? shots.map((shot, index) =>
+                        selected !== null &&
+                        selected !== index ? null : selected === null &&
+                          index !== 0 ? null : (
+                          <div className="os-shot-row" key={shot.shotId}>
+                            <ShotCard
+                              shot={shot}
+                              input={input}
+                              visualStyle={result.directorPlan.visualStyle}
+                              projectId={currentProjectId}
+                              selected={selected === index}
+                              intelligence={intelligence[shot.shotId]}
+                              onAnalyze={() => analyzeCurrent(index)}
+                              onSelect={() => selectShot(index)}
+                              onToggleLock={() =>
+                                setShots((value) =>
+                                  value.map((item, i) =>
+                                    i === index
+                                      ? { ...item, locked: !item.locked }
+                                      : item,
+                                  ),
+                                )
+                              }
+                              onDuplicate={() =>
+                                commit(duplicateShot(shots, index))
+                              }
+                              onDelete={() => remove(index)}
+                              onRegenerate={() => regenerate(index)}
+                              onOpenImageStudio={() => onNavigate?.("images")}
+                              onDragStart={() => {
+                                dragged.current = index;
+                              }}
+                              onDrop={() => {
+                                if (dragged.current !== null) {
+                                  commit(
+                                    reorderShots(shots, dragged.current, index),
+                                  );
+                                  dragged.current = null;
+                                }
+                              }}
+                            />
+                            <div className="os-add-shot">
+                              <button onClick={() => addManual(index)}>
+                                ＋ 添加空白镜头
+                              </button>
+                              <button
+                                disabled={busy}
+                                onClick={() => suggest(index)}
+                              >
+                                ✦ AI 建议镜头
+                              </button>
+                            </div>
+                          </div>
+                        ),
+                      )
+                    : null}
+                </div>
+              </main>
+            </DirectorWorkspace>
+            <section
+              className={`os-director-timeline ${integrity.status === "Needs Attention" ? "needs-attention" : ""}`}
+            >
+              <header>
+                <b>镜头时间轴</b>
+                <span>
+                  0秒 → {planned}秒 · 目标 {target}秒
+                </span>
+              </header>
+              <div>
+                {shots.map((shot, index) => (
+                  <button
+                    key={shot.shotId}
+                    style={{ flexGrow: Math.max(0.5, shot.duration) }}
+                    className={[
+                      selected === index ? "selected" : "",
+                      shot.locked ? "locked" : "",
+                      shot.status.toLowerCase(),
+                      integrity.status === "Needs Attention" ? "attention" : "",
+                    ]
+                      .filter(Boolean)
+                      .join(" ")}
+                    onClick={() => scrollToShot(index)}
+                  >
+                    <b>{String(index + 1).padStart(2, "0")}</b>
+                    <span>
+                      {shot.duration}秒 · {stageLabel(shot.stage)}
+                    </span>
+                  </button>
+                ))}
+              </div>
+              {rebalance ? (
+                <p>
+                  调整前 {rebalance.beforePlanned}秒 → 调整后{" "}
+                  {rebalance.afterPlanned}秒 · 目标 {rebalance.target}秒 · 差值{" "}
+                  {rebalance.delta}秒
+                </p>
+              ) : null}
+            </section>
+          </div>
+          {preview ? (
+            <div className="os-rewrite-modal">
+              <div>
+                <header>
+                  <div>
+                    <span>AI 镜头修改 · 修改前 / 修改后</span>
+                    <h2>
+                      {preview.mode === "insert"
+                        ? "新增镜头预览"
+                        : `镜头 ${String(preview.index + 1).padStart(2, "0")}`}
+                    </h2>
+                  </div>
+                  <button onClick={() => setPreview(null)}>×</button>
+                </header>
+                <section>
+                  <article>
+                    <b>修改前</b>
+                    <p>{preview.before.visualDescription}</p>
+                    <small>
+                      {cameraLabel(preview.before.framing)} ·{" "}
+                      {cameraLabel(preview.before.cameraMovement)}
+                    </small>
+                    <p>{preview.before.proofRequirement}</p>
+                  </article>
+                  <article>
+                    <b>修改后</b>
+                    <p>{preview.after.visualDescription}</p>
+                    <small>
+                      {cameraLabel(preview.after.framing)} ·{" "}
+                      {cameraLabel(preview.after.cameraMovement)}
+                    </small>
+                    <p>{preview.after.proofRequirement}</p>
+                  </article>
+                </section>
+                <footer>
+                  <span>
+                    AI 服务 {preview.metadata.providerUsed} · 事实保护{" "}
+                    {preview.metadata.factGuardPassed ? "通过" : "需要检查"} ·
+                    安全回退 {preview.metadata.fallbackUsed ? "是" : "否"}
+                  </span>
+                  <button onClick={() => setPreview(null)}>拒绝</button>
+                  <button
+                    className="os-primary vf-button vf-button-primary"
+                    onClick={acceptPreview}
+                  >
+                    接受
+                  </button>
+                </footer>
+              </div>
+            </div>
+          ) : null}
+        </>
+      )}
+      <ConfirmDialog
+        open={pendingDelete !== null}
+        title={
+          pendingDelete === null
+            ? "删除镜头"
+            : `删除镜头 ${String(pendingDelete + 1).padStart(2, "0")}？`
+        }
+        description="删除后不会自动恢复缺失的开场、证明或行动引导，完整性检查会重新计算。"
+        confirmLabel="确认删除"
+        tone="danger"
+        onCancel={() => setPendingDelete(null)}
+        onConfirm={confirmDelete}
+      />
+    </section>
+  );
 }
