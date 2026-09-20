@@ -73,5 +73,5 @@ test("Test I: architecture and persistence regression guards remain intact",()=>
   assert.match(page,/viralflow-project-memory-v1|readProjectMemory\(\)/);
   assert.match(page,/cacheProjectMemory\(projectMemory\)/);
   assert.doesNotMatch(css,/background:\s*(?:#fff|white)/i);
-  assert.match(read("../app/layout.tsx"),/typography\.css";\s*import "\.\/styles\/interaction\.css"/);
+  assert.match(read("../app/layout.tsx"),/design-tokens\.css";\s*import "\.\/styles\/workspace-components\.css"/);
 });

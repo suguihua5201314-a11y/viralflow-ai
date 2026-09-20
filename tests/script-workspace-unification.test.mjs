@@ -7,21 +7,21 @@ const page=read("../app/page.tsx");
 const studio=read("../app/script-studio.tsx");
 const sidebar=read("../app/components/layout/sidebar.tsx");
 const recovery=read("../app/script-workspace.ts");
-const css=read("../app/styles/script-workspace.css");
+const css=read("../app/styles/workspace-components.css");
 
 test("Script and Director share project navigation without changing Director workspace",()=>{
   assert.match(sidebar,/active==="director"\|\|active==="create"/);
   for(const label of ["脚本创作","爆款研究","内容策划","AI分镜导演","视觉创作","声音制作","素材管理","项目大脑"]) assert.ok(sidebar.includes(`label:"${label}"`));
-  assert.match(page,/active==="create"\?"vf-project-mode vf-script-mode"/);
+  assert.match(page,/const projectMode=active==="brain"\|\|active==="director"\|\|active==="create"/);
 });
 
 test("Script is workspace-first with version rail, block canvas and assistant",()=>{
-  assert.match(studio,/className="script-version-rail"/);
-  assert.match(studio,/className="script-blocks"/);
-  assert.match(studio,/className="script-assistant"/);
-  assert.match(studio,/Creative Controls/);
-  assert.match(css,/\.vf-script-mode \.studio-brief,[^}]+display:none/);
-  assert.match(css,/grid-template-columns:minmax\(640px,1fr\) 360px/);
+  assert.match(studio,/className="os-script-version-rail"/);
+  assert.match(studio,/className="os-script-blocks"/);
+  assert.match(studio,/className="os-script-assistant"/);
+  assert.match(studio,/Creative Inspector/);
+  assert.match(studio,/ScriptDocument script=\{draftScript\}/);
+  assert.match(css,/\.creative-script-layout \{ display: grid; grid-template-columns: minmax\(0, 1\.65fr\) minmax\(300px, 1fr\)/);
 });
 
 test("sending to Director persists the current draft first",()=>{
@@ -40,9 +40,9 @@ test("real project versions restore the version rail and dense editor content",(
   assert.match(recovery,/restoredRaceResults\.length\?restoredRaceResults:versions/);
   assert.match(recovery,/new Map\(project\.assets\.scriptVersions/);
   assert.match(studio,/variantIdentity\(script\)===variantIdentity\(item\)/);
-  assert.match(studio,/className="script-context-strip"/);
-  assert.match(css,/height:58px/);
-  assert.match(css,/\.pacing-card,[^}]+\.editor-status\{display:none\}/);
+  assert.match(studio,/className="os-script-context-strip"/);
+  assert.match(css,/\.creative-script-document/);
+  assert.match(css,/\.creative-shot-timeline/);
 });
 
 test("Version Rail always builds five slots and fills only real versions",()=>{
@@ -65,9 +65,8 @@ test("Version Rail keeps real identity, score and active state without fabricati
 });
 
 test("Version Rail remains compact with explicit empty slot styling",()=>{
-  assert.match(css,/\.script-version-rail>header\{height:34px/);
-  assert.match(css,/\.version-select\{height:58px/);
-  assert.match(css,/article\.version-empty[^}]+border-style:dashed/);
+  assert.match(css,/\.os-script-version-rail > div \{ display: flex/);
+  assert.match(css,/\.os-version-select \{ display: grid/);
   assert.doesNotMatch(studio,/className="empty" key=\{`empty-v/);
-  assert.match(css,/\.version-slot-generate\{/);
+  assert.match(studio,/os-version-slot-generate/);
 });

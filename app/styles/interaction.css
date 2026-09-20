@@ -9,9 +9,9 @@
 button{transition:transform var(--vf-interaction-fast),border-color var(--vf-interaction-fast),background-color var(--vf-interaction-fast),color var(--vf-interaction-fast),box-shadow var(--vf-interaction-fast),opacity var(--vf-interaction-fast)}
 button:not(:disabled):hover{filter:brightness(1.08)}
 button:not(:disabled):active{transform:translateY(1px) scale(.99);filter:brightness(.98)}
-button:focus-visible,[tabindex="0"]:focus-visible,input:focus-visible,textarea:focus-visible,select:focus-visible{outline:0;box-shadow:var(--vf-focus-ring)!important}
-button:disabled{cursor:not-allowed!important;opacity:.48!important;filter:saturate(.55)}
-button[aria-busy="true"]{position:relative;cursor:progress!important;pointer-events:none}
+button:focus-visible,[tabindex="0"]:focus-visible,input:focus-visible,textarea:focus-visible,select:focus-visible{outline:0;box-shadow:var(--vf-focus-ring)}
+button:disabled{cursor:not-allowed;opacity:.48;filter:saturate(.55)}
+button[aria-busy="true"]{position:relative;cursor:progress;pointer-events:none}
 .button-spinner{display:inline-block;width:14px;height:14px;margin-right:8px;border:2px solid rgba(255,255,255,.32);border-top-color:#fff;border-radius:50%;vertical-align:-2px;animation:vf-spin .75s linear infinite}
 @keyframes vf-spin{to{transform:rotate(360deg)}}
 
@@ -39,20 +39,20 @@ body .vf-nav-group nav button:hover{background:rgba(255,255,255,.075);color:#fff
 body .vf-nav-group nav button.nav-active{font-weight:650;box-shadow:0 9px 24px rgba(69,61,190,.28),inset 0 1px rgba(255,255,255,.08)}
 body .vf-nav-group nav button.nav-active:after{background:#d5ceff;box-shadow:0 0 12px rgba(190,178,255,.8)}
 body .vf-nav-group nav button.nav-active>span{transform:scale(1.04);box-shadow:inset 0 0 0 1px rgba(255,255,255,.16)}
-.vf-breadcrumb span{font-weight:650;color:#b8adff!important}
+.vf-breadcrumb span{font-weight:650;color:#b8adff}
 
 /* Tabs and segmented controls */
 .version-tabs button,.studio-segments button,.choice-grid button,.provider-tabs button,.va-toggle button,
 .vr-modes button,.vr-intensity button,.projects-toolbar button,.library-tabs button,.race-cards footer button{
-  position:relative;transition:all var(--vf-interaction-fast)!important
+  position:relative;transition:all var(--vf-interaction-fast)
 }
 .version-tabs button:hover,.studio-segments button:hover,.choice-grid button:hover,.provider-tabs button:hover,.va-toggle button:hover,
 .vr-modes button:hover,.vr-intensity button:hover,.projects-toolbar button:hover,.library-tabs button:hover{
-  border-color:rgba(139,122,255,.42)!important;color:#c8c0ff!important;background:rgba(111,88,228,.1)!important
+  border-color:rgba(139,122,255,.42);color:#c8c0ff;background:rgba(111,88,228,.1)
 }
 .version-tabs button.active,.studio-segments button.selected,.choice-grid button.selected,.provider-tabs button.selected,
 .va-toggle button.selected,.vr-modes button.active,.vr-intensity button.active,.projects-toolbar button.active,.library-tabs button.selected{
-  border-color:rgba(154,139,255,.5)!important;background:linear-gradient(135deg,rgba(119,92,238,.26),rgba(66,108,222,.14))!important;color:#eeeaff!important;font-weight:650!important;box-shadow:inset 0 1px rgba(255,255,255,.06),0 5px 14px rgba(51,40,139,.15)!important
+  border-color:rgba(154,139,255,.5);background:linear-gradient(135deg,rgba(119,92,238,.26),rgba(66,108,222,.14));color:#eeeaff;font-weight:650;box-shadow:inset 0 1px rgba(255,255,255,.06),0 5px 14px rgba(51,40,139,.15)
 }
 
 /* Interactive cards */
@@ -62,15 +62,15 @@ body .vf-nav-group nav button.nav-active>span{transform:scale(1.04);box-shadow:i
 }
 .project-card-grid>article:hover,.vf-quick-grid button:hover,.vf-metric-grid article:hover,.vf-recent-list article:hover,
 .race-cards>article:hover,.va-saved:hover,.vr-strategy-grid>article:hover,.director-shot-card:hover,.library-list article:hover,.product-list article:hover{
-  transform:var(--vf-interaction-lift);border-color:rgba(139,122,255,.36)!important;box-shadow:0 16px 38px rgba(0,0,0,.24),0 0 0 1px rgba(118,95,235,.07)!important
+  transform:var(--vf-interaction-lift);border-color:rgba(139,122,255,.36);box-shadow:0 16px 38px rgba(0,0,0,.24),0 0 0 1px rgba(118,95,235,.07)
 }
-.race-cards>article.comparing,.race-cards>article.adopted,.director-shot-card.selected{border-color:#806ef5!important;box-shadow:0 0 0 2px rgba(128,110,245,.18),0 14px 34px rgba(0,0,0,.2)!important}
+.race-cards>article.comparing,.race-cards>article.adopted,.director-shot-card.selected{border-color:#806ef5;box-shadow:0 0 0 2px rgba(128,110,245,.18),0 14px 34px rgba(0,0,0,.2)}
 
 /* Button outcome and disabled explanations */
-.generation-state.generating{color:#b9adff!important;background:rgba(111,88,228,.12)!important}
-.generation-state.completed{color:#69d3aa!important;background:rgba(57,170,127,.1)!important}
-.generation-state.error{color:#ef8c9a!important;background:rgba(217,74,94,.1)!important}
-.provider-warning{position:relative;padding-left:30px!important}
+.generation-state.generating{color:#b9adff;background:rgba(111,88,228,.12)}
+.generation-state.completed{color:#69d3aa;background:rgba(57,170,127,.1)}
+.generation-state.error{color:#ef8c9a;background:rgba(217,74,94,.1)}
+.provider-warning{position:relative;padding-left:30px}
 .provider-warning:before{content:"!";position:absolute;left:10px;top:9px;display:grid;width:14px;height:14px;place-items:center;border-radius:50%;background:rgba(213,145,50,.18);font-weight:800}
 .project-action-notice{position:fixed;right:26px;bottom:26px;z-index:110;padding:11px 15px;border:1px solid rgba(86,203,159,.24);border-radius:10px;background:#10251f;color:#7ce0b9;font-size:13px;box-shadow:0 16px 44px rgba(0,0,0,.35);animation:vf-notice-in .2s ease-out}
 @keyframes vf-notice-in{from{opacity:0;transform:translateY(8px)}}
@@ -92,5 +92,5 @@ body .vf-nav-group nav button.nav-active>span{transform:scale(1.04);box-shadow:i
   .project-action-notice{right:12px;bottom:58px}
 }
 @media(prefers-reduced-motion:reduce){
-  *,*:before,*:after{scroll-behavior:auto!important;transition-duration:.01ms!important;animation-duration:.01ms!important;animation-iteration-count:1!important}
+  *,*:before,*:after{scroll-behavior:auto;transition-duration:.01ms;animation-duration:.01ms;animation-iteration-count:1}
 }

@@ -10,7 +10,7 @@ const workspace = fs.readFileSync(new URL("../app/project-asset-workspace.tsx", 
 const assets = fs.readFileSync(new URL("../app/image-assets.ts", import.meta.url), "utf8");
 const memory = fs.readFileSync(new URL("../app/project-memory.ts", import.meta.url), "utf8");
 const directorImage = fs.readFileSync(new URL("../app/director-shot-image.tsx", import.meta.url), "utf8");
-const directorUi = fs.readFileSync(new URL("../app/styles/director-intelligence-ui.css", import.meta.url), "utf8");
+const directorUi = fs.readFileSync(new URL("../app/styles/workspace-components.css", import.meta.url), "utf8");
 
 test("Step 7.0-C 1: Assets 与 Script History 使用独立 routing", () => {
   assert.match(navigation, /"assets"/);
@@ -83,11 +83,10 @@ test("Step 7.0-C 14: 唯一 Image Store 与现有 API/Director loop 保持不变
 });
 
 test("Step 7.0-C.1: Director 图片操作在桌面布局保持可访问", () => {
-  assert.match(directorImage, /className="shot-image-details"/);
+  assert.match(directorImage, /className="os-shot-image-details"/);
   assert.match(directorImage, /aria-label="镜头图片操作"/);
-  assert.match(directorUi, /\.vf-director-mode \.shot-image-details\{[^}]*display:block/);
-  assert.match(directorUi, /\.vf-director-mode \.shot-image-details nav\{[^}]*grid-template-columns:repeat\(2,minmax\(0,1fr\)\)/);
-  assert.doesNotMatch(directorUi, /\.vf-director-mode \.shot-image-result>div\{display:none\}/);
+  assert.match(directorUi, /\.os-shot-image-details nav \{ display: flex; flex-wrap: wrap/);
+  assert.doesNotMatch(directorUi, /\.os-shot-image-result[^}]+display:\s*none/);
 });
 
 test("Step 7.0-C.1: Prompt 长度在调用 API 前完成前端校验", () => {

@@ -13,7 +13,7 @@ test("global typography tokens define the approved hierarchy",()=>{
 });
 
 test("typography layer loads last without changing application behavior",()=>{
-  assert.match(layout,/global-dark-cleanup\.css";\s*import "\.\/styles\/typography\.css";/);
+  assert.match(layout,/design-tokens\.css";\s*import "\.\/styles\/workspace-components\.css";/);
   assert.doesNotMatch(typography,/@media.*prefers-color-scheme/);
   assert.match(page,/readProjectMemory\(\)/);
 });

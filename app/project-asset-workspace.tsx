@@ -1,5 +1,8 @@
 "use client";
 
+import ImageStudioWorkspace from "./components/images/image-studio-workspace";
+import AssetLibraryWorkspace from "./components/assets/asset-library-workspace";
+import { Inspector } from "./components/workspace/workspace";
 import Image from "next/image";
 import { useEffect, useMemo, useState } from "react";
 import {
@@ -174,48 +177,49 @@ export default function ProjectAssetWorkspace({ mode, projects, currentProjectId
     catch { setCopied(false); }
   }
 
-  return <section className={`project-asset-workspace ${mode}`} data-project-id={currentProjectId || "none"}>
-    <header className="paw-heading">
+  return <section className={`os-project-asset-workspace ${mode}`} data-project-id={currentProjectId || "none"}>
+    <header className="os-paw-heading">
       <div><span>{mode === "images" ? "图片创作" : "项目素材"}</span><h2>{mode === "images" ? "AI图片创作工作台" : "项目素材库"}</h2><p>{project ? `${project.name} · ${project.product}` : "请先选择当前项目"}</p></div>
-      <div className="paw-project-context"><small>当前项目</small><b>{project?.name || "未选择项目"}</b><span>{projectAssets.length} 个图片素材</span></div>
+      <div className="os-paw-project-context"><small>当前项目</small><b>{project?.name || "未选择项目"}</b><span>{projectAssets.length} 个图片素材</span></div>
     </header>
 
-    {mode === "assets" && <nav className="paw-tabs" aria-label="素材类型">{tabs.map(item => <button type="button" className={tab === item.id ? "active" : ""} key={item.id} onClick={() => { setTab(item.id); setSelectedAssetId(null); }}>{item.label}</button>)}</nav>}
+    {mode === "assets" && <nav className="os-paw-tabs" aria-label="素材类型">{tabs.map(item => <button type="button" className={tab === item.id ? "active" : ""} key={item.id} onClick={() => { setTab(item.id); setSelectedAssetId(null); }}>{item.label}</button>)}</nav>}
 
-    <div className="paw-layout">
-      <main className="paw-board">
-        {!specialTab && <div className="paw-toolbar">
-          <label className="paw-search"><span>⌕</span><input aria-label="素材搜索" value={search} onChange={event => setSearch(event.target.value)} placeholder="搜索提示词、分镜 ID、来源" /></label>
+    <div className="os-paw-layout">
+      <main className="os-paw-board">
+        {!specialTab && <div className="os-paw-toolbar">
+          <label className="os-paw-search"><span>⌕</span><input aria-label="素材搜索" value={search} onChange={event => setSearch(event.target.value)} placeholder="搜索提示词、分镜 ID、来源" /></label>
           <select aria-label="来源筛选" value={sourceFilter} onChange={event => setSourceFilter(event.target.value)}><option value="all">全部来源</option><option>导演分镜</option><option>AI图片创作</option></select>
           <select aria-label="分镜筛选" value={shotFilter} onChange={event => setShotFilter(event.target.value)}><option value="all">全部分镜</option>{shotOptions.map(value => <option key={value}>{value}</option>)}</select>
           <select aria-label="模型筛选" value={modelFilter} onChange={event => setModelFilter(event.target.value)}><option value="all">全部模型</option>{modelOptions.map(value => <option key={value}>{value}</option>)}</select>
           <select aria-label="创建时间筛选" value={timeFilter} onChange={event => setTimeFilter(event.target.value)}><option value="all">全部时间</option><option value="1">最近24小时</option><option value="7">最近7天</option><option value="30">最近30天</option></select>
         </div>}
 
-        {specialTab ? <div className="paw-special-empty">
+        {mode === "images" ? <ImageStudioWorkspace asset={selectedAsset} assets={visibleAssets} onSelect={setSelectedAssetId} onOpen={()=>setShowLarge(true)} onUse={usePrompt} onRegenerate={asset=>{usePrompt(asset);void generateImage(asset.prompt,asset.metadata?.sourceReference || null,asset);}} busy={status === "loading"} context={<><b>{project?.name || "未选择项目"}</b><span>{sourceReference?.shotId || selectedAsset?.metadata?.sourceReference?.shotId || "独立图片创作"}</span></>} /> : <AssetLibraryWorkspace>{specialTab ? <div className="os-paw-special-empty">
           <span>{tab === "voice" ? "♫" : "▶"}</span><h3>{tab === "voice" ? "AI配音功能已保留" : "视频功能即将开放"}</h3>
           <p>{tab === "voice" ? "继续使用现有多语言配音能力。" : "当前项目暂无视频素材，后续版本开放。"}</p>
           {tab === "voice" && <button type="button" onClick={() => onNavigate("voice")}>进入AI配音</button>}
-        </div> : visibleAssets.length ? <div className="paw-grid">
+        </div> : visibleAssets.length ? <div className="os-paw-grid">
           {visibleAssets.map(asset => {
             const reference = asset.metadata?.sourceReference;
-            return <button type="button" className={`paw-card ${selectedAsset?.id === asset.id ? "selected" : ""}`} key={asset.id} onClick={() => setSelectedAssetId(asset.id)}>
-              <div className="paw-card-image"><Image src={asset.imageUrl} alt={asset.prompt} fill sizes="(max-width: 900px) 50vw, 260px" unoptimized />{currentIds.has(asset.id) && <em>当前版本</em>}</div>
-              <div className="paw-card-body"><div><span className={reference ? "director" : "studio"}>{imageAssetSource(asset)}</span><small>{reference?.shotId || "未关联分镜"}</small></div><p>{shortPrompt(asset.prompt)}</p><dl><div><dt>模型</dt><dd>{asset.model}</dd></div><div><dt>服务商</dt><dd>{asset.provider}</dd></div></dl><time>{new Date(asset.createdAt).toLocaleString("zh-CN")}</time></div>
+            return <button type="button" className={`os-paw-card ${selectedAsset?.id === asset.id ? "selected" : ""}`} key={asset.id} onClick={() => setSelectedAssetId(asset.id)}>
+              <div className="os-paw-card-image"><Image src={asset.imageUrl} alt={asset.prompt} fill sizes="(max-width: 900px) 50vw, 260px" unoptimized />{currentIds.has(asset.id) && <em>当前版本</em>}</div>
+              <div className="os-paw-card-body"><div><span className={reference ? "director" : "studio"}>{imageAssetSource(asset)}</span><small>{reference?.shotId || "未关联分镜"}</small></div><p>{shortPrompt(asset.prompt)}</p><dl><div><dt>模型</dt><dd>{asset.model}</dd></div><div><dt>服务商</dt><dd>{asset.provider}</dd></div></dl><time>{new Date(asset.createdAt).toLocaleString("zh-CN")}</time></div>
             </button>;
           })}
-        </div> : <div className="paw-empty"><span>✨</span><h3>{projectAssets.length ? "没有符合条件的素材" : "开始创建视觉素材"}</h3>{projectAssets.length ? <p>调整搜索或筛选条件查看其他真实素材。</p> : <><p>选择适合当前创作流程的方式，建立项目视觉语言。</p><ul><li>从 AI分镜导演生成</li><li>输入提示词生成</li><li>使用参考素材生成</li></ul></>}{!projectAssets.length && <button type="button" onClick={() => onNavigate("images")}>开始生成图片</button>}</div>}
+        </div> : <div className="os-paw-empty"><span>✨</span><h3>{projectAssets.length ? "没有符合条件的素材" : "开始创建视觉素材"}</h3>{projectAssets.length ? <p>调整搜索或筛选条件查看其他真实素材。</p> : <><p>选择适合当前创作流程的方式，建立项目视觉语言。</p><ul><li>从 AI分镜导演生成</li><li>输入提示词生成</li><li>使用参考素材生成</li></ul></>}{!projectAssets.length && <button type="button" onClick={() => onNavigate("images")}>开始生成图片</button>}</div>}
+        </AssetLibraryWorkspace>}
       </main>
 
-      <aside className="paw-side">
-        <section className="paw-inspector">
+      <Inspector title={mode === "images" ? "图片生成器" : "素材详情"}>
+        <section className="os-paw-inspector">
           <header><div><span>创作者面板</span><h3>素材预览</h3></div>{selectedAsset && <small>{selectedAsset.id}</small>}</header>
           {selectedAsset ? <>
-            <button className="paw-inspector-image" type="button" onClick={() => setShowLarge(true)}><Image src={selectedAsset.imageUrl} alt={selectedAsset.prompt} fill sizes="360px" unoptimized /><span>查看大图 ↗</span></button>
-            <div className="paw-creative-context"><div><span>用途</span><b>{selectedAsset.metadata?.sourceReference?.shotId ? `分镜 ${selectedAsset.metadata.sourceReference.shotId}` : "项目视觉素材"}</b></div><div><span>来源</span><b>{imageAssetSource(selectedAsset)}</b></div></div>
-            <div className="paw-prompt"><span>提示词</span><p>{selectedAsset.prompt}</p></div>
-            <div className="paw-actions paw-creator-actions">{mode === "images" && <button className="primary" type="button" disabled={status === "loading"} onClick={() => { usePrompt(selectedAsset); void generateImage(selectedAsset.prompt, selectedAsset.metadata?.sourceReference || null, selectedAsset); }}>重新生成</button>}<button type="button" disabled title="视频创作即将开放">生成视频</button><button type="button" onClick={() => void copyPrompt(selectedAsset)}>{copied ? "已复制 ✓" : "复制提示词"}</button></div>
-            <details className="paw-advanced-metadata"><summary>高级信息</summary><dl className="paw-metadata">
+            <button className="os-paw-inspector-image" type="button" onClick={() => setShowLarge(true)}><Image src={selectedAsset.imageUrl} alt={selectedAsset.prompt} fill sizes="360px" unoptimized /><span>查看大图 ↗</span></button>
+            <div className="os-paw-creative-context"><div><span>用途</span><b>{selectedAsset.metadata?.sourceReference?.shotId ? `分镜 ${selectedAsset.metadata.sourceReference.shotId}` : "项目视觉素材"}</b></div><div><span>来源</span><b>{imageAssetSource(selectedAsset)}</b></div></div>
+            <div className="os-paw-prompt"><span>提示词</span><p>{selectedAsset.prompt}</p></div>
+            <div className="os-paw-actions os-paw-creator-actions">{mode === "images" && <button className="os-primary" type="button" disabled={status === "loading"} onClick={() => { usePrompt(selectedAsset); void generateImage(selectedAsset.prompt, selectedAsset.metadata?.sourceReference || null, selectedAsset); }}>重新生成</button>}<button type="button" disabled title="视频创作即将开放">生成视频</button><button type="button" onClick={() => void copyPrompt(selectedAsset)}>{copied ? "已复制 ✓" : "复制提示词"}</button></div>
+            <details className="os-paw-advanced-metadata"><summary>高级信息</summary><dl className="os-paw-metadata">
               <div><dt>模型</dt><dd>{selectedAsset.model}</dd></div><div><dt>服务商</dt><dd>{selectedAsset.provider}</dd></div>
               <div><dt>比例</dt><dd>{selectedAsset.ratio}</dd></div><div><dt>风格</dt><dd>{selectedAsset.style}</dd></div>
               <div><dt>镜头</dt><dd>{selectedAsset.camera}</dd></div><div><dt>创建时间</dt><dd>{new Date(selectedAsset.createdAt).toLocaleString("zh-CN")}</dd></div>
@@ -223,24 +227,24 @@ export default function ProjectAssetWorkspace({ mode, projects, currentProjectId
               <div><dt>分镜 ID</dt><dd>{selectedAsset.metadata?.sourceReference?.shotId || "—"}</dd></div><div><dt>来源区块 ID</dt><dd>{selectedAsset.metadata?.sourceReference?.sourceBlockId || "—"}</dd></div>
               <div><dt>请求 ID</dt><dd>{selectedAsset.metadata?.requestId || "—"}</dd></div>
             </dl></details>
-            <div className="paw-actions paw-secondary-actions"><button type="button" onClick={() => setShowLarge(true)}>查看大图</button><button type="button" onClick={() => usePrompt(selectedAsset)}>使用提示词</button>{selectedAsset.metadata?.sourceReference && <button type="button" onClick={() => onNavigate("director")}>返回导演分镜</button>}</div>
-          </> : <div className="paw-inspector-empty"><span>◎</span><p>选择一张素材，查看详情与复用操作。</p></div>}
+            <div className="os-paw-actions os-paw-secondary-actions"><button type="button" onClick={() => setShowLarge(true)}>查看大图</button><button type="button" onClick={() => usePrompt(selectedAsset)}>使用提示词</button>{selectedAsset.metadata?.sourceReference && <button type="button" onClick={() => onNavigate("director")}>返回导演分镜</button>}</div>
+          </> : <div className="os-paw-inspector-empty"><span>◎</span><p>选择一张素材，查看详情与复用操作。</p></div>}
         </section>
 
-        {mode === "images" && <section className="paw-composer">
+        {mode === "images" && <section className="os-paw-composer">
           <header><span>轻量图片创作</span><h3>图片生成器</h3><p>{project ? `项目 · ${project.name}` : "当前未选择项目"}</p></header>
-          {sourceReference && <div className="paw-shot-context"><div><span>分镜上下文</span><b>{sourceReference.shotId}</b><small>{sourceReference.sourceBlockId}</small></div><button type="button" onClick={() => setSourceReference(null)}>清除</button></div>}
+          {sourceReference && <div className="os-paw-shot-context"><div><span>分镜上下文</span><b>{sourceReference.shotId}</b><small>{sourceReference.sourceBlockId}</small></div><button type="button" onClick={() => setSourceReference(null)}>清除</button></div>}
           <label>提示词<textarea aria-label="图片描述" rows={5} maxLength={MAX_PROMPT_LENGTH} value={prompt} onChange={event => { const nextPrompt = event.target.value; const tooLong = nextPrompt.length > MAX_PROMPT_LENGTH; setPrompt(nextPrompt); setStatus(tooLong ? "error" : "idle"); setError(tooLong ? { type: "validation_error", message: `提示词最多支持 ${MAX_PROMPT_LENGTH} 个字符`, retryable: false } : null); }} placeholder="描述主体、场景、光线、构图与商业氛围…" /><small>{prompt.length} / {MAX_PROMPT_LENGTH}</small></label>
-          <div className="paw-composer-row"><label>类型<select value={imageType} onChange={event => setImageType(event.target.value as typeof imageType)}>{imageTypes.map(item => <option value={item.value} key={item.value}>{item.label}</option>)}</select></label><label>模型<select aria-label="图片模型" value={selectedProvider} onChange={event => setSelectedProvider(event.target.value as ImageProviderId)}>{providerState.providers.length ? providerState.providers.map(item => <option value={item.id} key={item.id} disabled={!item.configured}>{item.label}{item.configured ? "" : "（未配置）"}</option>) : <option value="doubao-image">豆包图片模型</option>}</select></label></div>
-          <div className="paw-composer-row"><label>风格<select value={style} onChange={event => setStyle(event.target.value as typeof style)}>{styles.map(item => <option value={item.value} key={item.value}>{item.label}</option>)}</select></label><label>镜头<select value={camera} onChange={event => setCamera(event.target.value as typeof camera)}>{cameras.map(item => <option value={item.value} key={item.value}>{item.label}</option>)}</select></label></div>
-          <fieldset><legend>比例</legend>{ratios.map(value => <button type="button" className={ratio === value ? "active" : ""} key={value} onClick={() => setRatio(value)}>{value}</button>)}</fieldset>
-          <button className="paw-generate" type="button" disabled={!prompt.trim() || prompt.length > MAX_PROMPT_LENGTH || !currentProjectId || status === "loading" || !selectedProviderState?.configured} onClick={() => void generateImage()}>{status === "loading" ? <><i className="image-spinner" /> 生成中...</> : status === "success" ? "生成成功 ✓" : status === "error" ? "重新尝试 ↻" : "生成图片 ↗"}</button>
-          {!selectedProviderState?.configured && <p className="paw-config-hint">图片模型尚未配置或状态仍在读取。</p>}
-          {error && <div className="paw-error" role="alert"><b>{status === "error" ? "生成失败" : "保存提醒"}</b><p>{error.message}</p>{error.retryable && <button type="button" onClick={() => void generateImage()}>重新尝试</button>}</div>}
+          <div className="os-paw-composer-row"><label>类型<select value={imageType} onChange={event => setImageType(event.target.value as typeof imageType)}>{imageTypes.map(item => <option value={item.value} key={item.value}>{item.label}</option>)}</select></label><label>模型<select aria-label="图片模型" value={selectedProvider} onChange={event => setSelectedProvider(event.target.value as ImageProviderId)}>{providerState.providers.length ? providerState.providers.map(item => <option value={item.id} key={item.id} disabled={!item.configured}>{item.label}{item.configured ? "" : "（未配置）"}</option>) : <option value="doubao-image">豆包图片模型</option>}</select></label></div>
+          <details className="creative-section"><summary>Advanced · 风格与镜头</summary><div className="os-paw-composer-row"><label>风格<select value={style} onChange={event => setStyle(event.target.value as typeof style)}>{styles.map(item => <option value={item.value} key={item.value}>{item.label}</option>)}</select></label><label>镜头<select value={camera} onChange={event => setCamera(event.target.value as typeof camera)}>{cameras.map(item => <option value={item.value} key={item.value}>{item.label}</option>)}</select></label></div>
+          </details><fieldset><legend>比例</legend>{ratios.map(value => <button type="button" className={ratio === value ? "active" : ""} key={value} onClick={() => setRatio(value)}>{value}</button>)}</fieldset>
+          <button className="os-paw-generate" type="button" disabled={!prompt.trim() || prompt.length > MAX_PROMPT_LENGTH || !currentProjectId || status === "loading" || !selectedProviderState?.configured} onClick={() => void generateImage()}>{status === "loading" ? <><i className="os-image-spinner" /> 生成中...</> : status === "success" ? "生成成功 ✓" : status === "error" ? "重新尝试 ↻" : "生成图片 ↗"}</button>
+          {!selectedProviderState?.configured && <p className="os-paw-config-hint">图片模型尚未配置或状态仍在读取。</p>}
+          {error && <div className="os-paw-error" role="alert"><b>{status === "error" ? "生成失败" : "保存提醒"}</b><p>{error.message}</p>{error.retryable && <button type="button" onClick={() => void generateImage()}>重新尝试</button>}</div>}
         </section>}
-      </aside>
+      </Inspector>
     </div>
 
-    {showLarge && selectedAsset && <div className="image-lightbox" role="dialog" aria-modal="true" aria-label="查看生成图片"><button type="button" aria-label="关闭大图" onClick={() => setShowLarge(false)}>×</button><Image src={selectedAsset.imageUrl} alt={selectedAsset.prompt} fill sizes="95vw" unoptimized /></div>}
+    {showLarge && selectedAsset && <div className="os-image-lightbox" role="dialog" aria-modal="true" aria-label="查看生成图片"><button type="button" aria-label="关闭大图" onClick={() => setShowLarge(false)}>×</button><Image src={selectedAsset.imageUrl} alt={selectedAsset.prompt} fill sizes="95vw" unoptimized /></div>}
   </section>;
 }

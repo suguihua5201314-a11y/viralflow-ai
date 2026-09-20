@@ -18,7 +18,6 @@ export default function DirectorShotImage({ shot, input, visualStyle, projectId,
   const [error, setError] = useState("");
   const [showLarge, setShowLarge] = useState(false);
   const spec = projectId ? shotImageSpec(shot, input, visualStyle, projectId) : null;
-  const demoFrame = input.script.title === "CrystalArmor iPhone TikTok" ? Math.min(3, Math.max(0, shot.order - 1)) : null;
 
   useEffect(() => {
     if (!projectId) return;
@@ -70,10 +69,10 @@ export default function DirectorShotImage({ shot, input, visualStyle, projectId,
   }
 
   const buttonLabel = status === "loading" ? "正在生成..." : status === "success" ? "已生成" : status === "error" ? "生成失败 · 重试" : "生成镜头图片";
-  return <section className="shot-image-panel" aria-label={`镜头 ${shot.order} 图片生成`}>
-    <header><div><span>SHOT IMAGE</span><b>分镜图片</b></div><button type="button" aria-busy={status === "loading"} disabled={!projectId || status === "loading"} onClick={() => void generateImage()}>{status === "loading" ? <i className="image-spinner" /> : null}{buttonLabel}</button></header>
-    {asset ? <div className="shot-image-result"><button type="button" className="shot-image-preview" onClick={() => setShowLarge(true)} aria-label="查看镜头大图"><Image src={asset.imageUrl} alt={asset.prompt} fill sizes="(max-width: 980px) 100vw, 600px" unoptimized /></button><div className="shot-image-details"><span>IMAGE PROMPT</span><p>{asset.prompt}</p><small>{asset.model} · {new Date(asset.createdAt).toLocaleString("zh-CN")}</small><nav aria-label="镜头图片操作"><button type="button" onClick={() => setShowLarge(true)}>查看大图</button><button type="button" disabled={status === "loading"} onClick={() => void generateImage()}>重新生成</button><button type="button" onClick={saveAsset}>保存到图片资产</button><button type="button" onClick={openImageStudio}>前往 AI 图片创作工作台</button></nav></div></div> : demoFrame !== null ? <div className="shot-demo-frame" role="img" aria-label={`Shot ${shot.order} 产品分镜预览`} style={{"--demo-position":`${demoFrame * 33.333}%`} as React.CSSProperties} /> : <div className="shot-image-empty"><p>{spec?.prompt || "当前 Director 尚未关联项目，无法保存镜头图片。"}</p><button type="button" disabled={!projectId} onClick={openImageStudio}>前往 AI 图片创作工作台继续编辑</button></div>}
-    {error ? <div className="shot-image-error" role="alert"><b>当前镜头图片未完成</b><p>{error}</p>{status === "error" ? <button type="button" onClick={() => void generateImage()}>重试当前镜头</button> : null}</div> : null}
-    {showLarge && asset ? <div className="shot-image-lightbox" role="dialog" aria-modal="true" aria-label="查看镜头图片"><button type="button" aria-label="关闭大图" onClick={() => setShowLarge(false)}>×</button><Image src={asset.imageUrl} alt={asset.prompt} fill sizes="95vw" unoptimized /></div> : null}
+  return <section className="os-shot-image-panel" aria-label={`镜头 ${shot.order} 图片生成`}>
+    <header><div><span>SHOT IMAGE</span><b>分镜图片</b></div><button type="button" aria-busy={status === "loading"} disabled={!projectId || status === "loading"} onClick={() => void generateImage()}>{status === "loading" ? <i className="os-image-spinner" /> : null}{buttonLabel}</button></header>
+    {asset ? <div className="os-shot-image-result"><button type="button" className="os-shot-image-preview" onClick={() => setShowLarge(true)} aria-label="查看镜头大图"><Image src={asset.imageUrl} alt={asset.prompt} fill sizes="(max-width: 980px) 100vw, 600px" unoptimized /></button><div className="os-shot-image-details"><details><summary>图片提示词</summary><p>{asset.prompt}</p></details><small>{asset.model} · {new Date(asset.createdAt).toLocaleString("zh-CN")}</small><nav aria-label="镜头图片操作"><button type="button" onClick={() => setShowLarge(true)}>查看大图</button><button type="button" disabled={status === "loading"} onClick={() => void generateImage()}>重新生成</button><button type="button" onClick={saveAsset}>保存到图片资产</button><button type="button" onClick={openImageStudio}>前往 AI 图片创作工作台</button></nav></div></div> : <div className="os-shot-image-empty"><h3>当前分镜尚无图片</h3><p>生成分镜图片，或前往图片工作台继续创作。</p><details><summary>查看图片提示词</summary><p>{spec?.prompt || "当前 Director 尚未关联项目，无法保存镜头图片。"}</p></details><button type="button" disabled={!projectId} onClick={openImageStudio}>前往 AI 图片创作工作台继续编辑</button></div>}
+    {error ? <div className="os-shot-image-error" role="alert"><b>当前镜头图片未完成</b><p>{error}</p>{status === "error" ? <button type="button" onClick={() => void generateImage()}>重试当前镜头</button> : null}</div> : null}
+    {showLarge && asset ? <div className="os-shot-image-lightbox" role="dialog" aria-modal="true" aria-label="查看镜头图片"><button type="button" aria-label="关闭大图" onClick={() => setShowLarge(false)}>×</button><Image src={asset.imageUrl} alt={asset.prompt} fill sizes="95vw" unoptimized /></div> : null}
   </section>;
 }
