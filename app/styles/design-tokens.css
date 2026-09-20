@@ -1,11 +1,11 @@
 :root {
   --vf-bg: #f7f8fc;
   --vf-surface: #fff;
-  --vf-surface-muted: #fafbfd;
-  --vf-border: #e8eaf0;
-  --vf-text: #111318;
+  --vf-surface-muted: #f2f4f7;
+  --vf-border: #e7eaf0;
+  --vf-text: #15171a;
   --vf-text-secondary: #667085;
-  --vf-brand: #5b5bf7;
+  --vf-brand: #635bff;
   --vf-brand-soft: #f0eeff;
   --vf-success: #22a06b;
   --vf-warning: #f59e0b;
@@ -21,4 +21,13 @@
   --vf-radius-md: 12px;
   --vf-radius-lg: 16px;
   --vf-shadow: 0 2px 8px #11131806;
+  --vf-font-page: 28px;
+  --vf-font-workspace: 22px;
+  --vf-font-section: 18px;
+  --vf-font-card: 16px;
+  --vf-font-body: 15px;
+  --vf-font-control: 14px;
+  --vf-font-secondary: 13px;
+  --vf-font-meta: 12px;
+  --vf-line-body: 1.6;
 }

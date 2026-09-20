@@ -39,7 +39,7 @@ const projectItems:Array<{id:ActiveView;icon:string;label:string}>=[
 
 export default function Sidebar({ active, onNavigate, onHistory, counts, teamConnected, onTeamToggle, project }: SidebarProps) {
   const countFor = (id: ActiveView) => id === "library" ? counts.library : id === "monitor" ? counts.monitor : id === "history" ? counts.history : id === "products" ? counts.products : id === "reviews" ? counts.reviews : undefined;
-  const projectMode=active==="brain"||active==="director"||active==="create"||active==="breakdown"||active==="replicate"||active==="images"||active==="assets";
+  const projectMode=active==="brain"||active==="director"||active==="create"||active==="breakdown"||active==="replicate"||active==="images"||active==="assets"||active==="voice"||active==="video";
   return <aside className="os-sidebar os-vf-sidebar">
     <button className="os-brand os-vf-brand" type="button" onClick={() => onNavigate("dashboard")} aria-label="返回工作台首页"><span className="os-brand-mark os-vf-brand-mark">V</span><div><strong>ViralFlow AI</strong><small>AI短视频创作工作台</small></div></button>
     {projectMode&&project?<button className="os-vf-director-project" onClick={()=>onNavigate("projects")}><span>{project.product.slice(0,2).toUpperCase()}</span><div><b>{project.product}</b><small>{project.name}</small></div><i>⌄</i></button>:<button className="os-vf-new-project" onClick={() => onNavigate("projects")}><span>＋</span> 新建项目</button>}

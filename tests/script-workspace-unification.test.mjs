@@ -19,9 +19,9 @@ test("Script is workspace-first with version rail, block canvas and assistant",(
   assert.match(studio,/className="os-script-version-rail"/);
   assert.match(studio,/className="os-script-blocks"/);
   assert.match(studio,/className="os-script-assistant"/);
-  assert.match(studio,/Creative Inspector/);
+  assert.match(studio,/创意检查器/);
   assert.match(studio,/ScriptDocument script=\{draftScript\}/);
-  assert.match(css,/\.creative-script-layout \{ display: grid; grid-template-columns: minmax\(0, 1\.65fr\) minmax\(300px, 1fr\)/);
+  assert.match(css,/\.creative-script-layout \{\s*grid-template-columns: minmax\(0, 1\.95fr\) minmax\(300px, 1fr\)/);
 });
 
 test("sending to Director persists the current draft first",()=>{

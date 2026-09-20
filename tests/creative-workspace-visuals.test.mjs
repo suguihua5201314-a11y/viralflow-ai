@@ -9,7 +9,7 @@ const tokens = read("../app/styles/design-tokens.css");
 const imageWorkspace = read("../app/components/images/image-studio-workspace.tsx");
 
 test("Creative workspace uses owned light design tokens without override rules", () => {
-  for (const token of ["--vf-bg: #f7f8fc", "--vf-surface: #fff", "--vf-border: #e8eaf0", "--vf-brand: #5b5bf7"]) {
+  for (const token of ["--vf-bg: #f7f8fc", "--vf-surface: #fff", "--vf-border: #e7eaf0", "--vf-brand: #635bff"]) {
     assert.ok(tokens.includes(token), token);
   }
   assert.doesNotMatch(tokens + workspaceCss, /!important/);
@@ -18,7 +18,8 @@ test("Creative workspace uses owned light design tokens without override rules",
 });
 
 test("Creative workspace keeps readable typography floors", () => {
-  assert.match(workspaceCss, /font: 14px\/1\.6/);
+  assert.match(tokens, /--vf-font-body: 15px/);
+  assert.match(workspaceCss, /font:\s*var\(--vf-font-body\)\/var\(--vf-line-body\)/);
   assert.match(workspaceCss, /:where\(small, dt, time\).*font-size: 12px/);
   assert.match(workspaceCss, /:where\(h2\).*font-size: 24px/);
   assert.match(workspaceCss, /:where\(h3\).*font-size: 18px/);

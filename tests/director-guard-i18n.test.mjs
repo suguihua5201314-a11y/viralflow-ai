@@ -32,7 +32,7 @@ test("Director 全字段与单镜候选共用 Context、Fact、Language Guard",a
 
 test("导演工作台显示层中文化且 AI 修复必须预览后接受",async()=>{
   const ui=await readFile(new URL("../app/shooting-director.tsx",import.meta.url),"utf8");
-  for(const marker of ["导演方案","镜头编辑器","镜头时间轴","目标时长","计划时长","完整性检查","AI 建议补充产品出场镜头","AI 建议补充证明镜头","自动平衡时长","修改前","修改后","接受","拒绝"])assert.ok(ui.includes(marker),marker);
+  for(const marker of ["导演方案","分镜检查器","镜头时间轴","目标时长","计划时长","完整性检查","AI 建议补充产品出场镜头","AI 建议补充证明镜头","自动平衡时长","修改前","修改后","接受","拒绝"])assert.ok(ui.includes(marker),marker);
   assert.match(ui,/mode:"replace"\|"insert"/);
   assert.match(ui,/if\(preview\.mode==="insert"\)/);
   assert.match(ui,/setPreview\(\{mode:"insert"/);

@@ -13,7 +13,7 @@ const darkWorkspaces = readFileSync(new URL("../app/styles/dark-workspaces.css",
 
 test("A-D Dashboard is the default and every renamed entry keeps a real ActiveView", () => {
   assert.match(page, /useState<ActiveView>\("dashboard"\)/);
-  for (const id of ["create", "breakdown", "replicate", "director", "voice", "checker"]) {
+  for (const id of ["breakdown", "create", "director", "images", "assets", "voice"]) {
     assert.match(dashboard, new RegExp(`view: "${id}"`));
   }
   for (const label of ["AI 创作工作台", "爆款洞察", "创意复刻", "内容合规", "视频洞察", "AI分镜导演工作台", "AI配音工作台", "产品知识库", "创意案例库", "内容监测", "脚本历史", "数据中心"]) {

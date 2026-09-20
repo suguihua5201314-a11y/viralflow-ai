@@ -26,7 +26,7 @@ test("AI Director is workspace-first even before a Director result exists",async
  assert.match(source,/director-empty-workspace/);
  assert.match(source,/storyboard-empty-canvas/);
  assert.match(source,/还没有导演方案/);
- assert.match(source,/AI DIRECTOR ASSISTANT · AI 副导演/);
+ assert.match(source,/AI 副导演/);
  assert.doesNotMatch(source,/className="director-form"/);
 });
 

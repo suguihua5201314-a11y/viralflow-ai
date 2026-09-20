@@ -27,73 +27,172 @@ type DashboardProps = {
   dataMode: DataMode;
 };
 
-const quickStarts: Array<{ view: ActiveView; icon: string; title: string; description: string; tone: string }> = [
-  { view: "create", icon: "✦", title: "AI 创作工作台", description: "根据产品与创作参数，生成多条短视频脚本。", tone: "violet" },
-  { view: "breakdown", icon: "◇", title: "爆款洞察", description: "拆解爆款内容的开场、结构、节奏与证明机制。", tone: "blue" },
-  { view: "replicate", icon: "◎", title: "创意复刻", description: "保留爆款机制，结合目标产品生成原创方向。", tone: "indigo" },
-  { view: "director", icon: "◉", title: "AI 导演工作台", description: "把脚本转成可执行镜头、动作与拍摄方案。", tone: "cyan" },
-  { view: "voice", icon: "♫", title: "AI 语音工作台", description: "生成多语言口播，为后续视频制作准备音轨。", tone: "pink" },
-  { view: "checker", icon: "✓", title: "内容合规", description: "检查脚本中的违规、绝对化与高风险表达。", tone: "green" },
+const quickStarts: Array<{
+  view: ActiveView;
+  icon: string;
+  title: string;
+  description: string;
+}> = [
+  {
+    view: "breakdown",
+    icon: "◇",
+    title: "爆款研究",
+    description: "拆解开场、结构、节奏与 Proof 机制。",
+  },
+  {
+    view: "create",
+    icon: "✦",
+    title: "脚本创作",
+    description: "从产品知识开始创作可拍摄短视频脚本。",
+  },
+  {
+    view: "director",
+    icon: "◉",
+    title: "AI 分镜导演",
+    description: "把脚本转成镜头、动作与拍摄方案。",
+  },
+  {
+    view: "images",
+    icon: "▧",
+    title: "视觉创作",
+    description: "围绕当前分镜生成和管理视觉版本。",
+  },
+  {
+    view: "assets",
+    icon: "◫",
+    title: "素材管理",
+    description: "浏览、筛选并复用当前项目素材。",
+  },
+  {
+    view: "voice",
+    icon: "♫",
+    title: "声音制作",
+    description: "制作多语言口播与可交付音轨。",
+  },
 ];
-
-const statCards = [
-  { key: "products", label: "产品数量", context: "产品知识库", icon: "▣" },
-  { key: "cases", label: "创意案例", context: "已保存爆款案例", icon: "▦" },
-  { key: "scripts", label: "历史脚本", context: "创作资产", icon: "◷" },
-  { key: "variants", label: "脚本方案", context: "多方案版本", icon: "◇" },
-  { key: "director", label: "导演方案", context: "镜头规划", icon: "◉" },
-  { key: "voice", label: "AI 语音生成", context: "口播音轨", icon: "♫" },
-] as const;
 
 const formatTime = (value?: string) => {
   if (!value) return "暂无更新时间";
   const date = new Date(value);
-  return Number.isNaN(date.getTime()) ? "暂无更新时间" : date.toLocaleString("zh-CN", { month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", timeZone: "Asia/Singapore" });
+  return Number.isNaN(date.getTime())
+    ? "暂无更新时间"
+    : date.toLocaleString("zh-CN", {
+        month: "2-digit",
+        day: "2-digit",
+        hour: "2-digit",
+        minute: "2-digit",
+        timeZone: "Asia/Singapore",
+      });
 };
 
-const statDestinations: Record<string, ActiveView> = { products: "products", cases: "library", scripts: "history", variants:"create", director:"director", voice:"voice" };
-
-export default function Dashboard({ metrics, recent, onNavigate, onOpenRecent, onOpenProject, dataMode }: DashboardProps) {
-  const counts = metrics.counts;
-  const trendMax = Math.max(1, ...metrics.trend.map(item => item.count));
-  return <section className="vf-dashboard" data-testid="dashboard-home">
-    <section className="vf-dashboard-hero">
-      <div className="vf-hero-copy"><span><i /> ViralFlow AI · 智能创意工作台</span><h2>欢迎回来，苏苏团队</h2><p>从爆款洞察到脚本、导演与成片，在一个工作台完成。</p>{dataMode==="demo"&&<em className="vf-demo-badge">演示数据</em>}</div>
-      <div className="vf-hero-actions"><small>创意生产中枢</small><button type="button" onClick={() => onNavigate("create")}><span>＋</span> 开始新创作 <i>→</i></button></div>
-    </section>
-
-    <div className="vf-dashboard-layout"><main className="vf-dashboard-main">
-      <section className="vf-dashboard-section">
-        <header><div><span>快速开始</span><h2>选择下一步工作</h2></div><p>所有入口均连接现有真实功能</p></header>
-        <div className="vf-quick-grid">{quickStarts.map(item => <button type="button" key={item.view} data-tone={item.tone} onClick={() => onNavigate(item.view)}><span>{item.icon}</span><div><h3>{item.title}</h3><p>{item.description}</p></div><i>↗</i></button>)}</div>
-      </section>
-
-      <section className="vf-dashboard-section">
-        <header><div><span>数据概览</span><h2>{dataMode==="demo"?"创意生产总览":"真实资产总览"}</h2></div><p>{dataMode==="demo"?"当前展示独立演示数据":"仅统计当前系统中可读取的数据"}</p></header>
-        <div className="vf-metric-grid">{statCards.map(item => {const value=counts[item.key];return <article key={item.key}><div><span>{item.label}</span><i>{item.icon}</i></div><strong>{value??"—"}</strong><small><b>{value==null?"尚未产生记录":value===0?"暂无数据":dataMode==="demo"?"演示数据":"数据已同步"}</b>{item.context}</small><button type="button" onClick={() => onNavigate(statDestinations[item.key])}>查看 →</button></article>})}</div>
+export default function Dashboard({ recent, onNavigate, onOpenRecent, onOpenProject, dataMode }: DashboardProps) {
+  const openRecent = (item: RecentWorkItem) => (item.projectName ? onOpenProject(item.key) : onOpenRecent(item.key, "script"));
+  return (
+    <section className="vf-dashboard vf-dashboard-v3" data-testid="dashboard-home">
+      <section className="vf-dashboard-hero">
+        <div className="vf-hero-copy">
+          <span>ViralFlow AI · Creative OS</span>
+          <h2>今天想从哪里开始？</h2>
+          <p>继续上次创作，或从一个新的创意方向开始。</p>
+          {dataMode === "demo" ? <em className="vf-demo-badge">演示数据</em> : null}
+        </div>
+        <div className="vf-hero-actions">
+          <button type="button" onClick={() => onNavigate("create")}>
+            开始新创作 <i>→</i>
+          </button>
+        </div>
       </section>
 
       <section className="vf-dashboard-section vf-recent-section">
-        <header><div><span>最近项目</span><h2>继续项目工作</h2></div><button type="button" onClick={() => onNavigate("projects")}>查看全部项目 →</button></header>
-        {recent.length === 0 ? <WorkspaceState compact eyebrow="最近项目" title="还没有创作项目" description="从一个真实产品开始第一个 AI 创作流程，后续资产都会归入同一个项目。" primary={{label:"新建第一个项目",onClick:()=>onNavigate("projects")}} secondary={{label:"先看爆款洞察",onClick:()=>onNavigate("breakdown")}} /> : <><article className="vf-continue-project"><div><span>继续上次创作</span><h3>{recent[0].projectName||recent[0].title}</h3><p>最后编辑：{recent[0].stage||"AI Script Studio"} · {formatTime(recent[0].updatedAt)}</p></div><button type="button" onClick={()=>recent[0].projectName?onOpenProject(recent[0].key):onOpenRecent(recent[0].key,"script")}>继续 <i>→</i></button></article><div className="vf-recent-list">{recent.map(item => <article key={item.key}>
-          <div className="vf-recent-mark">{item.product.trim().slice(0, 1) || "创"}</div>
-          <div className="vf-recent-main"><div><span>{item.stage || (item.current ? "当前采用" : "脚本")}</span><small>{formatTime(item.updatedAt)}</small></div><h3>{item.projectName || item.title}</h3><p>{item.product} · {item.market || "未设置市场"}</p></div>
-          <div className="vf-recent-meta"><span>{item.language || "未设置语言"}</span><span>{item.platform}</span><span>{item.duration}s</span></div>
-          <div className="vf-recent-actions">{item.projectName?<><button type="button" onClick={() => onOpenProject(item.key)}>打开项目</button><button type="button" onClick={() => onOpenProject(item.key)}>{item.nextAction || "继续项目"}</button></>:<><button type="button" onClick={() => onOpenRecent(item.key, "script")}>查看脚本</button><button type="button" onClick={() => onOpenRecent(item.key, "director")}>进入导演</button></>}</div>
-        </article>)}</div></>}
+        <header>
+          <div>
+            <span>继续工作</span>
+            <h2>回到最近的项目</h2>
+          </div>
+          <button type="button" onClick={() => onNavigate("projects")}>
+            查看全部项目 →
+          </button>
+        </header>
+        {recent.length === 0 ? (
+          <WorkspaceState
+            compact
+            eyebrow="最近项目"
+            title="还没有创作项目"
+            description="从一个真实产品开始，脚本、分镜和素材都会归入同一个项目。"
+            primary={{
+              label: "新建第一个项目",
+              onClick: () => onNavigate("projects"),
+            }}
+            secondary={{
+              label: "先看爆款研究",
+              onClick: () => onNavigate("breakdown"),
+            }}
+          />
+        ) : (
+          <>
+            <article className="vf-continue-project">
+              <div>
+                <span>继续上次创作</span>
+                <h3>{recent[0].projectName || recent[0].title}</h3>
+                <p>
+                  {recent[0].stage || "脚本创作"} · {formatTime(recent[0].updatedAt)}
+                </p>
+              </div>
+              <button type="button" onClick={() => openRecent(recent[0])}>
+                继续 <i>→</i>
+              </button>
+            </article>
+            <div className="vf-recent-list">
+              {recent.slice(1, 4).map((item) => (
+                <article key={item.key}>
+                  <div className="vf-recent-mark">{item.product.trim().slice(0, 1) || "创"}</div>
+                  <div className="vf-recent-main">
+                    <div>
+                      <span>{item.stage || (item.current ? "当前采用" : "脚本")}</span>
+                      <small>{formatTime(item.updatedAt)}</small>
+                    </div>
+                    <h3>{item.projectName || item.title}</h3>
+                    <p>
+                      {item.product} · {item.market || "未设置市场"}
+                    </p>
+                  </div>
+                  <div className="vf-recent-meta">
+                    <span>{item.language || "未设置语言"}</span>
+                    <span>{item.platform}</span>
+                  </div>
+                  <div className="vf-recent-actions">
+                    <button type="button" onClick={() => openRecent(item)}>
+                      打开项目
+                    </button>
+                  </div>
+                </article>
+              ))}
+            </div>
+          </>
+        )}
       </section>
 
-      <section className="vf-dashboard-section vf-trend-section"><header><div><span>创作趋势</span><h2>近 7 天{dataMode==="demo"?"演示":"真实"}活动</h2></div><p>{metrics.periods.available ? `今日 ${metrics.periods.today} · 本周 ${metrics.periods.week} · 本月 ${metrics.periods.month}` : "暂无历史统计"}</p></header>
-        {metrics.trend.some(item => item.count > 0) ? <div className="vf-trend-chart">{metrics.trend.map(item => <div className="vf-trend-day" key={item.label}><span className="vf-trend-bar" style={{ height: `${Math.max(8, item.count / trendMax * 100)}%` }}><b>{item.count}</b></span><span>{item.label}</span></div>)}</div> : <WorkspaceState compact kind="unavailable" icon="↗" title="暂无趋势数据" description="产生带可靠时间记录的脚本、案例或产品更新后，这里才会显示真实趋势。" />}
+      <section className="vf-dashboard-section vf-workflow-section">
+        <header>
+          <div>
+            <span>Creative Workflow</span>
+            <h2>选择下一步工作</h2>
+          </div>
+          <p>每个入口都连接当前项目的真实内容</p>
+        </header>
+        <div className="vf-quick-grid">
+          {quickStarts.map((item) => (
+            <button type="button" key={item.view} onClick={() => onNavigate(item.view)}>
+              <span>{item.icon}</span>
+              <div>
+                <h3>{item.title}</h3>
+                <p>{item.description}</p>
+              </div>
+              <i>→</i>
+            </button>
+          ))}
+        </div>
       </section>
-      <section className="vf-pipeline"><span>创意生产路径</span>{["爆款洞察", "脚本", "创意复刻", "导演", "配音"].map((label, index) => <div key={label}><b>{index + 1}</b>{label}{index < 4 && <i>→</i>}</div>)}</section>
-    </main>
-
-    <aside className="vf-intelligence-rail">
-      <section><header><span>创作概览</span><b>{dataMode==="demo"?"演示数据":"实时派生"}</b></header><div className="vf-rail-overview"><p><span>产品</span><strong>{counts.products}</strong></p><p><span>案例</span><strong>{counts.cases}</strong></p><p><span>脚本方案</span><strong>{counts.variants??"暂无数据"}</strong></p><p><span>导演方案</span><strong>{counts.director??"暂无数据"}</strong></p></div></section>
-      <section><header><span>最近动态</span><b>{metrics.activity.length ? `${metrics.activity.length} 条` : "暂无"}</b></header>{metrics.activity.length ? <div className="vf-activity-list">{metrics.activity.map(item => <article key={item.id}><i /><div><b>{item.title}</b><small>{formatTime(item.timestamp)} · {item.type}</small></div></article>)}</div> : <p className="vf-rail-empty">暂无带可靠时间的创作活动。</p>}</section>
-      <section><header><span>可读取 AI 记录</span><b>非请求次数</b></header><div className="vf-usage-list"><p><span>脚本记录</span><strong>{metrics.usage.scripts}</strong></p><p><span>洞察案例</span><strong>{metrics.usage.analyzer}</strong></p><p><span>导演方案</span><strong>{metrics.usage.director??"暂无数据"}</strong></p><p><span>语音生成</span><strong>{metrics.usage.voice??"暂无数据"}</strong></p></div></section>
-      <section><header><span>AI 服务状态</span><b>Provider</b></header><div className="vf-provider-list">{metrics.providers.map(item => <p key={item.id} className={item.connected ? "connected" : ""}><i /><span>{item.label}</span><strong>{item.status}</strong></p>)}</div></section>
-    </aside></div>
-  </section>;
+    </section>
+  );
 }
