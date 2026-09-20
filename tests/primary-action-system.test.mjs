@@ -26,8 +26,8 @@ test("high-value product actions opt into the shared hierarchy", () => {
   const shotImage = read("../app/director-shot-image.tsx");
   const images = read("../app/project-asset-workspace.tsx");
   const voice = read("../app/voice-studio.tsx");
-  assert.match(dashboard, /vf-button-primary[^>]*>[\s\S]*?开始新创作/);
-  assert.match(dashboard, /vf-button-card[^>]*>[\s\S]*?打开项目/);
+  assert.match(dashboard, /vf-button-primary[^>]*>[\s\S]*?开始创作/);
+  assert.match(dashboard, /vf-button-card[^>]*>[\s\S]*?继续创作/);
   assert.match(projects, /vf-button-card[^>]*>[\s\S]*?进入工作区/);
   assert.match(projects, /vf-button-primary[^>]*>[\s\S]*?新建项目/);
   assert.match(script, /os-variant-primary vf-button vf-button-secondary/);

@@ -14,7 +14,7 @@ test("统一工作台状态覆盖空、加载、错误、搜索与不可用",()=
 });
 
 test("五个核心工作台使用统一状态或真实状态语义",()=>{
- for(const marker of ["WorkspaceState","今天想从哪里开始","AI 正在构建脚本结构","正在理解爆款机制","正在规划镜头与时长","正在生成真实音频"])assert.match(screens,new RegExp(marker));
+ for(const marker of ["WorkspaceState","今天想","创作什么","AI 正在构建脚本结构","正在理解爆款机制","正在规划镜头与时长","正在生成真实音频"])assert.match(screens,new RegExp(marker));
 });
 
 test("统一反馈覆盖成功、错误、信息与克制动效",()=>{

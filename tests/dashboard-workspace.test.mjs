@@ -41,16 +41,31 @@ test("E-G recent work, metrics and global search use existing state sources", ()
 });
 
 test("K-L layout has light Creative OS surfaces and responsive breakpoints", () => {
-  assert.match(styles, /@media\(max-width:1280px\)/);
-  assert.match(styles, /@media\(max-width:800px\)/);
-  assert.match(styles, /@media\(min-width:1680px\)/);
-  assert.match(styles, /background:\s*var\(--vf-bg\)/);
-  assert.match(styles, /background:\s*var\(--vf-surface\)/);
+  assert.match(styles, /@media \(max-width: 1280px\)/);
+  assert.match(styles, /@media \(max-width: 800px\)/);
+  assert.match(styles, /@media \(min-width: 1680px\)/);
+  assert.match(styles, /max-width:\s*1360px/);
+  assert.match(styles, /grid-template-columns:\s*minmax\(0, 1\.5fr\) minmax\(340px, 1fr\)/);
+  assert.match(styles, /min-height:\s*344px/);
   assert.match(styles, /prefers-reduced-motion/);
-  assert.match(styles, /vf-intelligence-rail/);
+  assert.match(styles, /vf-command-bar/);
+  assert.match(styles, /vf-pipeline/);
+  assert.match(styles, /vf-project-card-grid/);
   assert.doesNotMatch(styles, /#070b14|#0d1320|#111827|--vf-dark/);
   assert.doesNotMatch(header, /aria-label="帮助"/);
   assert.match(header, /role="listbox"/);
   assert.match(header, /event\.metaKey \|\| event\.ctrlKey/);
   assert.match(header, /<kbd>⌘ K<\/kbd>/);
+});
+
+test("Home vNext is a visual creative platform backed by real image assets", () => {
+  for (const copy of ["今天想", "创作什么", "完整创作流程", "快速开始", "创意灵感", "继续创作"]) {
+    assert.ok(dashboard.includes(copy));
+  }
+  assert.match(dashboard, /readImageAssets/);
+  assert.match(dashboard, /latestAssetByProject/);
+  assert.match(dashboard, /inspirationAssets/);
+  assert.match(dashboard, /即将开放完整成片工作流/);
+  assert.doesNotMatch(dashboard, /Fake Views|Fake Likes|GMV|播放量/);
+  assert.match(page, /DATA_MODE==="demo"\?demoRecent:\[\]/);
 });
