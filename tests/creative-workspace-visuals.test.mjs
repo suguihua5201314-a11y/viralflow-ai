@@ -20,7 +20,7 @@ test("Creative workspace uses owned light design tokens without override rules",
 test("Creative workspace keeps readable typography floors", () => {
   assert.match(tokens, /--vf-font-body: 15px/);
   assert.match(workspaceCss, /font:\s*var\(--vf-font-body\)\/var\(--vf-line-body\)/);
-  assert.match(workspaceCss, /:where\(small, dt, time\).*font-size: 12px/);
+  assert.match(workspaceCss, /:where\(small, dt, time\).*font-size: 13px/);
   assert.match(workspaceCss, /:where\(h2\).*font-size: 24px/);
   assert.match(workspaceCss, /:where\(h3\).*font-size: 18px/);
 });

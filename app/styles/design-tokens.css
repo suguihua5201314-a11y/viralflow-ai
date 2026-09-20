@@ -26,8 +26,16 @@
   --vf-font-section: 18px;
   --vf-font-card: 16px;
   --vf-font-body: 15px;
-  --vf-font-control: 14px;
-  --vf-font-secondary: 13px;
-  --vf-font-meta: 12px;
+  --vf-font-control: 15px;
+  --vf-font-secondary: 14px;
+  --vf-font-meta: 13px;
   --vf-line-body: 1.6;
+}
+
+html {
+  font-size: 16px;
+}
+
+body {
+  font-size: 15px;
 }

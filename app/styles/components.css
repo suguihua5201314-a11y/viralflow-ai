@@ -16,7 +16,7 @@ body input,body select,body textarea { accent-color:var(--vf-primary); }
 body .form-panel input:focus,body .form-panel textarea:focus,body .form-panel select:focus,body .review-form input:focus,body .review-form select:focus,body .review-form textarea:focus,body .product-editor input:focus,body .product-editor select:focus,body .product-editor textarea:focus { border-color:#8878ff;box-shadow:0 0 0 3px rgba(109,93,251,.11); }
 body .generate,body .modal-primary,body .save-product,body .save-review,body .video-start,body .video-save,body .director-generate,body .voice-generate,body .product-profile-card footer .use-product { background:var(--vf-ai-gradient);border-color:transparent;box-shadow:0 8px 20px rgba(94,76,235,.18); }
 body .race-button { color:var(--vf-primary);border-color:#cfc7ff;background:#f5f2ff; }
-body .tag,body .modal-kicker,body .eyebrow { color:var(--vf-primary)!important; }
+body .tag,body .modal-kicker,body .eyebrow { color:var(--vf-primary); }
 body .status { color:#5a49d6;border-color:#ddd8ff;background:#f2f0ff; }body .status i { background:var(--vf-primary);box-shadow:0 0 0 3px #ded9ff; }
 body .race-tabs button.selected,body .library-tabs button.selected,body .hook-filter button.selected,body .provider-tabs button.selected { color:var(--vf-primary);border-color:#9284ff;background:#f2efff; }
 body .hook-card { border-left-color:var(--vf-primary);background:var(--vf-ai-soft); }body .score-grid span,body .empty-tags span { background:#f2f0ff;color:#5f55b8; }
