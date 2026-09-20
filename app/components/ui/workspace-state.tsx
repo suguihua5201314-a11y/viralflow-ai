@@ -38,8 +38,8 @@ export default function WorkspaceState({
     </div> : null}
     {detail ? <div className="workspace-state-detail">{detail}</div> : null}
     {primary || secondary ? <div className="workspace-state-actions">
-      {secondary ? <button type="button" onClick={secondary.onClick} disabled={secondary.disabled}>{secondary.label}</button> : null}
-      {primary ? <button type="button" className="primary" onClick={primary.onClick} disabled={primary.disabled}>{primary.label}</button> : null}
+      {secondary ? <button type="button" className="vf-button vf-button-secondary" onClick={secondary.onClick} disabled={secondary.disabled}>{secondary.label}</button> : null}
+      {primary ? <button type="button" className="vf-button vf-button-primary" onClick={primary.onClick} disabled={primary.disabled}>{primary.label}</button> : null}
     </div> : null}
   </section>;
 }

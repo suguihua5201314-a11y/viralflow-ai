@@ -97,7 +97,7 @@ export default function Dashboard({ recent, onNavigate, onOpenRecent, onOpenProj
           {dataMode === "demo" ? <em className="vf-demo-badge">演示数据</em> : null}
         </div>
         <div className="vf-hero-actions">
-          <button type="button" onClick={() => onNavigate("create")}>
+          <button className="vf-button vf-button-primary" type="button" onClick={() => onNavigate("create")}>
             开始新创作 <i>→</i>
           </button>
         </div>
@@ -109,7 +109,7 @@ export default function Dashboard({ recent, onNavigate, onOpenRecent, onOpenProj
             <span>继续工作</span>
             <h2>回到最近的项目</h2>
           </div>
-          <button type="button" onClick={() => onNavigate("projects")}>
+          <button className="vf-button vf-button-tertiary" type="button" onClick={() => onNavigate("projects")}>
             查看全部项目 →
           </button>
         </header>
@@ -138,7 +138,7 @@ export default function Dashboard({ recent, onNavigate, onOpenRecent, onOpenProj
                   {recent[0].stage || "脚本创作"} · {formatTime(recent[0].updatedAt)}
                 </p>
               </div>
-              <button type="button" onClick={() => openRecent(recent[0])}>
+              <button className="vf-button vf-button-card" type="button" onClick={() => openRecent(recent[0])}>
                 继续 <i>→</i>
               </button>
             </article>
@@ -161,7 +161,7 @@ export default function Dashboard({ recent, onNavigate, onOpenRecent, onOpenProj
                     <span>{item.platform}</span>
                   </div>
                   <div className="vf-recent-actions">
-                    <button type="button" onClick={() => openRecent(item)}>
+                    <button className="vf-button vf-button-card" type="button" onClick={() => openRecent(item)}>
                       打开项目
                     </button>
                   </div>

@@ -7,6 +7,10 @@
   --vf-text-secondary: #667085;
   --vf-brand: #635bff;
   --vf-brand-soft: #f0eeff;
+  --vf-action-primary: #5b5bf7;
+  --vf-action-primary-hover: #4f46e5;
+  --vf-action-primary-active: #4338ca;
+  --vf-action-secondary-border: #dde1ea;
   --vf-success: #22a06b;
   --vf-warning: #f59e0b;
   --vf-danger: #d92d20;

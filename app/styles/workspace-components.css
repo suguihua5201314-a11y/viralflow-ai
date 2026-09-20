@@ -207,6 +207,7 @@ body { margin: 0; background: var(--vf-bg); color: var(--vf-text); }
   .os-paw-heading { flex-wrap: wrap; }
 }
 @media (prefers-reduced-motion: reduce) { .os-app-shell * { transition: none; scroll-behavior: auto; } }
+
 .creative-global-nav { display: grid; gap: 4px; }
 .creative-global-nav button { text-align: left; border: 0; }
 .os-director-shot-card > header { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 16px; }
@@ -1118,3 +1119,102 @@ body { margin: 0; background: var(--vf-bg); color: var(--vf-text); }
     grid-template-columns: 1fr;
   }
 }
+
+/* Shared action hierarchy. Product flows opt into one of these variants instead of
+   defining page-specific primary buttons. */
+.os-app-shell button:not(.vf-button) { font-size: max(14px, 1em); }
+.os-app-shell .vf-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 40px;
+  padding: 0 16px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 1;
+  white-space: nowrap;
+  transition: transform 160ms ease, background 160ms ease, border-color 160ms ease, color 160ms ease, box-shadow 160ms ease;
+}
+.os-app-shell .vf-button:hover:not(:disabled) { transform: translateY(-1px); }
+.os-app-shell .vf-button:active:not(:disabled) { transform: translateY(1px); }
+.os-app-shell .vf-button:focus-visible { outline: 0; box-shadow: 0 0 0 3px rgba(91, 91, 247, .2); }
+.os-app-shell .vf-button:disabled { opacity: .48; }
+.os-app-shell .vf-button > :where(i, svg) { flex: 0 0 auto; font-size: 17px; font-style: normal; }
+.os-app-shell .vf-button-primary,
+.os-app-shell .vf-button-ai {
+  min-height: 42px;
+  padding: 0 18px;
+  border-color: transparent;
+  background: var(--vf-action-primary);
+  color: #fff;
+}
+.os-app-shell .vf-button-primary:hover:not(:disabled),
+.os-app-shell .vf-button-ai:hover:not(:disabled) { border-color: transparent; background: var(--vf-action-primary-hover); color: #fff; }
+.os-app-shell .vf-button-primary:active:not(:disabled),
+.os-app-shell .vf-button-ai:active:not(:disabled) { background: var(--vf-action-primary-active); }
+.os-app-shell .vf-button-secondary {
+  border-color: var(--vf-action-secondary-border);
+  background: #fff;
+  color: #344054;
+}
+.os-app-shell .vf-button-secondary:hover:not(:disabled) { border-color: #cfd5df; background: #f8f9fc; color: #344054; }
+.os-app-shell .vf-button-tertiary,
+.os-app-shell .vf-button-ghost {
+  min-height: 36px;
+  padding: 0 10px;
+  border-color: transparent;
+  background: transparent;
+  color: #475467;
+  font-size: 14px;
+}
+.os-app-shell .vf-button-tertiary:hover:not(:disabled),
+.os-app-shell .vf-button-ghost:hover:not(:disabled) { border-color: transparent; background: #f2f4f7; color: #344054; }
+.os-app-shell .vf-button-danger { border-color: #fecdca; background: #fff; color: var(--vf-danger); }
+.os-app-shell .vf-button-danger:hover:not(:disabled) { border-color: #fda29b; background: #fff4f4; color: #b42318; }
+.os-app-shell .vf-button-card {
+  min-height: 42px;
+  padding: 0 18px;
+  border-color: transparent;
+  background: var(--vf-brand-soft);
+  color: #5b5bf7;
+  font-size: 15px;
+}
+.os-app-shell .vf-button-card:hover:not(:disabled) { border-color: transparent; background: #5b5bf7; color: #fff; }
+.os-app-shell .vf-dashboard-v3 .vf-hero-actions .vf-button-primary {
+  min-height: 42px;
+  padding: 0 18px;
+  border-color: transparent;
+  background: var(--vf-action-primary);
+  color: #fff;
+  font-size: 15px;
+}
+.os-app-shell .vf-dashboard-v3 .vf-hero-actions .vf-button-primary:hover:not(:disabled) { background: var(--vf-action-primary-hover); color: #fff; }
+.os-app-shell .vf-dashboard-v3 .vf-recent-actions .vf-button-card,
+.os-app-shell .vf-dashboard-v3 .vf-continue-project .vf-button-card,
+.os-app-shell .project-card-grid article > footer .vf-button-card {
+  min-height: 42px;
+  padding: 0 18px;
+  border-color: transparent;
+  background: var(--vf-brand-soft);
+  color: #5b5bf7;
+  font-size: 15px;
+}
+.os-app-shell .vf-dashboard-v3 .vf-recent-actions .vf-button-card:hover:not(:disabled),
+.os-app-shell .vf-dashboard-v3 .vf-continue-project .vf-button-card:hover:not(:disabled),
+.os-app-shell .project-card-grid article > footer .vf-button-card:hover:not(:disabled) { background: #5b5bf7; color: #fff; }
+
+/* Keep each workspace's single principal action visually dominant. */
+.os-app-shell :where(.os-paw-generate, .os-studio-generate, .os-send-director, .os-pipeline-primary, .os-variant-primary, .voice-generate) {
+  width: auto;
+  min-height: 42px;
+  font-size: 15px;
+}
+.os-app-shell .os-studio-generate,
+.os-app-shell .os-paw-generate,
+.os-app-shell .voice-generate { width: 100%; }
+.os-app-shell .workspace-state-actions { gap: 10px; }
+.os-app-shell .workspace-state-actions .vf-button-primary { order: 1; }
+.os-app-shell .os-vf-new-project { width: 100%; }
