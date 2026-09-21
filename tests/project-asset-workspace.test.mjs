@@ -36,7 +36,7 @@ test("Step 7.0-C 4/5: currentProjectId 是唯一项目来源且切换会重新�
 });
 
 test("Step 7.0-C 6/7: Source 只由现有 sourceReference 分类", () => {
-  assert.match(assets, /sourceReference\?\.type === "director-shot" \? "导演分镜" : "AI图片创作"/);
+  assert.match(assets, /type === "director-shot" \? "导演分镜" : type === "frame-prompt" \? "画面提示词" : "AI图片创作"/);
   assert.match(workspace, /imageAssetSource\(asset\)/);
 });
 

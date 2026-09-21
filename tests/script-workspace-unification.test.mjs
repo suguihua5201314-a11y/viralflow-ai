@@ -10,9 +10,9 @@ const recovery=read("../app/script-workspace.ts");
 const css=read("../app/styles/workspace-components.css");
 
 test("Script and Director share project navigation without changing Director workspace",()=>{
-  assert.match(sidebar,/active==="director"\|\|active==="create"/);
-  for(const label of ["脚本创作","爆款研究","内容策划","AI分镜导演","视觉创作","声音制作","素材管理","项目大脑"]) assert.ok(sidebar.includes(`label:"${label}"`));
-  assert.match(page,/const projectMode=active==="brain"\|\|active==="director"\|\|active==="create"/);
+  assert.match(sidebar,/active==="director"\|\|active==="frames"\|\|active==="create"/);
+  for(const label of ["脚本创作","爆款研究","内容策划","AI分镜导演","画面提示词","视觉创作","声音制作","素材管理","项目大脑"]) assert.ok(sidebar.includes(`label:"${label}"`));
+  assert.match(page,/const projectMode=active==="brain"\|\|active==="director"\|\|active==="frames"\|\|active==="create"/);
 });
 
 test("Script is workspace-first with version rail, block canvas and assistant",()=>{

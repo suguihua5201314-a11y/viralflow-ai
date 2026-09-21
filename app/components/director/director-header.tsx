@@ -12,6 +12,7 @@ type DirectorHeaderProps = {
   onSave: () => void;
   onRebalance: () => void;
   onConfirm: () => void;
+  onFramePrompt: () => void;
 };
 
 export default function DirectorHeader({
@@ -28,6 +29,7 @@ export default function DirectorHeader({
   onSave,
   onRebalance,
   onConfirm,
+  onFramePrompt,
 }: DirectorHeaderProps) {
   return (
     <header className="vnext-director-header">
@@ -54,6 +56,14 @@ export default function DirectorHeader({
           <small>{saved ? "✓ 已保存" : "编辑中"}</small>
         </div>
         <nav aria-label="导演工作区操作">
+          <button
+            type="button"
+            className="vf-button vf-button-secondary"
+            disabled={selectedShot === null}
+            onClick={onFramePrompt}
+          >
+            生成画面提示词 →
+          </button>
           <button
             type="button"
             className="vf-button vf-button-secondary"

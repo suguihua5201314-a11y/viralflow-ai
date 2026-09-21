@@ -46,7 +46,9 @@ type Props = {
   input: DirectorRequest | null;
   currentProjectId: string | null;
   initialWorkspace?: unknown;
-  onNavigate?: (view: "create" | "history" | "replicate" | "images") => void;
+  onNavigate?: (
+    view: "create" | "history" | "replicate" | "images" | "frames",
+  ) => void;
   onChange?: (value: unknown) => void;
 };
 type RewritePreview = {
@@ -1278,6 +1280,7 @@ export default function ShootingDirector({
             onSave={saveVersion}
             onRebalance={doRebalance}
             onConfirm={confirmList}
+            onFramePrompt={() => onNavigate?.("frames")}
           />
           {input ? (
             <DirectorWorkspace
@@ -1893,9 +1896,8 @@ export default function ShootingDirector({
                                   : "AI 实时分析"}{" "}
                                 ·{" "}
                                 {new Date(
-                                  intelligence[
-                                    shots[selected].shotId
-                                  ].evaluation!.evaluatedAt,
+                                  intelligence[shots[selected].shotId]
+                                    .evaluation!.evaluatedAt,
                                 ).toLocaleTimeString("zh-CN", {
                                   hour: "2-digit",
                                   minute: "2-digit",

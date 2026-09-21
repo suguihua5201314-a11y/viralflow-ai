@@ -4,7 +4,10 @@ export const IMAGE_ASSET_STORAGE_KEY = "viralflow-image-assets-v1";
 export const IMAGE_STUDIO_DRAFT_KEY = "viralflow-image-studio-draft-v1";
 export const IMAGE_ASSET_LIMIT = 60;
 
-export type ImageSourceReference = { type: "director-shot"; shotId: string; sourceBlockId: string };
+export type ImageFrameType = "start-frame" | "end-frame" | "shot-image";
+export type ImageSourceReference =
+  | { type: "director-shot"; shotId: string; sourceBlockId: string }
+  | { type: "frame-prompt"; projectId: string; scriptVersion: string; shotId: string; sourceBlockId: string; frameType: ImageFrameType; promptType: ImageFrameType };
 export type ImageAssetMetadata = { size: string; requestId?: string; sourceReference?: ImageSourceReference };
 
 export type ImageAsset = {
@@ -45,13 +48,16 @@ export function assetsForProject(assets: ImageAsset[], projectId: string | null)
 }
 
 export function imageAssetSource(asset: ImageAsset) {
-  return asset.metadata?.sourceReference?.type === "director-shot" ? "导演分镜" : "AI图片创作";
+  const type = asset.metadata?.sourceReference?.type;
+  return type === "director-shot" ? "导演分镜" : type === "frame-prompt" ? "画面提示词" : "AI图片创作";
 }
 
 export function currentDirectorAssetIds(assets: ImageAsset[]) {
   const latestByShot = new Map<string, ImageAsset>();
   for (const asset of assets) {
-    const shotId = asset.metadata?.sourceReference?.shotId;
+    const reference = asset.metadata?.sourceReference;
+    if (reference?.type !== "director-shot") continue;
+    const shotId = reference.shotId;
     if (!shotId) continue;
     const latest = latestByShot.get(shotId);
     if (!latest || Date.parse(asset.createdAt) > Date.parse(latest.createdAt)) latestByShot.set(shotId, asset);

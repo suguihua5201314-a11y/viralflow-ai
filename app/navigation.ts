@@ -1,4 +1,4 @@
-export type ActiveView = "brain" | "dashboard" | "projects" | "create" | "images" | "assets" | "video" | "director" | "voice" | "breakdown" | "replicate" | "checker" | "library" | "products" | "reviews" | "history" | "monitor";
+export type ActiveView = "brain" | "dashboard" | "projects" | "create" | "images" | "frames" | "assets" | "video" | "director" | "voice" | "breakdown" | "replicate" | "checker" | "library" | "products" | "reviews" | "history" | "monitor";
 
 export const viewMeta: Record<ActiveView, { label: string; eyebrow: string; description: string }> = {
   brain: { label: "项目大脑", eyebrow: "项目知识", description: "当前项目的产品事实、受众与参考资料" },
@@ -6,6 +6,7 @@ export const viewMeta: Record<ActiveView, { label: string; eyebrow: string; desc
   projects: { label: "我的项目", eyebrow: "项目工作区", description: "按产品与市场管理从洞察到数据复盘的完整创作流程" },
   create: { label: "AI 创作工作台", eyebrow: "Creative Writing", description: "根据产品与创作参数，生成多条短视频脚本" },
   images: { label: "AI图片创作工作台", eyebrow: "内容制作", description: "面向短视频、电商和广告场景的 AI 商业视觉创作工作台" },
+  frames: { label: "画面提示词", eyebrow: "Visual Prompt Studio", description: "把导演镜头转换成首尾帧、图片与视频生成指令" },
   assets: { label: "项目素材库", eyebrow: "项目素材", description: "浏览、筛选和复用当前项目的真实创作素材" },
   breakdown: { label: "爆款洞察", eyebrow: "Creative Research", description: "拆解爆款内容的开场、结构、节奏与证明机制" },
   replicate: { label: "创意复刻", eyebrow: "Creative Strategy", description: "保留爆款机制，结合目标产品生成原创方向" },

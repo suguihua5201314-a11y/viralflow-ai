@@ -22,6 +22,7 @@ const groups: Array<{ label: string; items: Array<{ id: ActiveView; icon: string
     { id: "images", icon: "◫", label: "AI图片创作工作台" },
     { id: "video", icon: "▶", label: "视频洞察" },
     { id: "director", icon: "◉", label: "AI分镜导演工作台" },
+    { id: "frames", icon: "✧", label: "画面提示词" },
     { id: "voice", icon: "♫", label: "AI配音工作台" },
   ] },
   { label: "知识与素材", items: [
@@ -34,12 +35,12 @@ const groups: Array<{ label: string; items: Array<{ id: ActiveView; icon: string
   ] },
 ];
 const projectItems:Array<{id:ActiveView;icon:string;label:string}>=[
-  {id:"breakdown",icon:"◇",label:"爆款研究"},{id:"replicate",icon:"◎",label:"内容策划"},{id:"create",icon:"▤",label:"脚本创作"},{id:"director",icon:"◉",label:"AI分镜导演"},{id:"images",icon:"▧",label:"视觉创作"},{id:"assets",icon:"◫",label:"素材管理"},{id:"voice",icon:"♫",label:"声音制作"},{id:"video",icon:"▷",label:"视频分析"},{id:"brain",icon:"▣",label:"项目大脑"},
+  {id:"breakdown",icon:"◇",label:"爆款研究"},{id:"replicate",icon:"◎",label:"内容策划"},{id:"create",icon:"▤",label:"脚本创作"},{id:"director",icon:"◉",label:"AI分镜导演"},{id:"frames",icon:"✧",label:"画面提示词"},{id:"images",icon:"▧",label:"视觉创作"},{id:"assets",icon:"◫",label:"素材管理"},{id:"voice",icon:"♫",label:"声音制作"},{id:"video",icon:"▷",label:"视频分析"},{id:"brain",icon:"▣",label:"项目大脑"},
 ];
 
 export default function Sidebar({ active, onNavigate, onHistory, counts, teamConnected, onTeamToggle, project }: SidebarProps) {
   const countFor = (id: ActiveView) => id === "library" ? counts.library : id === "monitor" ? counts.monitor : id === "history" ? counts.history : id === "products" ? counts.products : id === "reviews" ? counts.reviews : undefined;
-  const projectMode=active==="brain"||active==="director"||active==="create"||active==="breakdown"||active==="replicate"||active==="images"||active==="assets"||active==="voice"||active==="video";
+  const projectMode=active==="brain"||active==="director"||active==="frames"||active==="create"||active==="breakdown"||active==="replicate"||active==="images"||active==="assets"||active==="voice"||active==="video";
   return <aside className="os-sidebar os-vf-sidebar">
     <button className="os-brand os-vf-brand" type="button" onClick={() => onNavigate("dashboard")} aria-label="返回工作台首页"><span className="os-brand-mark os-vf-brand-mark">V</span><div><strong>ViralFlow AI</strong><small>AI短视频创作工作台</small></div></button>
     {projectMode&&project?<button className="os-vf-director-project" onClick={()=>onNavigate("projects")}><span>{project.product.slice(0,2).toUpperCase()}</span><div><b>{project.product}</b><small>{project.name}</small></div><i>⌄</i></button>:<button className="os-vf-new-project vf-button vf-button-primary" onClick={() => onNavigate("projects")}><span>＋</span> 新建项目</button>}
@@ -54,6 +55,6 @@ export default function Sidebar({ active, onNavigate, onHistory, counts, teamCon
         })}</nav>
       </section>)}
     </div>
-    {projectMode?<div className="os-vf-director-sidebar-foot"><span>项目大脑</span><div><i/><b>当前项目上下文</b></div><small>{active==="director"?"分镜 · 图片 · 智能分析":active==="create"?"脚本 · 版本 · 合规":active==="breakdown"?"开场 · 结构 · 爆款洞察":"映射 · 创意 · 事实校验"}</small></div>:<div className={`os-sidebar-note os-team-note os-vf-team-card ${teamConnected ? "connected" : ""}`}><span>{teamConnected ? "● 团队云端已连接" : "团队云端空间"}</span><p>{teamConnected ? "产品资料、素材和历史脚本将同步给团队。" : "连接后，多台电脑可共享产品资料和历史脚本。"}</p><button onClick={onTeamToggle}>{teamConnected ? "断开本机" : "连接团队空间"}</button></div>}
+    {projectMode?<div className="os-vf-director-sidebar-foot"><span>项目大脑</span><div><i/><b>当前项目上下文</b></div><small>{active==="director"?"分镜 · 图片 · 智能分析":active==="frames"?"首帧 · 尾帧 · 视频提示词":active==="create"?"脚本 · 版本 · 合规":active==="breakdown"?"开场 · 结构 · 爆款洞察":"映射 · 创意 · 事实校验"}</small></div>:<div className={`os-sidebar-note os-team-note os-vf-team-card ${teamConnected ? "connected" : ""}`}><span>{teamConnected ? "● 团队云端已连接" : "团队云端空间"}</span><p>{teamConnected ? "产品资料、素材和历史脚本将同步给团队。" : "连接后，多台电脑可共享产品资料和历史脚本。"}</p><button onClick={onTeamToggle}>{teamConnected ? "断开本机" : "连接团队空间"}</button></div>}
   </aside>;
 }

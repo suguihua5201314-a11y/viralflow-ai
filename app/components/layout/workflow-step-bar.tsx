@@ -5,6 +5,7 @@ const steps: Array<{ id: ActiveView; label: string; future?: boolean }> = [
   { id: "replicate", label: "内容策划" },
   { id: "create", label: "脚本创作" },
   { id: "director", label: "AI 分镜导演" },
+  { id: "frames", label: "画面提示词" },
   { id: "images", label: "视觉创作" },
   { id: "assets", label: "素材管理" },
   { id: "voice", label: "声音制作" },

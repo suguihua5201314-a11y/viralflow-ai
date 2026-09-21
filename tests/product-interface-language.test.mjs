@@ -27,7 +27,7 @@ test("Step 7.0-C.3: Images 与 Assets 标题、操作和状态完成中文化", 
 });
 
 test("Step 7.0-C.3: 素材分类、筛选、空状态和 Tabs 使用业务中文", () => {
-  assert.match(assets, /"导演分镜" : "AI图片创作"/);
+  assert.match(assets, /"导演分镜".*"画面提示词".*"AI图片创作"/);
   for (const label of ["全部来源", "全部分镜", "全部模型", "全部时间", "全部", "图片", "参考素材", "声音", "视频", "当前版本", "开始创建视觉素材", "视频功能即将开放"]) {
     assert.match(workspace, new RegExp(label));
   }

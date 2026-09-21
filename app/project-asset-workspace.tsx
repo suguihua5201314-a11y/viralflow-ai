@@ -55,7 +55,6 @@ function withinCreatedTime(asset: ImageAsset, value: string) {
   const days = Number(value);
   return Date.parse(asset.createdAt) >= Date.now() - days * 86400000;
 }
-
 export default function ProjectAssetWorkspace({ mode, projects, currentProjectId, onNavigate }: {
   mode: WorkspaceMode;
   projects: ProjectOption[];
@@ -189,7 +188,7 @@ export default function ProjectAssetWorkspace({ mode, projects, currentProjectId
       <main className="os-paw-board">
         {!specialTab && <div className="os-paw-toolbar">
           <label className="os-paw-search"><span>⌕</span><input aria-label="素材搜索" value={search} onChange={event => setSearch(event.target.value)} placeholder="搜索提示词、分镜 ID、来源" /></label>
-          <select aria-label="来源筛选" value={sourceFilter} onChange={event => setSourceFilter(event.target.value)}><option value="all">全部来源</option><option>导演分镜</option><option>AI图片创作</option></select>
+          <select aria-label="来源筛选" value={sourceFilter} onChange={event => setSourceFilter(event.target.value)}><option value="all">全部来源</option><option>导演分镜</option><option>画面提示词</option><option>AI图片创作</option></select>
           <select aria-label="分镜筛选" value={shotFilter} onChange={event => setShotFilter(event.target.value)}><option value="all">全部分镜</option>{shotOptions.map(value => <option key={value}>{value}</option>)}</select>
           <select aria-label="模型筛选" value={modelFilter} onChange={event => setModelFilter(event.target.value)}><option value="all">全部模型</option>{modelOptions.map(value => <option key={value}>{value}</option>)}</select>
           <select aria-label="创建时间筛选" value={timeFilter} onChange={event => setTimeFilter(event.target.value)}><option value="all">全部时间</option><option value="1">最近24小时</option><option value="7">最近7天</option><option value="30">最近30天</option></select>
@@ -227,7 +226,7 @@ export default function ProjectAssetWorkspace({ mode, projects, currentProjectId
               <div><dt>分镜 ID</dt><dd>{selectedAsset.metadata?.sourceReference?.shotId || "—"}</dd></div><div><dt>来源区块 ID</dt><dd>{selectedAsset.metadata?.sourceReference?.sourceBlockId || "—"}</dd></div>
               <div><dt>请求 ID</dt><dd>{selectedAsset.metadata?.requestId || "—"}</dd></div>
             </dl></details>
-            <div className="os-paw-actions os-paw-secondary-actions"><button type="button" onClick={() => setShowLarge(true)}>查看大图</button><button type="button" onClick={() => usePrompt(selectedAsset)}>使用提示词</button>{selectedAsset.metadata?.sourceReference && <button type="button" onClick={() => onNavigate("director")}>返回导演分镜</button>}</div>
+            <div className="os-paw-actions os-paw-secondary-actions"><button type="button" onClick={() => setShowLarge(true)}>查看大图</button><button type="button" onClick={() => usePrompt(selectedAsset)}>使用提示词</button>{selectedAsset.metadata?.sourceReference && <button type="button" onClick={() => onNavigate(selectedAsset.metadata?.sourceReference?.type === "frame-prompt" ? "frames" : "director")}>{selectedAsset.metadata?.sourceReference?.type === "frame-prompt" ? "返回画面提示词" : "返回导演分镜"}</button>}</div>
           </> : <div className="os-paw-inspector-empty"><span>◎</span><p>选择一张素材，查看详情与复用操作。</p></div>}
         </section>
 

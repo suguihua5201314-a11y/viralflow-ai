@@ -34,6 +34,7 @@ import ProjectWorkspace from "./project-workspace";
 import {cacheProjectMemory,readProjectMemory,touchProject,type PersistentProject,type ProjectMemory} from "./project-memory";
 import ImageStudio from "./image-studio";
 import ProjectAssetWorkspace from "./project-asset-workspace";
+import FramePromptWorkspace from "./frame-prompt-workspace";
 import {mergeReplicationAdoption,restoreProjectAnalyzer,restoreProjectReplication,type ReplicationWorkspaceAsset} from "./analyzer-replication-workspace";
 
 type Scene = { time: string; visual: string; line: string; edit: string };
@@ -389,7 +390,7 @@ export default function Home() {
   const dashboardRecent=persistentProjects.length?persistentProjects:(DATA_MODE==="demo"?demoRecent:[]);
   const openProject=(key:string)=>{setSelectedProjectKey(key);setActive("projects");saveWorkspaceSnapshot({activeView:"projects",currentProjectId:key});};
 
-  const projectMode=active==="brain"||active==="director"||active==="create"||active==="breakdown"||active==="replicate"||active==="images"||active==="assets";
+  const projectMode=active==="brain"||active==="director"||active==="frames"||active==="create"||active==="breakdown"||active==="replicate"||active==="images"||active==="assets";
   return (<AppShell
     sidebar={<Sidebar active={active} project={projectMode?{name:currentDirectorProject?.name||`${result?.country||form.country} · TikTok 项目`,product:currentDirectorProject?.product||result?.product||form.product}:null} onNavigate={view=>{if(view==="projects")setSelectedProjectKey(null);setActive(view);saveWorkspaceSnapshot({activeView:view});}} onHistory={() => { setActive("history"); saveWorkspaceSnapshot({activeView:"history"}); void loadHistory(); }} counts={{ library: hookLibrary.length + pointLibrary.length, monitor: monitorAccounts.length, history: history.length, products: productProfiles.length, reviews: reviewRecords.length }} teamConnected={teamConnected} onTeamToggle={() => { if (teamConnected) { setTeamConnected(false); setTeamPassword(""); } else setShowTeamLogin(true); }} />}
     header={<TopHeader active={active} aiConnected={aiConnected} teamConnected={teamConnected} saveState={memorySaveState} searchItems={searchItems} project={projectMode?{name:currentDirectorProject?.name||result?.product||form.product,market:currentDirectorProject?.market||result?.country||form.country,platform:currentDirectorProject?.platform||"TikTok",language:currentDirectorProject?.language||result?.language||form.language}:null} />}
@@ -399,6 +400,7 @@ export default function Home() {
       {active === "brain" && <ProjectBrainWorkspace project={projectMemory.projects.find(item=>item.id===projectMemory.workspace.currentProjectId)} knowledge={productProfiles.find(item=>item.name===projectMemory.projects.find(project=>project.id===projectMemory.workspace.currentProjectId)?.product)} reference={projectMemory.workspace.referenceScript} onEdit={()=>setActive("products")} />}
       {active === "projects" && <ProjectWorkspace projects={persistentProjects} initialProjectKey={selectedProjectKey} saveState={memorySaveState} onCreate={createProject} onRename={renameProject} onDuplicate={duplicateProject} onDelete={deleteProject} onSelect={id=>saveWorkspaceSnapshot({currentProjectId:id,activeView:"projects"})} onNavigate={view=>{setActive(view);saveWorkspaceSnapshot({activeView:view});}} />}
       {active === "images" && <ImageStudio projects={projectMemory.projects.map(project=>({id:project.id,name:project.name,product:project.product}))} currentProjectId={projectMemory.workspace.currentProjectId} onNavigate={view=>{setActive(view);saveWorkspaceSnapshot({activeView:view});}} />}
+      {active === "frames" && <FramePromptWorkspace project={currentDirectorProject||null} request={directorDisplayInput} workspace={currentDirectorWorkspace} scriptVersion={result?.title||"当前脚本"} onNavigate={view=>{setActive(view);saveWorkspaceSnapshot({activeView:view});}} onSelectShot={index=>{if(!currentDirectorWorkspace||typeof currentDirectorWorkspace!=="object")return;updateProjectMemory({directorResult:{...currentDirectorWorkspace,selectedShot:index}});saveWorkspaceSnapshot({activeView:"frames"});}} />}
       {active === "assets" && <ProjectAssetWorkspace mode="assets" projects={projectMemory.projects.map(project=>({id:project.id,name:project.name,product:project.product}))} currentProjectId={projectMemory.workspace.currentProjectId} onNavigate={view=>{setActive(view);saveWorkspaceSnapshot({activeView:view});}} />}
       {active === "video" && <VideoAnalyzer products={productProfiles.map(x=>x.name)} />}
       {active === "director" && <ShootingDirector input={directorDisplayInput} currentProjectId={projectMemory.workspace.currentProjectId} initialWorkspace={currentDirectorWorkspace} onNavigate={view=>setActive(view)} onChange={value=>{updateProjectMemory({directorResult:value},{stage:"导演",progress:72});saveWorkspaceSnapshot({activeView:"director"});}} />}
