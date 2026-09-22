@@ -1,30 +1,27 @@
 import Image from "next/image";
-import PromptEditor from "./prompt-editor";
 
 export default function FrameCard({
   kind,
   title,
   imageUrl,
-  prompt,
-  automaticPrompt,
-  onPromptChange,
   onGenerate,
   onOpen,
+  onDownload,
+  onEdit,
 }: {
   kind: "start" | "end";
   title: string;
   imageUrl?: string;
-  prompt: string;
-  automaticPrompt: string;
-  onPromptChange: (value: string) => void;
   onGenerate: () => void;
   onOpen: () => void;
+  onDownload: () => void;
+  onEdit: () => void;
 }) {
   return (
     <article className={`vnext-frame-card is-${kind}`}>
       <header>
         <span>{kind === "start" ? "START FRAME" : "END FRAME"}</span>
-        <h2>{title}</h2>
+        <h2>{title} <small>{kind === "start" ? "Start Frame" : "End Frame"}</small></h2>
       </header>
       <div className="vnext-frame-preview">
         {imageUrl ? (
@@ -42,20 +39,11 @@ export default function FrameCard({
                 unoptimized
               />
             </button>
-            <nav>
-              <button type="button" onClick={onGenerate}>
-                重新生成
-              </button>
-              <button type="button" onClick={onOpen}>
-                查看大图
-              </button>
-            </nav>
           </>
         ) : (
           <div>
             <span>✦</span>
             <b>{title}尚未生成</b>
-            <p>使用当前导演镜头与提示词进入现有视觉创作工作台。</p>
             <button
               type="button"
               className="vf-button vf-button-secondary"
@@ -66,13 +54,12 @@ export default function FrameCard({
           </div>
         )}
       </div>
-      <PromptEditor
-        label={`${title}提示词`}
-        value={prompt}
-        automaticValue={automaticPrompt}
-        onChange={onPromptChange}
-        compact
-      />
+      <footer>
+        <button type="button" onClick={onGenerate}>{imageUrl ? "重新生成" : "生成画面"}</button>
+        <button type="button" onClick={onEdit}>编辑</button>
+        <button type="button" onClick={onDownload} disabled={!imageUrl}>下载</button>
+        <details><summary>更多</summary><button type="button" onClick={onOpen} disabled={!imageUrl}>查看大图</button></details>
+      </footer>
     </article>
   );
 }

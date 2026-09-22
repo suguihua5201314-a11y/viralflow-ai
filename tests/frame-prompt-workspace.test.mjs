@@ -136,9 +136,26 @@ test("Frame Prompt keeps project isolation and explicit missing-shot states", as
 
 test("Frame Prompt responsive layout preserves a flexible canvas", async () => {
   const css = await read("app/styles/vnext-frame-prompt.css");
-  assert.match(css, /grid-template-columns:\s*230px minmax\(0, 1fr\) 330px/);
+  assert.match(css, /grid-template-columns:\s*210px minmax\(0, 1fr\) 286px/);
+  assert.match(css, /\.vnext-frame-prompt-grid\s*\{[^}]*grid-template-columns:\s*repeat\(2,minmax\(0,1fr\)\)/);
+  assert.match(css, /\.vnext-frame-preview\s*\{[^}]*aspect-ratio:\s*16 \/ 9/);
   assert.match(css, /@media \(max-width: 1280px\)/);
   assert.match(css, /@media \(max-width: 1100px\)/);
   assert.match(css, /@media \(max-width: 900px\)/);
   assert.doesNotMatch(css, /!important/);
+});
+
+test("Frame Prompt keeps per-shot editors and existing image handoff after layout change", async () => {
+  const [workspace, card, navigator] = await Promise.all([
+    read("app/frame-prompt-workspace.tsx"),
+    read("app/components/frame-prompt/frame-card.tsx"),
+    read("app/components/frame-prompt/shot-navigator.tsx"),
+  ]);
+  assert.match(workspace, /key=\{`\$\{shot\.shotId\}-start`\}/);
+  assert.match(workspace, /key=\{`\$\{shot\.shotId\}-end`\}/);
+  assert.match(workspace, /onSelectShot\(index\)/);
+  assert.match(workspace, /saveImageStudioDraft\(\{/);
+  assert.match(workspace, /sourceReference,/);
+  assert.doesNotMatch(card, /PromptEditor/);
+  assert.match(navigator, /onClick=\{\(\) => onSelect\(index\)\}/);
 });

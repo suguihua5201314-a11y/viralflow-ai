@@ -4,12 +4,14 @@ import { useState } from "react";
 
 export default function PromptEditor({
   label,
+  id,
   value,
   automaticValue,
   onChange,
   compact = false,
 }: {
   label: string;
+  id?: string;
   value: string;
   automaticValue: string;
   onChange: (value: string) => void;
@@ -41,6 +43,7 @@ export default function PromptEditor({
 
   return (
     <section
+      id={id}
       className={`vnext-frame-prompt-editor${compact ? " is-compact" : ""}`}
     >
       <header>
@@ -57,16 +60,19 @@ export default function PromptEditor({
           <button type="button" onClick={() => void copy()}>
             {copied ? "已复制" : "复制"}
           </button>
-          <button
-            type="button"
-            disabled
-            title="AI Prompt Enhancement 将在 Provider 接入后开放"
-          >
-            AI 优化
-          </button>
-          <button type="button" onClick={() => onChange(automaticValue)}>
-            恢复自动版本
-          </button>
+          <details>
+            <summary>更多</summary>
+            <button
+              type="button"
+              disabled
+              title="AI Prompt Enhancement 将在 Provider 接入后开放"
+            >
+              AI 优化
+            </button>
+            <button type="button" onClick={() => onChange(automaticValue)}>
+              恢复自动版本
+            </button>
+          </details>
         </nav>
       </header>
       {editing ? (

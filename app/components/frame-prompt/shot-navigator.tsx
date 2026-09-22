@@ -43,7 +43,7 @@ export default function FrameShotNavigator({
                 </small>
                 <em>{shot.visualDescription}</em>
               </span>
-              <strong>{imageUrl ? "Has Image" : "Ready"}</strong>
+              <strong>{index === selected ? "Current" : imageUrl ? "Has Image" : shot.visualDescription?.trim() ? "Ready" : "Needs Prompt"}</strong>
             </button>
           );
         })}

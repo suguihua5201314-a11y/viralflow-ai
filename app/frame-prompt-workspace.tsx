@@ -139,6 +139,29 @@ export default function FramePromptWorkspace({
     onSelectShot(index);
   }
 
+  function downloadFrame(asset: ImageAsset | undefined, name: string) {
+    if (!asset) return;
+    const link = document.createElement("a");
+    link.href = asset.imageUrl;
+    link.download = `${name}.png`;
+    link.target = "_blank";
+    link.rel = "noopener noreferrer";
+    link.click();
+  }
+
+  function editFramePrompt(id: string) {
+    const editor = document.getElementById(id);
+    editor?.scrollIntoView({ behavior: "smooth", block: "center" });
+    const button = editor?.querySelector("nav button");
+    if (button?.textContent === "编辑") (button as HTMLButtonElement).click();
+  }
+
+  function assistantAction(action: "prompt" | "consistency" | "style" | "variants") {
+    if (action === "style") { onNavigate("director"); return; }
+    if (action === "variants") { if (prompts) openImages(prompts.imagePrompt, "shot-image"); return; }
+    document.querySelector(action === "prompt" ? ".vnext-frame-prompt-grid .vnext-frame-prompt-editor" : ".vnext-frame-consistency")?.scrollIntoView({ behavior: "smooth", block: "center" });
+  }
+
   function updatePrompt(key: keyof PromptEdits, value: string) {
     if (!shot) return;
     setEdits((current) => ({
@@ -211,16 +234,11 @@ export default function FramePromptWorkspace({
     <section className="vnext-frame-workspace" data-project-id={project.id}>
       <header className="vnext-frame-header">
         <div>
-          <span>AI VISUAL PROMPT STUDIO</span>
-          <h1>画面提示词</h1>
-          <p>把导演镜头转换成可生成的首尾帧与视频提示词</p>
-          <small>
-            {project.name} · {project.market} {project.platform} /{" "}
-            {scriptVersion} / Shot {String(shot.order).padStart(2, "0")}
-          </small>
+          <span>FRAME PROMPT WORKSPACE</span>
+          <h1>画面提示词 <small>{project.name} / {scriptVersion} / Shot {String(shot.order).padStart(2, "0")}</small></h1>
         </div>
         <aside>
-          <span>{edits[shot.shotId] ? "已编辑" : "自动提示词已准备"}</span>
+          <span>{edits[shot.shotId] ? "当前会话已编辑" : "自动提示词已准备"}</span>
           <button
             type="button"
             className="vf-button vf-button-primary"
@@ -253,78 +271,54 @@ export default function FramePromptWorkspace({
           <header>
             <div>
               <span>SHOT {String(shot.order).padStart(2, "0")}</span>
-              <h2>{prompts.visualGoal}</h2>
+              <h2>Shot {String(shot.order).padStart(2, "0")} — {shot.visualDescription}</h2>
+              <small>{shot.startTime.toFixed(1)}–{shot.endTime.toFixed(1)}s · {shot.framing} · {shot.cameraAngle}</small>
+              <p>{shot.proofRequirement || shot.productAction || prompts.visualGoal}</p>
             </div>
-            <small>
-              {shot.duration.toFixed(1)} 秒 · {shot.framing}
-            </small>
+            <aside><span>{shot.duration.toFixed(1)} 秒</span><button type="button" onClick={() => onNavigate("director")}>编辑分镜</button></aside>
           </header>
           <div className="vnext-frame-pair">
             <FrameCard
               kind="start"
               title="首帧"
               imageUrl={startAsset?.imageUrl}
-              prompt={prompts.startFramePrompt}
-              automaticPrompt={automatic.startFramePrompt}
-              onPromptChange={(value) =>
-                updatePrompt("startFramePrompt", value)
-              }
               onGenerate={() =>
                 openImages(prompts.startFramePrompt, "start-frame")
               }
               onOpen={() => startAsset && setLightbox(startAsset)}
+              onDownload={() => downloadFrame(startAsset, `shot-${shot.order}-start`)}
+              onEdit={() => editFramePrompt("start-frame-prompt")}
             />
-            <div className="vnext-frame-motion">
-              <span>START</span>
-              <i>→</i>
-              <p>{prompts.motionBridge}</p>
-              <i>→</i>
-              <span>END</span>
-            </div>
             <FrameCard
               kind="end"
               title="尾帧"
               imageUrl={endAsset?.imageUrl}
-              prompt={prompts.endFramePrompt}
-              automaticPrompt={automatic.endFramePrompt}
-              onPromptChange={(value) => updatePrompt("endFramePrompt", value)}
               onGenerate={() => openImages(prompts.endFramePrompt, "end-frame")}
               onOpen={() => endAsset && setLightbox(endAsset)}
+              onDownload={() => downloadFrame(endAsset, `shot-${shot.order}-end`)}
+              onEdit={() => editFramePrompt("end-frame-prompt")}
             />
           </div>
+          <p className="vnext-frame-motion"><b>动作衔接</b><span>{prompts.motionBridge}</span></p>
 
-          <PromptEditor
-            label="IMAGE PROMPT"
-            value={prompts.imagePrompt}
-            automaticValue={automatic.imagePrompt}
-            onChange={(value) => updatePrompt("imagePrompt", value)}
-          />
-          <button
-            type="button"
-            className="vnext-frame-generate-shot vf-button vf-button-secondary"
-            onClick={() => openImages(prompts.imagePrompt, "shot-image")}
-          >
-            生成 Shot 图片 →
-          </button>
-          <PromptEditor
-            label="VIDEO PROMPT"
-            value={prompts.videoPrompt}
-            automaticValue={automatic.videoPrompt}
-            onChange={(value) => updatePrompt("videoPrompt", value)}
-          />
-          <div className="vnext-frame-video-future">
-            <button type="button" disabled>
-              准备视频 →
-            </button>
-            <span>视频生成将在下一阶段接入</span>
-          </div>
-          <details className="vnext-frame-consistency">
-            <summary>CONSISTENCY · 一致性规则</summary>
+          <div className="vnext-frame-prompt-grid">
+            <PromptEditor key={`${shot.shotId}-start`} id="start-frame-prompt" label="START FRAME PROMPT" value={prompts.startFramePrompt} automaticValue={automatic.startFramePrompt} onChange={(value) => updatePrompt("startFramePrompt", value)} />
+            <PromptEditor key={`${shot.shotId}-end`} id="end-frame-prompt" label="END FRAME PROMPT" value={prompts.endFramePrompt} automaticValue={automatic.endFramePrompt} onChange={(value) => updatePrompt("endFramePrompt", value)} />
+            <div className="vnext-frame-prompt-cell">
+              <PromptEditor key={`${shot.shotId}-image`} label="IMAGE PROMPT" value={prompts.imagePrompt} automaticValue={automatic.imagePrompt} onChange={(value) => updatePrompt("imagePrompt", value)} />
+              <button type="button" className="vnext-frame-generate-shot" onClick={() => openImages(prompts.imagePrompt, "shot-image")}>生成 Shot 图片 →</button>
+            </div>
+            <div className="vnext-frame-prompt-cell">
+              <PromptEditor key={`${shot.shotId}-video`} label="VIDEO PROMPT" value={prompts.videoPrompt} automaticValue={automatic.videoPrompt} onChange={(value) => updatePrompt("videoPrompt", value)} />
+              <div className="vnext-frame-video-future"><button type="button" disabled>准备视频 →</button><span>视频生成将在下一阶段接入</span></div>
+            </div>
+          <section className="vnext-frame-consistency">
+            <h3>CONSISTENCY · 一致性规则</h3>
             <div>
               {Object.entries(prompts.consistencyRules).map(([key, rules]) => (
                 <section key={key}>
                   <h3>{key.toUpperCase()}</h3>
-                  <ul>
+                  <ul className="vnext-frame-rule-chips">
                     {rules.map((rule) => (
                       <li key={rule}>{rule}</li>
                     ))}
@@ -332,19 +326,21 @@ export default function FramePromptWorkspace({
                 </section>
               ))}
             </div>
-          </details>
-          <details className="vnext-frame-negative">
-            <summary>NEGATIVE PROMPT</summary>
+          </section>
+          <section className="vnext-frame-negative">
             <PromptEditor
-              label="排除内容"
+              key={`${shot.shotId}-negative`}
+              label="NEGATIVE PROMPT"
               value={prompts.negativePrompt}
               automaticValue={automatic.negativePrompt}
               onChange={(value) => updatePrompt("negativePrompt", value)}
               compact
             />
-          </details>
+            <div className="vnext-frame-negative-chips">{prompts.negativePrompt.split(",").map((item, index) => <span key={`${item}-${index}`}>{item.trim()}</span>)}</div>
+          </section>
+          </div>
         </main>
-        <VisualAssistant shot={shot} request={request} prompts={prompts} />
+        <VisualAssistant key={shot.shotId} shot={shot} request={request} prompts={prompts} onAction={assistantAction} onInstruction={(instruction) => updatePrompt("imagePrompt", `${prompts.imagePrompt}\n${instruction}`)} />
       </div>
 
       {lightbox ? (
