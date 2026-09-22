@@ -751,3 +751,387 @@
 @media (max-width: 1360px) { .vnext-frame-layout { grid-template-columns: 190px minmax(0,1fr); } .vnext-frame-assistant { position: static; grid-column: 1 / -1; max-height: none; } }
 @media (max-width: 900px) { .vnext-frame-layout { grid-template-columns: 1fr; } .vnext-frame-shot-nav { position: static; max-height: none; } .vnext-frame-header { align-items: flex-start; } .vnext-frame-header h1 small { display: block; margin: 5px 0 0; } }
 @media (max-width: 620px) { .vnext-frame-pair, .vnext-frame-prompt-grid { grid-template-columns: 1fr; } .vnext-frame-canvas > header h2 { white-space: normal; } }
+
+/* Phase 4.1.1: visual hierarchy and first-screen density */
+.vnext-frame-workspace {
+  background: #f8f8fc;
+  color: #252438;
+}
+.vnext-frame-layout {
+  grid-template-columns: 185px minmax(0, 1fr) 260px;
+  gap: 12px;
+}
+.vnext-frame-header { border-color: #e8e8ef; }
+.vnext-frame-shot-nav, .vnext-frame-assistant { top: 94px; max-height: calc(100vh - 108px); }
+.vnext-frame-shot-nav > header span,
+.vnext-frame-canvas > header span,
+.vnext-frame-card > header span { font-size: 9px; letter-spacing: .1em; }
+.vnext-frame-shot-nav button {
+  border-color: #edeaf3;
+  background: #fff;
+  min-height: 68px;
+  box-shadow: none;
+}
+.vnext-frame-shot-nav button:hover { border-color: #d9d1ee; box-shadow: 0 3px 10px rgba(49,37,98,.06); }
+.vnext-frame-shot-nav button.is-selected {
+  border-color: #e8dfff;
+  background: #f6f2ff;
+  box-shadow: none;
+}
+.vnext-frame-shot-nav button.is-selected::before {
+  content: "";
+  position: absolute;
+  inset: 8px auto 8px 0;
+  width: 3px;
+  border-radius: 0 3px 3px 0;
+  background: var(--vf-brand);
+}
+.vnext-frame-shot-nav button > i { background: #f3f2f8; }
+.vnext-frame-shot-nav strong { color: #88849b; font-size: 9px; font-weight: 600; }
+.vnext-frame-shot-nav strong { top: 8px; right: 8px; bottom: auto; font-size: 8px; }
+.vnext-frame-shot-nav button.is-selected strong { color: var(--vf-brand); }
+.vnext-frame-shot-nav em { overflow-wrap: anywhere; }
+.vnext-frame-canvas {
+  min-width: 0;
+  padding: 13px;
+  border-color: #e8e8ef;
+  background: #fff;
+  box-shadow: none;
+}
+.vnext-frame-canvas > header {
+  align-items: center;
+  min-height: 76px;
+  gap: 12px;
+  margin-bottom: 9px;
+  padding-bottom: 9px;
+  border-color: #efedf4;
+}
+.vnext-frame-shot-heading { min-width: 0; flex: 1 1 auto; }
+.vnext-frame-canvas > header h2 {
+  display: block;
+  max-width: 100%;
+  margin: 3px 0;
+  overflow: hidden;
+  font-size: 17px;
+  font-weight: 650;
+  line-height: 1.2;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.vnext-frame-canvas > header small { display: block; overflow: hidden; color: #77758a; font-size: 11px; line-height: 1.25; text-overflow: ellipsis; white-space: nowrap; }
+.vnext-frame-canvas > header p { max-width: 100%; margin-top: 2px; color: #77758a; font-size: 11px; line-height: 1.25; }
+.vnext-frame-canvas > header aside { align-self: center; }
+.vnext-frame-canvas > header aside { display: flex; align-items: center; gap: 6px; }
+.vnext-frame-canvas > header aside button { min-height: 26px; border-color: #e8e8ef; }
+.vnext-frame-pair { gap: 9px; }
+.vnext-frame-card { display: flex; min-width: 0; flex-direction: column; border-color: #e8e8ef; background: #fff; }
+.vnext-frame-card.is-end { border-color: #e8e8ef; }
+.vnext-frame-card > header { padding: 5px 10px 4px; line-height: 1.15; }
+.vnext-frame-card > header span { display: block; line-height: 1.2; }
+.vnext-frame-card h2 { margin-top: 2px; font-size: 13px; font-weight: 650; }
+.vnext-frame-preview {
+  height: 140px;
+  max-height: 140px;
+  aspect-ratio: auto;
+  border-color: #eeedf4;
+  background: #f8f8fc;
+}
+.vnext-frame-preview img { object-fit: contain; }
+.vnext-frame-preview > div { gap: 5px; padding: 10px; line-height: 1.2; }
+.vnext-frame-placeholder-mark {
+  display: grid;
+  width: 28px;
+  height: 28px;
+  place-items: center;
+  border: 1px solid #e5def8;
+  border-radius: 7px;
+  background: #fff;
+  color: var(--vf-brand);
+  font-size: 17px;
+}
+.vnext-frame-preview > div > b { color: #77758a; font-size: 11px; font-weight: 500; line-height: 1.3; }
+.vnext-frame-preview > div > button.vf-button { min-height: 27px; margin-top: 1px; padding: 4px 10px; border-color: #e2dafa; background: #fff; color: var(--vf-brand); font-size: 10px; line-height: 1.2; }
+.vnext-frame-card footer { min-height: 31px; padding: 4px 8px; }
+.vnext-frame-card footer button, .vnext-frame-card footer summary { min-height: 24px; padding: 3px 6px; border-color: transparent; background: transparent; font-size: 10px; line-height: 1.3; }
+.vnext-frame-card footer button:hover, .vnext-frame-card footer summary:hover { background: #f5f3fb; }
+.vnext-frame-card footer button:disabled { color: #b9b6c4; opacity: 1; cursor: not-allowed; }
+.vnext-frame-card footer button:first-child { background: #f2edff; font-weight: 650; }
+.vnext-frame-motion {
+  min-width: 0;
+  min-height: 28px;
+  margin: 7px 0 8px;
+  padding: 5px 8px;
+  border: 0;
+  background: #f7f5fc;
+}
+.vnext-frame-motion-flow { flex: none; color: #817a98; font-size: 9px; white-space: nowrap; }
+.vnext-frame-motion-flow i { margin: 0 3px; color: #a69cbe; font-size: 10px; }
+.vnext-frame-motion b { color: #6654a7; font-size: 9px; white-space: nowrap; }
+.vnext-frame-motion .vnext-frame-motion-copy { min-width: 0; color: #77758a; font-size: 10px; }
+.vnext-frame-prompt-grid { gap: 10px; }
+.vnext-frame-prompt-grid > .vnext-frame-prompt-editor,
+.vnext-frame-prompt-cell,
+.vnext-frame-consistency,
+.vnext-frame-negative {
+  padding: 10px 12px;
+  border-color: #e8e8ef;
+  border-radius: 9px;
+  transition: border-color 160ms ease, box-shadow 160ms ease;
+}
+.vnext-frame-prompt-grid > .vnext-frame-prompt-editor:hover,
+.vnext-frame-prompt-cell:hover,
+.vnext-frame-consistency:hover,
+.vnext-frame-negative:hover { border-color: #dcd5ee; box-shadow: 0 3px 10px rgba(49,37,98,.045); }
+.vnext-frame-prompt-editor > header { align-items: center; }
+.vnext-frame-prompt-title { min-width: 0; }
+.vnext-frame-prompt-title > span { color: #9488b0; font-size: 9px; font-weight: 650; letter-spacing: .09em; }
+.vnext-frame-prompt-editor h3 { margin-top: 2px; color: #302d41; font-size: 14px; font-weight: 650; }
+.vnext-frame-prompt-editor nav { flex: none; gap: 3px; }
+.vnext-frame-prompt-editor nav button, .vnext-frame-prompt-editor nav summary { min-height: 22px; padding: 3px 4px; border-color: transparent; background: transparent; color: #6f687e; font-size: 10px; line-height: 1.3; }
+.vnext-frame-prompt-editor nav button:hover, .vnext-frame-prompt-editor nav summary:hover { background: #f4f1fb; color: var(--vf-brand); }
+.vnext-frame-prompt-editor p { max-height: 48px; margin-top: 9px; overflow: auto; color: #5b5869; font-size: 12px; line-height: 1.6; overflow-wrap: anywhere; }
+.vnext-frame-prompt-editor textarea { font-size: 12px; line-height: 1.55; }
+.vnext-frame-prompt-cell .vnext-frame-prompt-editor p { max-height: 44px; }
+.vnext-frame-generate-shot { min-height: 25px; margin-top: 7px; line-height: 1.3; }
+.vnext-frame-video-future { margin-top: 7px; }
+.vnext-frame-video-future button { min-height: 25px; line-height: 1.3; }
+.vnext-frame-consistency > h3 { margin-bottom: 7px; color: #302d41; font-size: 12px; }
+.vnext-frame-consistency > div { gap: 4px; }
+.vnext-frame-consistency section { min-width: 0; padding: 4px 6px; background: #f8f8fb; }
+.vnext-frame-consistency section h3 { flex-basis: 74px; margin-top: 3px; color: #8476ab; font-size: 9px; }
+.vnext-frame-rule-chips { gap: 4px; }
+.vnext-frame-rule-chips li, .vnext-frame-negative-chips span { border: 0; border-radius: 5px; background: #f1f1f6; color: #625f70; font-size: 10px; line-height: 1.35; overflow-wrap: anywhere; }
+.vnext-frame-rule-chips li:hover, .vnext-frame-negative-chips span:hover { background: #eae6f5; }
+.vnext-frame-negative-chips { gap: 5px; }
+.vnext-frame-assistant { min-width: 0; padding: 13px; border-color: #e8e8ef; background: #fff; box-shadow: 0 4px 15px rgba(48,39,87,.045); }
+.vnext-frame-assistant > header { padding-bottom: 10px; border-color: #efedf4; }
+.vnext-frame-assistant > header span { color: var(--vf-brand); font-size: 11px; }
+.vnext-frame-assistant > header small { display: block; margin-top: 7px; color: #8a8798; font-size: 10px; }
+.vnext-frame-assistant > header h2 { margin: 1px 0 5px; font-size: 17px; }
+.vnext-frame-assistant > header p { display: -webkit-box; overflow: hidden; -webkit-box-orient: vertical; -webkit-line-clamp: 3; }
+.vnext-frame-assistant > section { padding: 10px 0; border-color: #efedf4; }
+.vnext-frame-assistant h3 { color: #302d41; font-size: 12px; }
+.vnext-frame-suggestions li { line-height: 1.45; }
+.vnext-frame-quick-actions > div { gap: 5px; }
+.vnext-frame-quick-actions button { padding: 6px 5px; border-color: #e7e1f5; background: #faf8ff; font-size: 10px; }
+.vnext-frame-quick-actions button:hover { background: #f0eaff; }
+.vnext-frame-assistant-input { padding-top: 10px; }
+.vnext-frame-assistant-input textarea { resize: none; background: #fcfbfe; }
+@media (max-width: 1280px) {
+  .vnext-frame-layout { grid-template-columns: 180px minmax(0, 1fr) 248px; }
+}
+@media (max-width: 1100px) {
+  .vnext-frame-layout { grid-template-columns: 180px minmax(0, 1fr); }
+  .vnext-frame-assistant { position: static; grid-column: 1 / -1; max-height: none; }
+}
+@media (max-width: 900px) {
+  .vnext-frame-layout { grid-template-columns: minmax(0, 1fr); }
+  .vnext-frame-shot-nav { position: static; max-height: none; }
+}
+
+/* Phase 4.2 — reference matched presentation, scoped to this workspace. */
+.vf-frame-mode { background: #fff; }
+.vf-frame-mode .os-vf-app-main { position: relative; background: #fff; }
+.vf-frame-mode .os-vf-top-header { min-height: 44px; padding: 7px 160px 7px 20px; border-color: #e8eaf2; }
+.vf-frame-mode .os-vf-header-title h1,
+.vf-frame-mode .os-vf-header-title p,
+.vf-frame-mode .os-vf-global-search,
+.vf-frame-mode .os-vf-service-state,
+.vf-frame-mode .os-vf-team-state,
+.vf-frame-mode .os-vf-user,
+.vf-frame-mode .os-vf-workflow-bar { display: none; }
+.vf-frame-mode .os-vf-breadcrumb { margin: 0; font-size: 11px; }
+.vf-frame-mode .os-vf-global-save { white-space: nowrap; font-size: 11px; }
+.vf-frame-mode .os-vf-workspace { padding: 0; }
+.vf-frame-mode .vnext-frame-workspace { max-width: none; padding: 0; background: #fff; }
+.vf-frame-mode .vnext-frame-header { height: 0; min-height: 0; padding: 0; border: 0; }
+.vf-frame-mode .vnext-frame-header > div,
+.vf-frame-mode .vnext-frame-header > aside > span { display: none; }
+.vf-frame-mode .vnext-frame-header > aside > button {
+  position: absolute;
+  z-index: 2;
+  top: 5px;
+  right: 16px;
+  min-height: 34px;
+  padding: 7px 17px;
+  border-radius: 7px;
+  font-size: 11px;
+}
+.vf-frame-mode .vnext-frame-flow {
+  min-height: 60px;
+  justify-content: center;
+  gap: clamp(10px, 2vw, 26px);
+  margin: 0;
+  padding: 7px 12px;
+  border-bottom: 1px solid #e8eaf2;
+  background: #fff;
+}
+.vf-frame-mode .vnext-frame-flow > span { gap: 8px; color: #5c6579; }
+.vf-frame-mode .vnext-frame-flow > span > b {
+  display: grid;
+  width: 28px;
+  height: 28px;
+  place-items: center;
+  border-radius: 50%;
+  background: #f2f4f9;
+  color: #66728a;
+  font-size: 11px;
+}
+.vf-frame-mode .vnext-frame-flow > span > span { display: grid; gap: 1px; }
+.vf-frame-mode .vnext-frame-flow strong { font-size: 11px; font-weight: 600; }
+.vf-frame-mode .vnext-frame-flow small { font-size: 9px; }
+.vf-frame-mode .vnext-frame-flow > span.is-current { padding: 0; background: transparent; }
+.vf-frame-mode .vnext-frame-flow > span.is-current > b { background: #6554e8; color: #fff; }
+.vf-frame-mode .vnext-frame-flow > span.is-current strong { color: #5b4bdc; }
+.vf-frame-mode .vnext-frame-flow i { margin-left: clamp(4px, 1vw, 15px); color: #a4a6b5; font-size: 12px; }
+.vf-frame-mode .vnext-frame-layout {
+  grid-template-columns: 208px minmax(0, 1fr) 292px;
+  gap: 0;
+  align-items: stretch;
+}
+.vf-frame-mode .vnext-frame-shot-nav {
+  top: 104px;
+  max-height: calc(100vh - 104px);
+  padding: 12px 9px;
+  border-right: 1px solid #e8eaf2;
+  background: #fff;
+}
+.vf-frame-mode .vnext-frame-shot-nav > header { padding: 3px 2px 10px; }
+.vf-frame-mode .vnext-frame-shot-nav h2 { margin: 0; font-size: 14px; }
+.vf-frame-mode .vnext-frame-shot-nav h2 small { font-size: 11px; font-weight: 500; }
+.vf-frame-mode .vnext-frame-shot-nav > div { gap: 5px; }
+.vf-frame-mode .vnext-frame-shot-nav button {
+  grid-template-columns: 56px minmax(0, 1fr);
+  gap: 7px;
+  min-height: 79px;
+  padding: 5px 6px;
+  border: 1px solid #e8eaf2;
+  border-radius: 8px;
+}
+.vf-frame-mode .vnext-frame-shot-nav button.is-selected { border-color: #9586fb; background: #f8f6ff; }
+.vf-frame-mode .vnext-frame-shot-nav button.is-selected::before { display: none; }
+.vf-frame-mode .vnext-frame-shot-nav button > i { width: 56px; height: 59px; background: #f2f3f8; }
+.vf-frame-mode .vnext-frame-shot-nav button > span { display: flex; min-width: 0; flex-direction: column; align-items: flex-start; }
+.vf-frame-mode .vnext-frame-shot-nav b { font-size: 12px; }
+.vf-frame-mode .vnext-frame-shot-nav small { font-size: 10px; }
+.vf-frame-mode .vnext-frame-shot-nav em { max-width: 100%; margin-top: 1px; font-size: 10px; -webkit-line-clamp: 1; }
+.vf-frame-mode .vnext-frame-shot-nav strong { position: absolute; top: auto; right: 7px; bottom: 5px; max-width: 76px; margin: 0; overflow: hidden; padding: 2px 5px; border-radius: 5px; background: #f1f2f7; font-size: 9px; line-height: 1.2; text-overflow: ellipsis; white-space: nowrap; }
+.vf-frame-mode .vnext-frame-shot-nav button.is-selected strong { background: #ebe7ff; }
+.vf-frame-mode .vnext-frame-canvas { padding: 14px 20px 26px; border: 0; border-radius: 0; box-shadow: none; }
+.vf-frame-mode .vnext-frame-canvas > header { min-height: 64px; margin-bottom: 8px; padding-bottom: 10px; }
+.vf-frame-mode .vnext-frame-canvas > header > div > span { display: none; }
+.vf-frame-mode .vnext-frame-canvas > header h2 { font-size: 17px; }
+.vf-frame-mode .vnext-frame-canvas > header small { display: none; }
+.vf-frame-mode .vnext-frame-canvas > header p { margin-top: 5px; color: #727b90; font-size: 11px; }
+.vf-frame-mode .vnext-frame-canvas > header aside { gap: 7px; }
+.vf-frame-mode .vnext-frame-canvas > header aside span,
+.vf-frame-mode .vnext-frame-canvas > header aside button { padding: 7px 9px; border: 0; border-radius: 6px; background: #f4f5f9; color: #50596b; font-size: 10px; white-space: nowrap; }
+.vf-frame-mode .vnext-frame-pair { gap: 12px; }
+.vf-frame-mode .vnext-frame-card { border-color: #e8eaf2; border-radius: 8px; }
+.vf-frame-mode .vnext-frame-card > header { display: flex; align-items: center; gap: 7px; padding: 7px 9px; }
+.vf-frame-mode .vnext-frame-card > header span { display: grid; width: 24px; height: 24px; place-items: center; border-radius: 6px; background: #f0edff; color: #6653e6; font-size: 13px; }
+.vf-frame-mode .vnext-frame-card h2 { margin: 0; font-size: 11px; }
+.vf-frame-mode .vnext-frame-card h2 small { color: #687085; font-size: 10px; }
+.vf-frame-mode .vnext-frame-preview {
+  height: clamp(190px, 22.2vh, 245px);
+  max-height: none;
+  margin: 0 7px;
+  border: 0;
+  border-radius: 6px;
+  background: #f3f4f8;
+}
+.vf-frame-mode .vnext-frame-preview img { object-fit: contain; }
+.vf-frame-mode .vnext-frame-preview > div { gap: 9px; }
+.vf-frame-mode .vnext-frame-placeholder-mark { width: 38px; height: 38px; font-size: 21px; }
+.vf-frame-mode .vnext-frame-preview > div > b { font-size: 12px; }
+.vf-frame-mode .vnext-frame-preview > div > button.vf-button { min-height: 30px; padding: 6px 12px; font-size: 11px; }
+.vf-frame-mode .vnext-frame-card footer { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)) 40px; gap: 5px; padding: 7px; }
+.vf-frame-mode .vnext-frame-card footer button,
+.vf-frame-mode .vnext-frame-card footer summary { display: flex; min-height: 26px; align-items: center; justify-content: center; gap: 5px; padding: 4px; border: 0; border-radius: 5px; background: #f4f5fa; color: #4c566d; font-size: 10px; line-height: 1.2; white-space: nowrap; }
+.vf-frame-mode .vnext-frame-card footer button:first-child { background: #f4f5fa; color: #4c566d; }
+.vf-frame-mode .vnext-frame-card footer button:disabled { color: #a8afc0; }
+.vf-frame-mode .vnext-frame-card footer details { min-width: 0; }
+.vf-frame-mode .vnext-frame-card footer summary { height: 100%; }
+.vf-frame-mode .vnext-frame-motion { min-height: 24px; margin: 5px 0 8px; padding: 4px 8px; background: #fafaff; }
+.vf-frame-mode .vnext-frame-prompt-grid { gap: 10px 12px; }
+.vf-frame-mode .vnext-frame-prompt-grid > .vnext-frame-prompt-editor,
+.vf-frame-mode .vnext-frame-prompt-cell,
+.vf-frame-mode .vnext-frame-consistency,
+.vf-frame-mode .vnext-frame-negative { padding: 10px 11px; border-color: #e8eaf2; border-radius: 8px; box-shadow: none; }
+.vf-frame-mode .vnext-frame-prompt-editor > header { align-items: center; }
+.vf-frame-mode .vnext-frame-prompt-title { display: flex; min-width: 0; align-items: center; gap: 6px; }
+.vf-frame-mode .vnext-frame-prompt-title > span { display: grid; flex: 0 0 18px; width: 18px; height: 18px; place-items: center; border-radius: 5px; background: #f0edff; color: #6653e6; font-size: 11px; }
+.vf-frame-mode .vnext-frame-prompt-editor h3 { overflow: hidden; margin: 0; font-size: 13px; text-overflow: ellipsis; white-space: nowrap; }
+.vf-frame-mode .vnext-frame-prompt-editor h3 small { color: #7e8595; font-size: 10px; font-weight: 400; }
+.vf-frame-mode .vnext-frame-prompt-editor nav button,
+.vf-frame-mode .vnext-frame-prompt-editor nav summary { min-height: 22px; padding: 3px 4px; color: #858b9b; font-size: 10px; }
+.vf-frame-mode .vnext-frame-prompt-editor p {
+  max-height: 80px;
+  margin-top: 9px;
+  overflow: hidden;
+  color: #515a6c;
+  font-size: 13px;
+  line-height: 1.5;
+  mask-image: linear-gradient(#000 75%, transparent);
+}
+.vf-frame-mode .vnext-frame-prompt-grid > .vnext-frame-prompt-editor p { max-height: 100px; }
+.vf-frame-mode .vnext-frame-prompt-cell .vnext-frame-prompt-editor p { max-height: 78px; }
+.vf-frame-mode .vnext-frame-prompt-editor:focus-within p { overflow: auto; mask-image: none; }
+.vf-frame-mode .vnext-frame-generate-shot,
+.vf-frame-mode .vnext-frame-video-future { margin-top: 7px; }
+.vf-frame-mode .vnext-frame-generate-shot,
+.vf-frame-mode .vnext-frame-video-future button { min-height: 24px; font-size: 9px; }
+.vf-frame-mode .vnext-frame-consistency > h3 { font-size: 11px; }
+.vf-frame-mode .vnext-frame-consistency > div { max-height: 115px; gap: 3px; }
+.vf-frame-mode .vnext-frame-consistency section { padding: 3px 5px; }
+.vf-frame-mode .vnext-frame-negative-chips { max-height: 115px; }
+.vf-frame-mode .vnext-frame-assistant {
+  position: sticky;
+  top: 104px;
+  display: flex;
+  height: calc(100vh - 104px);
+  max-height: calc(100vh - 104px);
+  padding: 14px 12px;
+  overflow: auto;
+  border: 0;
+  border-left: 1px solid #e8eaf2;
+  border-radius: 0;
+  box-shadow: none;
+}
+.vf-frame-mode .vnext-frame-assistant > header { display: flex; gap: 8px; padding-bottom: 12px; }
+.vf-frame-mode .vnext-frame-assistant-mark { display: grid; flex: 0 0 30px; height: 30px; place-items: center; border-radius: 7px; background: #f0edff; color: #6553e6; font-size: 16px; }
+.vf-frame-mode .vnext-frame-assistant > header h2 { margin: 0; font-size: 14px; }
+.vf-frame-mode .vnext-frame-assistant > header h2 small { display: inline-block; margin: 0; padding: 2px 5px; border-radius: 4px; background: #f0edff; color: #6553e6; font-size: 9px; vertical-align: middle; }
+.vf-frame-mode .vnext-frame-assistant > header p { margin: 3px 0 0; font-size: 10px; }
+.vf-frame-mode .vnext-frame-assistant-context { margin-top: 10px; padding: 11px; border: 0; border-radius: 8px; background: #f6f7fc; }
+.vf-frame-mode .vnext-frame-assistant-context small { font-size: 9px; }
+.vf-frame-mode .vnext-frame-assistant-context p { margin: 5px 0; font-size: 11px; line-height: 1.5; }
+.vf-frame-mode .vnext-frame-assistant-context > span { color: #8790a1; font-size: 9px; }
+.vf-frame-mode .vnext-frame-assistant-context h3 { margin: 10px 0 5px; font-size: 10px; }
+.vf-frame-mode .vnext-frame-assistant-context ol { display: grid; gap: 4px; margin: 0; padding-left: 19px; }
+.vf-frame-mode .vnext-frame-assistant-context li { font-size: 10px; line-height: 1.45; }
+.vf-frame-mode .vnext-frame-quick-actions { padding: 9px 0; border: 0; }
+.vf-frame-mode .vnext-frame-quick-actions button { min-height: 29px; padding: 5px; border: 0; background: #f2efff; font-size: 10px; }
+.vf-frame-mode .vnext-frame-quick-actions small { display: none; }
+.vf-frame-mode .vnext-frame-assistant-input { margin-top: 0; padding: 9px 0; }
+.vf-frame-mode .vnext-frame-assistant-input label { margin: 0; font-size: 9px; }
+.vf-frame-mode .vnext-frame-assistant-input textarea { min-height: 40px; height: 42px; padding: 7px; font-size: 10px; }
+.vf-frame-mode .vnext-frame-assistant-input button { min-height: 27px; padding: 5px; font-size: 9px; }
+.vf-frame-mode .vnext-frame-reference-images { padding: 10px 0 0; border-top: 1px solid #e8eaf2; }
+.vf-frame-mode .vnext-frame-reference-images h3 { margin: 0 0 8px; font-size: 11px; }
+.vf-frame-mode .vnext-frame-reference-images h3 small { font-size: 9px; font-weight: 400; }
+.vf-frame-mode .vnext-frame-reference-images > div { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 5px; }
+.vf-frame-mode .vnext-frame-reference-images > div > span { position: relative; height: 54px; overflow: hidden; border-radius: 5px; background: #f3f4f8; }
+.vf-frame-mode .vnext-frame-reference-images img { object-fit: cover; }
+.vf-frame-mode .vnext-frame-reference-images p { margin: 0; padding: 8px 9px; border: 1px dashed #e1e3ee; border-radius: 6px; color: #8c93a3; font-size: 10px; }
+@media (max-width: 1320px) {
+  .vf-frame-mode .vnext-frame-layout { grid-template-columns: 190px minmax(0, 1fr) 270px; }
+}
+@media (max-width: 1100px) {
+  .vf-frame-mode .vnext-frame-layout { grid-template-columns: 175px minmax(0, 1fr); }
+  .vf-frame-mode .vnext-frame-assistant { position: static; grid-column: 1 / -1; height: auto; max-height: none; border-top: 1px solid #e8eaf2; border-left: 0; }
+}
+@media (max-width: 900px) {
+  .vf-frame-mode .vnext-frame-layout { grid-template-columns: minmax(0, 1fr); }
+  .vf-frame-mode .vnext-frame-shot-nav { position: static; max-height: none; }
+}

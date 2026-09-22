@@ -29,8 +29,9 @@ test("Test B: AI processing feedback is honest and context-specific",()=>{
 });
 
 test("Test C: navigation active state is accessible and visible",()=>{
-  assert.match(sidebar,/aria-current=\{active === item\.id \? "page"/);
-  assert.match(sidebar,/className=\{active === item\.id \? "nav-active"/);
+  assert.match(sidebar,/aria-current=\{globalActive === item\.id \? "page"/);
+  assert.match(sidebar,/globalActive === item\.id \? " nav-active"/);
+  assert.match(sidebar,/active : "projects"/);
   assert.match(css,/nav button\.nav-active:after/);
 });
 

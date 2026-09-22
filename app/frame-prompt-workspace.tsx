@@ -63,6 +63,13 @@ function newestAsset(
     )[0];
 }
 
+const shotTitles: Record<string, string> = {
+  "Attention Shot": "开场钩子",
+  "Action Shot": "动作展示",
+  "Proof Shot": "产品验证",
+  "CTA Shot": "收尾行动",
+};
+
 export default function FramePromptWorkspace({
   project,
   request,
@@ -250,14 +257,19 @@ export default function FramePromptWorkspace({
       </header>
 
       <nav className="vnext-frame-flow" aria-label="画面提示词工作流">
-        {["脚本创作", "AI 分镜导演", "画面提示词", "视觉创作", "视频生成"].map(
-          (item, index) => (
-            <span key={item} className={index === 2 ? "is-current" : ""}>
-              {item}
-              {index < 4 ? <i>→</i> : null}
-            </span>
-          ),
-        )}
+        {[
+          ["脚本创作", "Script"],
+          ["AI 分镜导演", "Director"],
+          ["画面提示词", "Frame Prompt"],
+          ["视觉创作", "Images"],
+          ["视频生成", "Video"],
+        ].map(([label, english], index) => (
+          <span key={label} className={index === 2 ? "is-current" : ""} aria-current={index === 2 ? "step" : undefined}>
+            <b>{String(index + 1).padStart(2, "0")}</b>
+            <span><strong>{label}</strong><small>{english}</small></span>
+            {index < 4 ? <i aria-hidden="true">→</i> : null}
+          </span>
+        ))}
       </nav>
 
       <div className="vnext-frame-layout">
@@ -269,11 +281,11 @@ export default function FramePromptWorkspace({
         />
         <main className="vnext-frame-canvas">
           <header>
-            <div>
+            <div className="vnext-frame-shot-heading">
               <span>SHOT {String(shot.order).padStart(2, "0")}</span>
-              <h2>Shot {String(shot.order).padStart(2, "0")} — {shot.visualDescription}</h2>
+              <h2 title={shot.visualDescription}>Shot {String(shot.order).padStart(2, "0")} — {shotTitles[shot.shotType] || shot.shotType}</h2>
               <small>{shot.startTime.toFixed(1)}–{shot.endTime.toFixed(1)}s · {shot.framing} · {shot.cameraAngle}</small>
-              <p>{shot.proofRequirement || shot.productAction || prompts.visualGoal}</p>
+              <p title={shot.visualDescription}>{shot.visualDescription}</p>
             </div>
             <aside><span>{shot.duration.toFixed(1)} 秒</span><button type="button" onClick={() => onNavigate("director")}>编辑分镜</button></aside>
           </header>
@@ -299,7 +311,11 @@ export default function FramePromptWorkspace({
               onEdit={() => editFramePrompt("end-frame-prompt")}
             />
           </div>
-          <p className="vnext-frame-motion"><b>动作衔接</b><span>{prompts.motionBridge}</span></p>
+          <div className="vnext-frame-motion" title={prompts.motionBridge}>
+            <span className="vnext-frame-motion-flow">Start Frame <i>→</i> Motion <i>→</i> End Frame</span>
+            <b>动作桥接 / Motion Bridge</b>
+            <span className="vnext-frame-motion-copy">{prompts.motionBridge}</span>
+          </div>
 
           <div className="vnext-frame-prompt-grid">
             <PromptEditor key={`${shot.shotId}-start`} id="start-frame-prompt" label="START FRAME PROMPT" value={prompts.startFramePrompt} automaticValue={automatic.startFramePrompt} onChange={(value) => updatePrompt("startFramePrompt", value)} />
@@ -340,7 +356,7 @@ export default function FramePromptWorkspace({
           </section>
           </div>
         </main>
-        <VisualAssistant key={shot.shotId} shot={shot} request={request} prompts={prompts} onAction={assistantAction} onInstruction={(instruction) => updatePrompt("imagePrompt", `${prompts.imagePrompt}\n${instruction}`)} />
+        <VisualAssistant key={shot.shotId} shot={shot} request={request} prompts={prompts} referenceImages={projectAssets} onAction={assistantAction} onInstruction={(instruction) => updatePrompt("imagePrompt", `${prompts.imagePrompt}\n${instruction}`)} />
       </div>
 
       {lightbox ? (

@@ -15,8 +15,7 @@ export default function FrameShotNavigator({
   return (
     <nav className="vnext-frame-shot-nav" aria-label="画面提示词分镜导航">
       <header>
-        <span>DIRECTOR SHOTS</span>
-        <h2>镜头</h2>
+        <h2>镜头列表 <small>({shots.length})</small></h2>
       </header>
       <div>
         {shots.map((shot, index) => {
@@ -41,9 +40,9 @@ export default function FrameShotNavigator({
                 <small>
                   {shot.startTime.toFixed(1)}–{shot.endTime.toFixed(1)}s
                 </small>
-                <em>{shot.visualDescription}</em>
+                <em title={shot.visualDescription}>{shot.visualDescription}</em>
               </span>
-              <strong>{index === selected ? "Current" : imageUrl ? "Has Image" : shot.visualDescription?.trim() ? "Ready" : "Needs Prompt"}</strong>
+              <strong>{index === selected ? "Current" : imageUrl ? "Has Image" : shot.status}</strong>
             </button>
           );
         })}

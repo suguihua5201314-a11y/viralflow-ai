@@ -17,10 +17,10 @@ test("A-D Dashboard is the default and every renamed entry keeps a real ActiveVi
   }
   for (const label of ["AI 创作工作台", "爆款洞察", "创意复刻", "内容合规", "视频洞察", "AI分镜导演工作台", "AI配音工作台", "产品知识库", "创意案例库", "内容监测", "脚本历史", "数据中心"]) {
     assert.ok(navigation.includes(label));
-    assert.ok(sidebar.includes(label));
   }
   assert.ok(navigation.includes("项目素材库"));
-  assert.ok(sidebar.includes("项目素材库"));
+  for (const label of ["首页", "项目", "资产库", "爆款洞察", "创意复刻", "内容合规", "AI 语音"]) assert.ok(sidebar.includes(`label: "${label}"`));
+  assert.doesNotMatch(sidebar, /label: "脚本创作"|label: "画面提示词"|label: "脚本历史"/);
 });
 
 test("E-G recent work, metrics and global search use existing state sources", () => {

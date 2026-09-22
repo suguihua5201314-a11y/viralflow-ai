@@ -1123,6 +1123,146 @@ body { margin: 0; background: var(--vf-bg); color: var(--vf-text); }
 /* Shared action hierarchy. Product flows opt into one of these variants instead of
    defining page-specific primary buttons. */
 .os-app-shell button:not(.vf-button) { font-size: max(14px, 1em); }
+
+/* Shared product navigation. The project pipeline lives in the app header. */
+.os-app-shell .vf-global-sidebar {
+  flex: 0 0 194px;
+  width: 194px;
+  height: 100dvh;
+  gap: 0;
+  padding: 16px 17px 17px;
+  border-right: 1px solid #e8ebf2;
+  background: #fff;
+  box-shadow: none;
+}
+.os-app-shell .vf-global-brand {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  min-height: 34px;
+  margin: 0 0 25px;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  text-align: left;
+}
+.os-app-shell .vf-global-brand:hover { border: 0; background: transparent; }
+.os-app-shell .vf-global-brand .os-vf-brand-mark {
+  display: grid;
+  flex: 0 0 34px;
+  width: 34px;
+  height: 34px;
+  min-width: 34px;
+  min-height: 34px;
+  place-items: center;
+  padding: 0;
+  border-radius: 9px;
+  background: var(--vf-brand);
+  color: #fff;
+  font-size: 15px;
+  font-weight: 700;
+  line-height: 1;
+  box-shadow: none;
+  transform: none;
+}
+.vf-global-brand-copy,
+.vf-global-team-copy { display: grid; min-width: 0; gap: 1px; }
+.os-app-shell .vf-global-brand-copy strong {
+  overflow: hidden;
+  color: #252b39;
+  font-size: 16px;
+  font-weight: 700;
+  line-height: 1.2;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.os-app-shell .vf-global-brand-copy small {
+  margin: 0;
+  color: #7a8499;
+  font-size: 9px;
+  line-height: 1.2;
+  white-space: nowrap;
+}
+.vf-global-sidebar-main { min-height: 0; overflow-y: auto; scrollbar-width: thin; }
+.vf-global-nav { display: grid; gap: 2px; }
+.os-app-shell .vf-global-sidebar .vf-global-nav-item {
+  display: flex;
+  width: 100%;
+  height: 42px;
+  min-height: 42px;
+  align-items: center;
+  gap: 14px;
+  padding: 0 9px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: #303c51;
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 1.2;
+  text-align: left;
+  white-space: nowrap;
+  box-shadow: none;
+}
+.os-app-shell .vf-global-sidebar .vf-global-nav-item svg {
+  flex: 0 0 18px;
+  width: 18px;
+  height: 18px;
+  color: #35445f;
+}
+.os-app-shell .vf-global-sidebar .vf-global-nav-item:hover:not(:disabled) { background: #f7f7fc; color: #5145c9; }
+.os-app-shell .vf-global-sidebar .vf-global-nav-item:hover:not(:disabled) svg { color: var(--vf-brand); }
+.os-app-shell .vf-global-sidebar .vf-global-nav-item.nav-active,
+.os-app-shell .vf-global-sidebar .vf-global-nav-item[aria-current="page"] {
+  background: var(--vf-brand-soft);
+  color: var(--vf-brand);
+}
+.os-app-shell .vf-global-sidebar .vf-global-nav-item.nav-active svg { color: var(--vf-brand); }
+.os-app-shell .vf-global-sidebar .vf-global-nav-item:disabled {
+  opacity: 1;
+  color: #707b90;
+  cursor: not-allowed;
+}
+.os-app-shell .vf-global-sidebar .vf-global-nav-item:disabled svg { color: #707b90; }
+.vf-global-tools { margin-top: 27px; }
+.os-app-shell .vf-global-tools h2 {
+  margin: 0 0 9px 9px;
+  color: #7a8499;
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1.4;
+}
+.vf-global-sidebar-bottom { flex: none; margin-top: auto; }
+.vf-global-team-divider { height: 1px; margin: 11px 0 13px; background: #e8ebf2; }
+.os-app-shell .vf-global-team {
+  display: flex;
+  width: 100%;
+  min-height: 40px;
+  align-items: center;
+  gap: 10px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  text-align: left;
+}
+.os-app-shell .vf-global-team:hover { border: 0; background: transparent; }
+.vf-global-team-avatar {
+  display: grid;
+  flex: 0 0 36px;
+  width: 36px;
+  height: 36px;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--vf-brand-soft);
+  color: #414a67;
+  font-size: 12px;
+  font-weight: 600;
+}
+.os-app-shell .vf-global-team-copy strong { color: #283042; font-size: 13px; font-weight: 650; line-height: 1.25; }
+.os-app-shell .vf-global-team-copy small { color: #7a8499; font-size: 11px; line-height: 1.25; }
 .os-app-shell .vf-button {
   display: inline-flex;
   align-items: center;

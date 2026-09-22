@@ -9,11 +9,12 @@ const navigation = read("../app/navigation.ts");
 const workspace = read("../app/project-asset-workspace.tsx");
 const assets = read("../app/image-assets.ts");
 
-test("Step 7.0-C.3: Project Sidebar 使用统一中文产品语言", () => {
-  for (const label of ["爆款研究", "内容策划", "脚本创作", "AI分镜导演", "视觉创作", "素材管理", "声音制作", "项目大脑"]) {
-    assert.ok(sidebar.includes(`label:"${label}"`), label);
+test("Global Sidebar 使用产品级导航且保留项目工作流页面", () => {
+  for (const label of ["首页", "项目", "资产库", "爆款洞察", "创意复刻", "内容合规", "AI 语音"]) {
+    assert.ok(sidebar.includes(`label: "${label}"`), label);
   }
-  assert.match(sidebar, /AI短视频创作工作台/);
+  assert.doesNotMatch(sidebar, /label: "脚本创作"|label: "AI分镜导演"|label: "画面提示词"/);
+  assert.match(sidebar, /Turn Ideas into Viral Videos/);
   assert.match(header, /内容管理/);
 });
 

@@ -20,6 +20,8 @@ export default function PromptEditor({
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(value);
   const [copied, setCopied] = useState(false);
+  const promptTitle = label === "START FRAME PROMPT" ? "Start Frame Prompt" : label === "END FRAME PROMPT" ? "End Frame Prompt" : label === "IMAGE PROMPT" ? "Image Prompt" : label === "VIDEO PROMPT" ? "Video Prompt" : "Negative Prompt";
+  const promptTitleZh = label === "START FRAME PROMPT" ? "首帧提示词" : label === "END FRAME PROMPT" ? "尾帧提示词" : label === "IMAGE PROMPT" ? "图片通用提示词" : label === "VIDEO PROMPT" ? "视频提示词" : "反向提示词";
 
   function startEditing() {
     setDraft(value);
@@ -47,7 +49,7 @@ export default function PromptEditor({
       className={`vnext-frame-prompt-editor${compact ? " is-compact" : ""}`}
     >
       <header>
-        <h3>{label}</h3>
+        <div className="vnext-frame-prompt-title"><span aria-hidden="true">✧</span><h3>{promptTitleZh} <small>({promptTitle})</small></h3></div>
         <nav aria-label={`${label}操作`}>
           <button type="button" onClick={editing ? save : startEditing}>
             {editing ? "保存" : "编辑"}

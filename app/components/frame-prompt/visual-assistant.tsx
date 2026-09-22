@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import { useState } from "react";
 import type { DirectorRequest } from "../../director-core";
 import type { WorkspaceShot } from "../../director-workspace";
@@ -9,12 +10,14 @@ export default function VisualAssistant({
   shot,
   request,
   prompts,
+  referenceImages,
   onAction,
   onInstruction,
 }: {
   shot: WorkspaceShot;
   request: DirectorRequest;
   prompts: FramePromptBundle;
+  referenceImages: Array<{ id: string; imageUrl: string; prompt: string }>;
   onAction: (action: "prompt" | "consistency" | "style" | "variants") => void;
   onInstruction: (instruction: string) => void;
 }) {
@@ -25,30 +28,27 @@ export default function VisualAssistant({
       ? "保持固定机位，突出产品动作。"
       : `镜头仅执行 ${shot.cameraMovement}，避免额外运动。`,
     "让动作从首帧自然延续到尾帧。",
+    ...(shot.proofRequirement ? [shot.proofRequirement] : []),
   ];
 
   return (
     <aside className="vnext-frame-assistant" aria-label="AI 画面助手">
       <header>
-        <span>✦ AI 画面助手</span>
-        <h2>Shot {String(shot.order).padStart(2, "0")}</h2>
-        <p>{prompts.visualGoal}</p>
+        <span className="vnext-frame-assistant-mark" aria-hidden="true">✦</span>
+        <div><h2>AI 视觉助手 <small>Beta</small></h2><p>基于当前导演分镜的画面建议</p></div>
       </header>
-      <section>
-        <h3>视觉策略</h3>
-        <p>{request.context.creativeMode} · {shot.framing} · {shot.cameraAngle}</p>
-        <small>{shot.proofRequirement || shot.productAction}</small>
-      </section>
-      <section className="vnext-frame-suggestions">
-        <h3>当前镜头建议</h3>
+      <section className="vnext-frame-assistant-context">
+        <small>Current Shot · Shot {String(shot.order).padStart(2, "0")}</small>
+        <p>{prompts.visualGoal}</p>
+        <span>{request.context.creativeMode} · {shot.framing} · {shot.cameraAngle}</span>
+        <h3>视觉建议</h3>
         <ol>
           {suggestions.map((suggestion) => (
             <li key={suggestion}>{suggestion}</li>
           ))}
         </ol>
       </section>
-      <section className="vnext-frame-quick-actions">
-        <h3>Quick Actions</h3>
+      <section className="vnext-frame-quick-actions" aria-label="快捷操作">
         <div>
           <button type="button" onClick={() => onAction("prompt")}>优化提示词</button>
           <button type="button" onClick={() => onAction("consistency")}>增强一致性</button>
@@ -62,6 +62,14 @@ export default function VisualAssistant({
         <textarea id="frame-assistant-instruction" value={instruction} onChange={(event) => setInstruction(event.target.value)} rows={2} placeholder="例如：更突出产品边缘光线" />
         <button type="submit" disabled={!instruction.trim()}>加入图片提示词 →</button>
       </form>
+      <section className="vnext-frame-reference-images">
+        <h3>参考图 <small>Reference Images</small></h3>
+        {referenceImages.length ? (
+          <div>{referenceImages.slice(0, 4).map((asset) => (
+            <span key={asset.id}><Image src={asset.imageUrl} alt={asset.prompt || "项目参考图"} fill sizes="72px" unoptimized /></span>
+          ))}</div>
+        ) : <p>当前项目暂无参考图</p>}
+      </section>
     </aside>
   );
 }

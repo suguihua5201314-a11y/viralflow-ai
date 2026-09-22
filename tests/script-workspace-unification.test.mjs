@@ -6,12 +6,15 @@ const read=path=>readFileSync(new URL(path,import.meta.url),"utf8");
 const page=read("../app/page.tsx");
 const studio=read("../app/script-studio.tsx");
 const sidebar=read("../app/components/layout/sidebar.tsx");
+const workflow=read("../app/components/layout/workflow-step-bar.tsx");
 const recovery=read("../app/script-workspace.ts");
 const css=read("../app/styles/workspace-components.css");
 
-test("Script and Director share project navigation without changing Director workspace",()=>{
-  assert.match(sidebar,/active==="director"\|\|active==="frames"\|\|active==="create"/);
-  for(const label of ["脚本创作","爆款研究","内容策划","AI分镜导演","画面提示词","视觉创作","声音制作","素材管理","项目大脑"]) assert.ok(sidebar.includes(`label:"${label}"`));
+test("Script and Director share product sidebar while workflow keeps project steps",()=>{
+  assert.match(sidebar,/active : "projects"/);
+  assert.match(page,/sidebar=\{<Sidebar active=\{active\}/);
+  for(const id of ["create","director","frames","images"]) assert.ok(workflow.includes(`id: "${id}"`));
+  assert.doesNotMatch(sidebar,/label: "脚本创作"|label: "AI分镜导演"|label: "画面提示词"/);
   assert.match(page,/const projectMode=active==="brain"\|\|active==="director"\|\|active==="frames"\|\|active==="create"/);
 });
 

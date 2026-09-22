@@ -20,8 +20,8 @@ export default function FrameCard({
   return (
     <article className={`vnext-frame-card is-${kind}`}>
       <header>
-        <span>{kind === "start" ? "START FRAME" : "END FRAME"}</span>
-        <h2>{title} <small>{kind === "start" ? "Start Frame" : "End Frame"}</small></h2>
+        <span aria-hidden="true">{kind === "start" ? "◧" : "◇"}</span>
+        <h2>{title} <small>({kind === "start" ? "Start Frame" : "End Frame"})</small></h2>
       </header>
       <div className="vnext-frame-preview">
         {imageUrl ? (
@@ -42,8 +42,8 @@ export default function FrameCard({
           </>
         ) : (
           <div>
-            <span>✦</span>
-            <b>{title}尚未生成</b>
+            <span className="vnext-frame-placeholder-mark" aria-hidden="true">✧</span>
+            <b>尚未生成{title}</b>
             <button
               type="button"
               className="vf-button vf-button-secondary"
@@ -55,10 +55,10 @@ export default function FrameCard({
         )}
       </div>
       <footer>
-        <button type="button" onClick={onGenerate}>{imageUrl ? "重新生成" : "生成画面"}</button>
-        <button type="button" onClick={onEdit}>编辑</button>
-        <button type="button" onClick={onDownload} disabled={!imageUrl}>下载</button>
-        <details><summary>更多</summary><button type="button" onClick={onOpen} disabled={!imageUrl}>查看大图</button></details>
+        <button type="button" onClick={onGenerate}><span aria-hidden="true">⟳</span>{imageUrl ? "重新生成" : "生成画面"}</button>
+        <button type="button" onClick={onEdit}><span aria-hidden="true">✎</span>编辑</button>
+        <button type="button" onClick={onDownload} disabled={!imageUrl}><span aria-hidden="true">⇩</span>下载</button>
+        <details><summary aria-label="更多操作">···</summary><button type="button" onClick={onOpen} disabled={!imageUrl}>查看大图</button></details>
       </footer>
     </article>
   );

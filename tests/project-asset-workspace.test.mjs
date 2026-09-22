@@ -16,15 +16,16 @@ test("Step 7.0-C 1: Assets 与 Script History 使用独立 routing", () => {
   assert.match(navigation, /"assets"/);
   assert.match(page, /active === "assets"/);
   assert.match(page, /active === "history"/);
-  assert.match(sidebar, /id:"assets".*label:"素材管理"/);
-  assert.match(sidebar, /id: "history".*label: "脚本历史"/);
+  assert.match(sidebar, /id: "assets", label: "资产库"/);
+  assert.doesNotMatch(sidebar, /id: "history"/);
 });
 
 test("Step 7.0-C 2/3: Images 与 Assets 均使用 Project Workspace", () => {
   assert.match(studio, /ProjectAssetWorkspace mode="images"/);
   assert.match(page, /ProjectAssetWorkspace mode="assets"/);
   assert.match(page, /active==="images"\|\|active==="assets"/);
-  assert.match(sidebar, /active==="images"\|\|active==="assets"/);
+  assert.match(sidebar, /id: "assets", label: "资产库"/);
+  assert.doesNotMatch(sidebar, /id: "images"/);
 });
 
 test("Step 7.0-C 4/5: currentProjectId 是唯一项目来源且切换会重新读取 Store", () => {
