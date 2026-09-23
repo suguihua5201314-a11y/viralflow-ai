@@ -4,17 +4,20 @@ import ImageStudioWorkspace from "./components/images/image-studio-workspace";
 import AssetLibraryWorkspace from "./components/assets/asset-library-workspace";
 import { Inspector } from "./components/workspace/workspace";
 import Image from "next/image";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   IMAGE_ASSET_LIMIT,
   assetsForProject,
   currentDirectorAssetIds,
+  frameLabel,
+  frameReturnContext,
   imageAssetSource,
   readImageAssets,
   saveImageAssets,
   saveImageStudioDraft,
   takeImageStudioDraft,
   type ImageAsset,
+  type ImageReturnContext,
   type ImageSourceReference,
 } from "./image-assets";
 import type { ImageGenerationRequest, ImageProviderId, ImageProviderStatus } from "./image-provider-router";
@@ -55,11 +58,12 @@ function withinCreatedTime(asset: ImageAsset, value: string) {
   const days = Number(value);
   return Date.parse(asset.createdAt) >= Date.now() - days * 86400000;
 }
-export default function ProjectAssetWorkspace({ mode, projects, currentProjectId, onNavigate }: {
+export default function ProjectAssetWorkspace({ mode, projects, currentProjectId, onNavigate, onReturnToFrame }: {
   mode: WorkspaceMode;
   projects: ProjectOption[];
   currentProjectId: string | null;
   onNavigate: (view: ActiveView) => void;
+  onReturnToFrame?: (context: ImageReturnContext) => void;
 }) {
   const [assets, setAssets] = useState<ImageAsset[]>(readImageAssets);
   const [selectedAssetId, setSelectedAssetId] = useState<string | null>(null);
@@ -75,12 +79,14 @@ export default function ProjectAssetWorkspace({ mode, projects, currentProjectId
   const [camera, setCamera] = useState<ImageGenerationRequest["camera"]>("Close Up");
   const [ratio, setRatio] = useState<ImageGenerationRequest["ratio"]>("9:16");
   const [sourceReference, setSourceReference] = useState<ImageSourceReference | null>(null);
+  const [returnContext, setReturnContext] = useState<ImageReturnContext | null>(null);
   const [status, setStatus] = useState<StudioStatus>("idle");
   const [error, setError] = useState<ApiError | null>(null);
   const [providerState, setProviderState] = useState<ProviderState>({ activeProvider: "doubao-image", providers: [] });
   const [selectedProvider, setSelectedProvider] = useState<ImageProviderId>("doubao-image");
   const [showLarge, setShowLarge] = useState(false);
   const [copied, setCopied] = useState(false);
+  const initializedContext = useRef<string | null>(null);
 
   const project = projects.find(item => item.id === currentProjectId) || null;
   const projectAssets = useMemo(() => assetsForProject(assets, currentProjectId).sort(newestFirst), [assets, currentProjectId]);
@@ -104,17 +110,20 @@ export default function ProjectAssetWorkspace({ mode, projects, currentProjectId
   const selectedProviderState = providerState.providers.find(item => item.id === selectedProvider);
 
   useEffect(() => {
+    const contextKey = `${mode}:${currentProjectId || "none"}`;
+    if (initializedContext.current === contextKey) return;
+    initializedContext.current = contextKey;
     const stored = readImageAssets();
     const nextProjectAssets = assetsForProject(stored, currentProjectId).sort(newestFirst);
     setAssets(stored);
     setSelectedAssetId(current => nextProjectAssets.some(asset => asset.id === current) ? current : nextProjectAssets[0]?.id || null);
     setSearch(""); setSourceFilter("all"); setShotFilter("all"); setModelFilter("all"); setTimeFilter("all");
     if (mode === "images") {
-      setPrompt(""); setSourceReference(null); setStatus("idle"); setError(null);
+      setPrompt(""); setSourceReference(null); setReturnContext(null); setStatus("idle"); setError(null);
       const draft = takeImageStudioDraft();
       if (draft?.projectId === currentProjectId) {
         setPrompt(draft.prompt); setImageType(draft.imageType); setStyle(draft.style); setCamera(draft.camera); setRatio(draft.ratio);
-        setSourceReference(draft.sourceReference || null); setStatus("idle"); setError(null);
+        setSourceReference(draft.sourceReference || null); setReturnContext(draft.returnContext || frameReturnContext(draft.sourceReference)); setStatus("idle"); setError(null);
       }
     }
   }, [currentProjectId, mode]);
@@ -163,12 +172,18 @@ export default function ProjectAssetWorkspace({ mode, projects, currentProjectId
 
   function usePrompt(asset: ImageAsset) {
     if (mode === "assets") {
-      saveImageStudioDraft({ projectId: asset.projectId, prompt: asset.prompt, imageType: asset.imageType, style: asset.style, camera: asset.camera, ratio: asset.ratio, sourceReference: asset.metadata?.sourceReference });
+      saveImageStudioDraft({ projectId: asset.projectId, prompt: asset.prompt, imageType: asset.imageType, style: asset.style, camera: asset.camera, ratio: asset.ratio, sourceReference: asset.metadata?.sourceReference, returnContext: frameReturnContext(asset.metadata?.sourceReference) || undefined });
       onNavigate("images");
       return;
     }
     setPrompt(asset.prompt); setImageType(asset.imageType); setStyle(asset.style); setCamera(asset.camera); setRatio(asset.ratio);
-    setSelectedProvider(asset.provider); setSourceReference(asset.metadata?.sourceReference || null); setStatus("idle"); setError(null);
+    setSelectedProvider(asset.provider); setSourceReference(asset.metadata?.sourceReference || null); setReturnContext(frameReturnContext(asset.metadata?.sourceReference)); setStatus("idle"); setError(null);
+  }
+
+  function returnToFrame(asset?: ImageAsset | null) {
+    const context = returnContext || frameReturnContext(asset?.metadata?.sourceReference);
+    if (context && onReturnToFrame) onReturnToFrame(context);
+    else onNavigate("frames");
   }
 
   async function copyPrompt(asset: ImageAsset) {
@@ -194,7 +209,7 @@ export default function ProjectAssetWorkspace({ mode, projects, currentProjectId
           <select aria-label="创建时间筛选" value={timeFilter} onChange={event => setTimeFilter(event.target.value)}><option value="all">全部时间</option><option value="1">最近24小时</option><option value="7">最近7天</option><option value="30">最近30天</option></select>
         </div>}
 
-        {mode === "images" ? <ImageStudioWorkspace asset={selectedAsset} assets={visibleAssets} onSelect={setSelectedAssetId} onOpen={()=>setShowLarge(true)} onUse={usePrompt} onRegenerate={asset=>{usePrompt(asset);void generateImage(asset.prompt,asset.metadata?.sourceReference || null,asset);}} busy={status === "loading"} context={<><b>{project?.name || "未选择项目"}</b><span>{sourceReference?.shotId || selectedAsset?.metadata?.sourceReference?.shotId || "独立图片创作"}</span></>} /> : <AssetLibraryWorkspace>{specialTab ? <div className="os-paw-special-empty">
+        {mode === "images" ? <ImageStudioWorkspace asset={selectedAsset} assets={visibleAssets} onSelect={setSelectedAssetId} onOpen={()=>setShowLarge(true)} onUse={usePrompt} onRegenerate={asset=>{usePrompt(asset);void generateImage(asset.prompt,asset.metadata?.sourceReference || null,asset);}} busy={status === "loading"} context={<><b>{project?.name || "未选择项目"}</b><span>{sourceReference?.type === "frame-prompt" ? `${sourceReference.shotId} · ${frameLabel(sourceReference.frameType)}` : sourceReference?.shotId || selectedAsset?.metadata?.sourceReference?.shotId || "独立图片创作"}</span></>} /> : <AssetLibraryWorkspace>{specialTab ? <div className="os-paw-special-empty">
           <span>{tab === "voice" ? "♫" : "▶"}</span><h3>{tab === "voice" ? "AI配音功能已保留" : "视频功能即将开放"}</h3>
           <p>{tab === "voice" ? "继续使用现有多语言配音能力。" : "当前项目暂无视频素材，后续版本开放。"}</p>
           {tab === "voice" && <button className="vf-button vf-button-primary" type="button" onClick={() => onNavigate("voice")}>进入 AI 配音 →</button>}
@@ -226,18 +241,19 @@ export default function ProjectAssetWorkspace({ mode, projects, currentProjectId
               <div><dt>分镜 ID</dt><dd>{selectedAsset.metadata?.sourceReference?.shotId || "—"}</dd></div><div><dt>来源区块 ID</dt><dd>{selectedAsset.metadata?.sourceReference?.sourceBlockId || "—"}</dd></div>
               <div><dt>请求 ID</dt><dd>{selectedAsset.metadata?.requestId || "—"}</dd></div>
             </dl></details>
-            <div className="os-paw-actions os-paw-secondary-actions"><button type="button" onClick={() => setShowLarge(true)}>查看大图</button><button type="button" onClick={() => usePrompt(selectedAsset)}>使用提示词</button>{selectedAsset.metadata?.sourceReference && <button type="button" onClick={() => onNavigate(selectedAsset.metadata?.sourceReference?.type === "frame-prompt" ? "frames" : "director")}>{selectedAsset.metadata?.sourceReference?.type === "frame-prompt" ? "返回画面提示词" : "返回导演分镜"}</button>}</div>
+            <div className="os-paw-actions os-paw-secondary-actions"><button type="button" onClick={() => setShowLarge(true)}>查看大图</button><button type="button" onClick={() => usePrompt(selectedAsset)}>使用提示词</button>{selectedAsset.metadata?.sourceReference && <button type="button" onClick={() => selectedAsset.metadata?.sourceReference?.type === "frame-prompt" ? returnToFrame(selectedAsset) : onNavigate("director")}>{selectedAsset.metadata?.sourceReference?.type === "frame-prompt" ? `返回 ${selectedAsset.metadata.sourceReference.shotId}` : "返回导演分镜"}</button>}</div>
           </> : <div className="os-paw-inspector-empty"><span>◎</span><p>选择一张素材，查看详情与复用操作。</p></div>}
         </section>
 
         {mode === "images" && <section className="os-paw-composer">
           <header><span>轻量图片创作</span><h3>图片生成器</h3><p>{project ? `项目 · ${project.name}` : "当前未选择项目"}</p></header>
-          {sourceReference && <div className="os-paw-shot-context"><div><span>分镜上下文</span><b>{sourceReference.shotId}</b><small>{sourceReference.sourceBlockId}</small></div><button type="button" onClick={() => setSourceReference(null)}>清除</button></div>}
+          {sourceReference && <div className="os-paw-shot-context"><div><span>当前来源</span><b>{sourceReference.shotId}{sourceReference.type === "frame-prompt" ? ` · ${frameLabel(sourceReference.frameType)}` : ""}</b><small>{sourceReference.sourceBlockId}</small></div><button type="button" onClick={() => { setSourceReference(null); setReturnContext(null); }}>清除</button></div>}
           <label>提示词<textarea aria-label="图片描述" rows={5} maxLength={MAX_PROMPT_LENGTH} value={prompt} onChange={event => { const nextPrompt = event.target.value; const tooLong = nextPrompt.length > MAX_PROMPT_LENGTH; setPrompt(nextPrompt); setStatus(tooLong ? "error" : "idle"); setError(tooLong ? { type: "validation_error", message: `提示词最多支持 ${MAX_PROMPT_LENGTH} 个字符`, retryable: false } : null); }} placeholder="描述主体、场景、光线、构图与商业氛围…" /><small>{prompt.length} / {MAX_PROMPT_LENGTH}</small></label>
           <div className="os-paw-composer-row"><label>类型<select value={imageType} onChange={event => setImageType(event.target.value as typeof imageType)}>{imageTypes.map(item => <option value={item.value} key={item.value}>{item.label}</option>)}</select></label><label>模型<select aria-label="图片模型" value={selectedProvider} onChange={event => setSelectedProvider(event.target.value as ImageProviderId)}>{providerState.providers.length ? providerState.providers.map(item => <option value={item.id} key={item.id} disabled={!item.configured}>{item.label}{item.configured ? "" : "（未配置）"}</option>) : <option value="doubao-image">豆包图片模型</option>}</select></label></div>
           <details className="creative-section"><summary>Advanced · 风格与镜头</summary><div className="os-paw-composer-row"><label>风格<select value={style} onChange={event => setStyle(event.target.value as typeof style)}>{styles.map(item => <option value={item.value} key={item.value}>{item.label}</option>)}</select></label><label>镜头<select value={camera} onChange={event => setCamera(event.target.value as typeof camera)}>{cameras.map(item => <option value={item.value} key={item.value}>{item.label}</option>)}</select></label></div>
           </details><fieldset><legend>比例</legend>{ratios.map(value => <button type="button" className={ratio === value ? "active" : ""} key={value} onClick={() => setRatio(value)}>{value}</button>)}</fieldset>
           <button className="os-paw-generate vf-button vf-button-primary" type="button" disabled={!prompt.trim() || prompt.length > MAX_PROMPT_LENGTH || !currentProjectId || status === "loading" || !selectedProviderState?.configured} onClick={() => void generateImage()}>{status === "loading" ? <><i className="os-image-spinner" /> 生成中...</> : status === "success" ? "生成成功 ✓" : status === "error" ? "重新尝试 ↻" : "生成图片"}</button>
+          {returnContext && <button className="vf-button vf-button-secondary" type="button" onClick={() => returnToFrame(selectedAsset)}>返回画面提示词 · {returnContext.shotId}</button>}
           {!selectedProviderState?.configured && <p className="os-paw-config-hint">图片模型尚未配置或状态仍在读取。</p>}
           {error && <div className="os-paw-error" role="alert"><b>{status === "error" ? "生成失败" : "保存提醒"}</b><p>{error.message}</p>{error.retryable && <button type="button" onClick={() => void generateImage()}>重新尝试</button>}</div>}
         </section>}

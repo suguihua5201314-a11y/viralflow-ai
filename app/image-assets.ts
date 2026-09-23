@@ -5,9 +5,17 @@ export const IMAGE_STUDIO_DRAFT_KEY = "viralflow-image-studio-draft-v1";
 export const IMAGE_ASSET_LIMIT = 60;
 
 export type ImageFrameType = "start-frame" | "end-frame" | "shot-image";
+export type ImageReturnContext = {
+  view: "frames";
+  projectId: string;
+  scriptIdentity: string;
+  scriptVersion: string;
+  shotId: string;
+  frameType: ImageFrameType;
+};
 export type ImageSourceReference =
-  | { type: "director-shot"; shotId: string; sourceBlockId: string }
-  | { type: "frame-prompt"; projectId: string; scriptVersion: string; shotId: string; sourceBlockId: string; frameType: ImageFrameType; promptType: ImageFrameType };
+  | { type: "director-shot"; projectId?: string; scriptIdentity?: string; scriptVersion?: string; shotId: string; sourceBlockId: string }
+  | { type: "frame-prompt"; projectId: string; scriptIdentity?: string; scriptVersion: string; shotId: string; sourceBlockId: string; frameType: ImageFrameType; promptType: ImageFrameType };
 export type ImageAssetMetadata = { size: string; requestId?: string; sourceReference?: ImageSourceReference };
 
 export type ImageAsset = {
@@ -25,7 +33,51 @@ export type ImageAsset = {
   metadata?: ImageAssetMetadata;
 };
 
-export type ImageStudioDraft = Pick<ImageAsset, "projectId" | "prompt" | "imageType" | "style" | "camera" | "ratio"> & { sourceReference?: ImageSourceReference };
+export type ImageStudioDraft = Pick<ImageAsset, "projectId" | "prompt" | "imageType" | "style" | "camera" | "ratio"> & { sourceReference?: ImageSourceReference; returnContext?: ImageReturnContext };
+
+export type FrameAssetQuery = {
+  projectId: string;
+  scriptIdentity: string;
+  scriptVersion: string;
+  shotId: string;
+  frameType: ImageFrameType;
+};
+
+export function resolveScriptIdentity(scriptId: string | number | null | undefined, scriptVersion: string) {
+  return scriptId !== null && scriptId !== undefined && String(scriptId).trim()
+    ? `script:${String(scriptId).trim()}`
+    : `version:${scriptVersion.trim() || "current-script"}`;
+}
+
+export function frameLabel(frameType: ImageFrameType) {
+  return frameType === "start-frame" ? "Start Frame" : frameType === "end-frame" ? "End Frame" : "Shot Image";
+}
+
+export function frameReturnContext(reference: ImageSourceReference | undefined): ImageReturnContext | null {
+  if (reference?.type !== "frame-prompt") return null;
+  return {
+    view: "frames",
+    projectId: reference.projectId,
+    scriptIdentity: reference.scriptIdentity || resolveScriptIdentity(undefined, reference.scriptVersion),
+    scriptVersion: reference.scriptVersion,
+    shotId: reference.shotId,
+    frameType: reference.frameType,
+  };
+}
+
+export function matchesFrameAsset(asset: ImageAsset, query: FrameAssetQuery) {
+  const reference = asset.metadata?.sourceReference;
+  if (asset.projectId !== query.projectId || reference?.type !== "frame-prompt") return false;
+  if (reference.projectId !== query.projectId || reference.shotId !== query.shotId || reference.frameType !== query.frameType) return false;
+  if (reference.scriptIdentity) return reference.scriptIdentity === query.scriptIdentity;
+  return reference.scriptVersion === query.scriptVersion;
+}
+
+export function newestFrameAsset(assets: ImageAsset[], query: FrameAssetQuery) {
+  return assets
+    .filter((asset) => matchesFrameAsset(asset, query))
+    .sort((left, right) => Date.parse(right.createdAt) - Date.parse(left.createdAt))[0];
+}
 
 export function readImageAssets(): ImageAsset[] {
   if (typeof window === "undefined") return [];

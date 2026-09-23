@@ -33,6 +33,7 @@ import ProjectBrainWorkspace from "./components/project-brain/project-brain-work
 import ProjectWorkspace from "./project-workspace";
 import {cacheProjectMemory,readProjectMemory,touchProject,type PersistentProject,type ProjectMemory} from "./project-memory";
 import ImageStudio from "./image-studio";
+import type { ImageReturnContext } from "./image-assets";
 import ProjectAssetWorkspace from "./project-asset-workspace";
 import FramePromptWorkspace from "./frame-prompt-workspace";
 import {mergeReplicationAdoption,restoreProjectAnalyzer,restoreProjectReplication,type ReplicationWorkspaceAsset} from "./analyzer-replication-workspace";
@@ -227,6 +228,22 @@ export default function Home() {
     });
   }
   function saveWorkspaceSnapshot(patch:Partial<ProjectMemory["workspace"]>){setProjectMemory(current=>({...current,workspace:{...current.workspace,...patch},updatedAt:new Date().toISOString()}));}
+  function returnToFramePrompt(context:ImageReturnContext){
+    setProjectMemory(current=>{
+      const projects=current.projects.map(project=>{
+        if(project.id!==context.projectId)return project;
+        const directorResult=project.assets.directorResult;
+        if(!directorResult||typeof directorResult!=="object")return project;
+        const workspace=directorResult as {shots?:Array<{shotId?:string}>;selectedShot?:number};
+        const requestedIndex=workspace.shots?.findIndex(shot=>shot.shotId===context.shotId)??-1;
+        const selectedShot=requestedIndex>=0?requestedIndex:typeof workspace.selectedShot==="number"?workspace.selectedShot:0;
+        return touchProject(project,{assets:{...project.assets,directorResult:{...workspace,selectedShot}}});
+      });
+      return {...current,projects,workspace:{...current.workspace,currentProjectId:context.projectId,activeView:"frames"},updatedAt:new Date().toISOString()};
+    });
+    setSelectedProjectKey(context.projectId);
+    setActive("frames");
+  }
   function createProject(input:{name:string;product:string;market:string;platform:string;language:string}){
     const now=new Date().toISOString();const id=`project-${Date.now()}`;
     const project:PersistentProject={id,name:input.name.trim(),product:input.product.trim(),market:input.market.trim(),platform:input.platform,language:input.language,stage:"洞察",createdAt:now,updatedAt:now,status:"创作中",progress:0,owner:"苏苏",assets:{scriptVersions:[]}};
@@ -400,8 +417,8 @@ export default function Home() {
       {active === "dashboard" && <Dashboard metrics={dashboardMetrics} recent={dashboardRecent} dataMode={DATA_MODE} onNavigate={setActive} onOpenRecent={openRecent} onOpenProject={openProject} />}
       {active === "brain" && <ProjectBrainWorkspace project={projectMemory.projects.find(item=>item.id===projectMemory.workspace.currentProjectId)} knowledge={productProfiles.find(item=>item.name===projectMemory.projects.find(project=>project.id===projectMemory.workspace.currentProjectId)?.product)} reference={projectMemory.workspace.referenceScript} onEdit={()=>setActive("products")} />}
       {active === "projects" && <ProjectWorkspace projects={persistentProjects} initialProjectKey={selectedProjectKey} saveState={memorySaveState} onCreate={createProject} onRename={renameProject} onDuplicate={duplicateProject} onDelete={deleteProject} onSelect={id=>saveWorkspaceSnapshot({currentProjectId:id,activeView:"projects"})} onNavigate={view=>{setActive(view);saveWorkspaceSnapshot({activeView:view});}} />}
-      {active === "images" && <ImageStudio projects={projectMemory.projects.map(project=>({id:project.id,name:project.name,product:project.product}))} currentProjectId={projectMemory.workspace.currentProjectId} onNavigate={view=>{setActive(view);saveWorkspaceSnapshot({activeView:view});}} />}
-      {active === "frames" && <FramePromptWorkspace project={currentDirectorProject||null} request={directorDisplayInput} workspace={currentDirectorWorkspace} scriptVersion={result?.title||"当前脚本"} onNavigate={view=>{setActive(view);saveWorkspaceSnapshot({activeView:view});}} onSelectShot={index=>{if(!currentDirectorWorkspace||typeof currentDirectorWorkspace!=="object")return;updateProjectMemory({directorResult:{...currentDirectorWorkspace,selectedShot:index}});saveWorkspaceSnapshot({activeView:"frames"});}} />}
+      {active === "images" && <ImageStudio projects={projectMemory.projects.map(project=>({id:project.id,name:project.name,product:project.product}))} currentProjectId={projectMemory.workspace.currentProjectId} onNavigate={view=>{setActive(view);saveWorkspaceSnapshot({activeView:view});}} onReturnToFrame={returnToFramePrompt} />}
+      {active === "frames" && <FramePromptWorkspace project={currentDirectorProject||null} request={directorDisplayInput} workspace={currentDirectorWorkspace} scriptId={result?.id} scriptVersion={result?.title||"当前脚本"} onNavigate={view=>{setActive(view);saveWorkspaceSnapshot({activeView:view});}} onSelectShot={index=>{if(!currentDirectorWorkspace||typeof currentDirectorWorkspace!=="object")return;updateProjectMemory({directorResult:{...currentDirectorWorkspace,selectedShot:index}});saveWorkspaceSnapshot({activeView:"frames"});}} />}
       {active === "assets" && <ProjectAssetWorkspace mode="assets" projects={projectMemory.projects.map(project=>({id:project.id,name:project.name,product:project.product}))} currentProjectId={projectMemory.workspace.currentProjectId} onNavigate={view=>{setActive(view);saveWorkspaceSnapshot({activeView:view});}} />}
       {active === "video" && <VideoAnalyzer products={productProfiles.map(x=>x.name)} />}
       {active === "director" && <ShootingDirector input={directorDisplayInput} currentProjectId={projectMemory.workspace.currentProjectId} initialWorkspace={currentDirectorWorkspace} onNavigate={view=>setActive(view)} onChange={value=>{updateProjectMemory({directorResult:value},{stage:"导演",progress:72});saveWorkspaceSnapshot({activeView:"director"});}} />}

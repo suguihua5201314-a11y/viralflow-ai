@@ -12,6 +12,8 @@ import type { WorkspaceShot } from "./director-workspace";
 import { buildFramePrompts, type FramePromptBundle } from "./frame-prompt";
 import {
   readImageAssets,
+  newestFrameAsset,
+  resolveScriptIdentity,
   saveImageStudioDraft,
   type ImageAsset,
   type ImageFrameType,
@@ -44,19 +46,15 @@ function directorWorkspace(value: unknown): DirectorWorkspaceValue | null {
   return candidate as DirectorWorkspaceValue;
 }
 
-function newestAsset(
+function newestShotAsset(
   assets: ImageAsset[],
   shotId: string,
-  frameType?: ImageFrameType,
 ) {
   return assets
     .filter((asset) => {
       const reference = asset.metadata?.sourceReference;
       if (reference?.shotId !== shotId) return false;
-      if (!frameType) return reference.type === "director-shot";
-      return (
-        reference.type === "frame-prompt" && reference.frameType === frameType
-      );
+      return reference.type === "director-shot";
     })
     .sort(
       (left, right) => Date.parse(right.createdAt) - Date.parse(left.createdAt),
@@ -74,6 +72,7 @@ export default function FramePromptWorkspace({
   project,
   request,
   workspace,
+  scriptId,
   scriptVersion,
   onNavigate,
   onSelectShot,
@@ -81,6 +80,7 @@ export default function FramePromptWorkspace({
   project: PersistentProject | null;
   request: DirectorRequest | null;
   workspace: unknown;
+  scriptId?: string | number | null;
   scriptVersion: string;
   onNavigate: (view: ActiveView) => void;
   onSelectShot: (index: number) => void;
@@ -95,6 +95,7 @@ export default function FramePromptWorkspace({
   const [edits, setEdits] = useState<Record<string, PromptEdits>>({});
   const [lightbox, setLightbox] = useState<ImageAsset | null>(null);
   const shot = shots[selected] || null;
+  const scriptIdentity = resolveScriptIdentity(scriptId, scriptVersion);
 
   useEffect(() => {
     setAssets(readImageAssets());
@@ -128,17 +129,18 @@ export default function FramePromptWorkspace({
     : [];
   const previews = Object.fromEntries(
     shots.flatMap((item) => {
+      if (!project) return [];
       const asset =
-        newestAsset(projectAssets, item.shotId, "start-frame") ||
-        newestAsset(projectAssets, item.shotId);
+        newestFrameAsset(projectAssets, { projectId: project.id, scriptIdentity, scriptVersion, shotId: item.shotId, frameType: "start-frame" }) ||
+        newestShotAsset(projectAssets, item.shotId);
       return asset ? [[item.shotId, asset.imageUrl]] : [];
     }),
   );
-  const startAsset = shot
-    ? newestAsset(projectAssets, shot.shotId, "start-frame")
+  const startAsset = shot && project
+    ? newestFrameAsset(projectAssets, { projectId: project.id, scriptIdentity, scriptVersion, shotId: shot.shotId, frameType: "start-frame" })
     : undefined;
-  const endAsset = shot
-    ? newestAsset(projectAssets, shot.shotId, "end-frame")
+  const endAsset = shot && project
+    ? newestFrameAsset(projectAssets, { projectId: project.id, scriptIdentity, scriptVersion, shotId: shot.shotId, frameType: "end-frame" })
     : undefined;
 
   function chooseShot(index: number) {
@@ -188,6 +190,7 @@ export default function FramePromptWorkspace({
     const sourceReference: ImageSourceReference = {
       type: "frame-prompt",
       projectId: project.id,
+      scriptIdentity,
       scriptVersion,
       shotId: shot.shotId,
       sourceBlockId: shot.sourceBlockId,
@@ -202,6 +205,14 @@ export default function FramePromptWorkspace({
       camera: spec.camera,
       ratio: spec.ratio,
       sourceReference,
+      returnContext: {
+        view: "frames",
+        projectId: project.id,
+        scriptIdentity,
+        scriptVersion,
+        shotId: shot.shotId,
+        frameType,
+      },
     });
     onNavigate("images");
   }
