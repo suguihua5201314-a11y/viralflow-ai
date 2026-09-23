@@ -13,6 +13,8 @@ export default function VisualAssistant({
   referenceImages,
   onAction,
   onInstruction,
+  collapsed,
+  onToggle,
 }: {
   shot: WorkspaceShot;
   request: DirectorRequest;
@@ -20,6 +22,8 @@ export default function VisualAssistant({
   referenceImages: Array<{ id: string; imageUrl: string; prompt: string }>;
   onAction: (action: "prompt" | "consistency" | "style" | "variants") => void;
   onInstruction: (instruction: string) => void;
+  collapsed: boolean;
+  onToggle: () => void;
 }) {
   const [instruction, setInstruction] = useState("");
   const suggestions = [
@@ -32,10 +36,11 @@ export default function VisualAssistant({
   ];
 
   return (
-    <aside className="vnext-frame-assistant" aria-label="AI 画面助手">
+    <aside className={`vnext-frame-assistant${collapsed ? " is-collapsed" : ""}`} aria-label="AI 画面助手">
       <header>
         <span className="vnext-frame-assistant-mark" aria-hidden="true">✦</span>
         <div><h2>AI 视觉助手 <small>Beta</small></h2><p>基于当前导演分镜的画面建议</p></div>
+        <button type="button" className="vnext-frame-assistant-toggle" onClick={onToggle} aria-expanded={!collapsed} aria-label={collapsed ? "展开 AI 视觉助手" : "折叠 AI 视觉助手"}>{collapsed ? "‹" : "›"}</button>
       </header>
       <section className="vnext-frame-assistant-context">
         <small>Current Shot · Shot {String(shot.order).padStart(2, "0")}</small>

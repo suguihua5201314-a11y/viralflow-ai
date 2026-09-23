@@ -11,6 +11,14 @@ import { shotImageSpec } from "./director-image";
 import type { WorkspaceShot } from "./director-workspace";
 import { buildFramePrompts, type FramePromptBundle } from "./frame-prompt";
 import {
+  effectiveFramePrompts,
+  findFramePromptOverride,
+  resetFramePromptOverride,
+  saveFramePromptOverride,
+  type FramePromptOverride,
+  type FramePromptOverrideKey,
+} from "./frame-prompt-overrides";
+import {
   readImageAssets,
   newestFrameAsset,
   resolveScriptIdentity,
@@ -28,17 +36,6 @@ type DirectorWorkspaceValue = {
   shots: WorkspaceShot[];
   selectedShot?: number | null;
 };
-
-type PromptEdits = Partial<
-  Pick<
-    FramePromptBundle,
-    | "startFramePrompt"
-    | "endFramePrompt"
-    | "imagePrompt"
-    | "videoPrompt"
-    | "negativePrompt"
-  >
->;
 
 type FrameGenerationState = {
   status: "idle" | "loading" | "success" | "error";
@@ -82,6 +79,8 @@ export default function FramePromptWorkspace({
   scriptVersion,
   onNavigate,
   onSelectShot,
+  promptOverrides,
+  onPromptOverridesChange,
 }: {
   project: PersistentProject | null;
   request: DirectorRequest | null;
@@ -90,6 +89,8 @@ export default function FramePromptWorkspace({
   scriptVersion: string;
   onNavigate: (view: ActiveView) => void;
   onSelectShot: (index: number) => void;
+  promptOverrides: FramePromptOverride[];
+  onPromptOverridesChange: (records: FramePromptOverride[]) => void;
 }) {
   const director = directorWorkspace(workspace);
   const shots = director?.shots || [];
@@ -98,9 +99,9 @@ export default function FramePromptWorkspace({
     Math.min(Math.max(requestedIndex, 0), Math.max(0, shots.length - 1)),
   );
   const [assets, setAssets] = useState<ImageAsset[]>(readImageAssets);
-  const [edits, setEdits] = useState<Record<string, PromptEdits>>({});
   const [generationStates, setGenerationStates] = useState<Record<string, FrameGenerationState>>({});
   const [lightbox, setLightbox] = useState<ImageAsset | null>(null);
+  const [assistantCollapsed, setAssistantCollapsed] = useState(false);
   const shot = shots[selected] || null;
   const requestScriptId = (request?.script as { id?: string | number } | undefined)?.id;
   const legacyScriptIdentity = resolveScriptIdentity(
@@ -139,9 +140,9 @@ export default function FramePromptWorkspace({
     shot,
   ]);
 
-  const prompts = automatic
-    ? { ...automatic, ...(shot ? edits[shot.shotId] : undefined) }
-    : null;
+  const promptIdentity = project && shot ? { projectId: project.id, scriptIdentity, shotId: shot.shotId } : null;
+  const currentOverride = promptIdentity ? findFramePromptOverride(promptOverrides, promptIdentity) : undefined;
+  const prompts = automatic ? effectiveFramePrompts(automatic, currentOverride) : null;
   const projectAssets = project
     ? assets.filter((asset) => asset.projectId === project.id)
     : [];
@@ -183,6 +184,8 @@ export default function FramePromptWorkspace({
 
   function editFramePrompt(id: string) {
     const editor = document.getElementById(id);
+    const advanced = editor?.closest("details") as HTMLDetailsElement | null;
+    if (advanced) advanced.open = true;
     editor?.scrollIntoView({ behavior: "smooth", block: "center" });
     const button = editor?.querySelector("nav button");
     if (button?.textContent === "编辑") (button as HTMLButtonElement).click();
@@ -194,12 +197,14 @@ export default function FramePromptWorkspace({
     document.querySelector(action === "prompt" ? ".vnext-frame-prompt-grid .vnext-frame-prompt-editor" : ".vnext-frame-consistency")?.scrollIntoView({ behavior: "smooth", block: "center" });
   }
 
-  function updatePrompt(key: keyof PromptEdits, value: string) {
-    if (!shot) return;
-    setEdits((current) => ({
-      ...current,
-      [shot.shotId]: { ...current[shot.shotId], [key]: value },
-    }));
+  function updatePrompt(key: FramePromptOverrideKey, value: string) {
+    if (!promptIdentity || !automatic) return;
+    onPromptOverridesChange(saveFramePromptOverride(promptOverrides, promptIdentity, key, value, automatic[key]));
+  }
+
+  function resetPrompt(key: FramePromptOverrideKey) {
+    if (!promptIdentity) return;
+    onPromptOverridesChange(resetFramePromptOverride(promptOverrides, promptIdentity, key));
   }
 
   function openImages(prompt: string, frameType: ImageFrameType) {
@@ -336,7 +341,7 @@ export default function FramePromptWorkspace({
           <h1>画面提示词 <small>{project.name} / {scriptVersion} / Shot {String(shot.order).padStart(2, "0")}</small></h1>
         </div>
         <aside>
-          <span>{edits[shot.shotId] ? "当前会话已编辑" : "自动提示词已准备"}</span>
+          <span>{currentOverride ? "已保存自定义提示词" : "AI 默认提示词已准备"}</span>
           <button
             type="button"
             className="vf-button vf-button-primary"
@@ -363,7 +368,7 @@ export default function FramePromptWorkspace({
         ))}
       </nav>
 
-      <div className="vnext-frame-layout">
+      <div className={`vnext-frame-layout${assistantCollapsed ? " is-assistant-collapsed" : ""}`}>
         <FrameShotNavigator
           shots={shots}
           selected={selected}
@@ -405,51 +410,52 @@ export default function FramePromptWorkspace({
             />
           </div>
           <div className="vnext-frame-motion" title={prompts.motionBridge}>
-            <span className="vnext-frame-motion-flow">Start Frame <i>→</i> Motion <i>→</i> End Frame</span>
-            <b>动作桥接 / Motion Bridge</b>
-            <span className="vnext-frame-motion-copy">{prompts.motionBridge}</span>
+            <span className="vnext-frame-motion-flow"><b>START FRAME</b><i>→</i><strong>镜头动作</strong><i>→</i><b>END FRAME</b></span>
+            <div><small>ACTION SUMMARY</small><span className="vnext-frame-motion-copy">{prompts.motionBridge}</span></div>
           </div>
+          <section className="vnext-frame-production-actions" aria-label="镜头生成准备状态">
+            <div className="vnext-frame-readiness">
+              <span><b>首帧</b><em className={startAsset ? "is-ready" : ""}>{startAsset ? "已就绪" : "未生成"}</em></span>
+              <span><b>尾帧</b><em className={endAsset ? "is-ready" : ""}>{endAsset ? "已就绪" : "未生成"}</em></span>
+              <span><b>镜头动作</b><em className="is-ready">已就绪</em></span>
+              <span><b>视频模型</b><em>暂不可用</em></span>
+            </div>
+            <div className="vnext-frame-video-action">
+              <button type="button" disabled title="Seedance 2.5 当前尚未开通">生成视频</button>
+              <small>视频模型尚未开通</small>
+            </div>
+          </section>
 
-          <div className="vnext-frame-prompt-grid">
-            <PromptEditor key={`${shot.shotId}-start`} id="start-frame-prompt" label="START FRAME PROMPT" value={prompts.startFramePrompt} automaticValue={automatic.startFramePrompt} onChange={(value) => updatePrompt("startFramePrompt", value)} />
-            <PromptEditor key={`${shot.shotId}-end`} id="end-frame-prompt" label="END FRAME PROMPT" value={prompts.endFramePrompt} automaticValue={automatic.endFramePrompt} onChange={(value) => updatePrompt("endFramePrompt", value)} />
-            <div className="vnext-frame-prompt-cell">
-              <PromptEditor key={`${shot.shotId}-image`} label="IMAGE PROMPT" value={prompts.imagePrompt} automaticValue={automatic.imagePrompt} onChange={(value) => updatePrompt("imagePrompt", value)} />
-              <button type="button" className="vnext-frame-generate-shot" onClick={() => openImages(prompts.imagePrompt, "shot-image")}>生成 Shot 图片 →</button>
+          <details className="vnext-frame-advanced">
+            <summary><span>高级生成设置</span><small>提示词、一致性规则与负面约束</small></summary>
+            <div className="vnext-frame-advanced-list">
+              <PromptEditor key={`${shot.shotId}-start`} id="start-frame-prompt" label="START FRAME PROMPT" value={prompts.startFramePrompt} automaticValue={automatic.startFramePrompt} hasOverride={Boolean(currentOverride?.startFramePrompt)} onChange={(value) => updatePrompt("startFramePrompt", value)} onReset={() => resetPrompt("startFramePrompt")} />
+              <PromptEditor key={`${shot.shotId}-end`} id="end-frame-prompt" label="END FRAME PROMPT" value={prompts.endFramePrompt} automaticValue={automatic.endFramePrompt} hasOverride={Boolean(currentOverride?.endFramePrompt)} onChange={(value) => updatePrompt("endFramePrompt", value)} onReset={() => resetPrompt("endFramePrompt")} />
+              <div className="vnext-frame-prompt-cell">
+                <PromptEditor key={`${shot.shotId}-video`} label="VIDEO PROMPT" value={prompts.videoPrompt} automaticValue={automatic.videoPrompt} hasOverride={Boolean(currentOverride?.videoPrompt)} onChange={(value) => updatePrompt("videoPrompt", value)} onReset={() => resetPrompt("videoPrompt")} />
+              </div>
+              <div className="vnext-frame-prompt-cell">
+                <PromptEditor key={`${shot.shotId}-image`} label="IMAGE PROMPT" value={prompts.imagePrompt} automaticValue={automatic.imagePrompt} hasOverride={Boolean(currentOverride?.imagePrompt)} onChange={(value) => updatePrompt("imagePrompt", value)} onReset={() => resetPrompt("imagePrompt")} />
+                <button type="button" className="vnext-frame-generate-shot" onClick={() => openImages(prompts.imagePrompt, "shot-image")}>生成镜头参考图 →</button>
+              </div>
+              <details className="vnext-frame-consistency">
+                <summary><span><b>一致性规则</b><small>{Object.values(prompts.consistencyRules).reduce((count, rules) => count + rules.length, 0)} 条规则</small></span><em>查看</em></summary>
+                <div>
+                  {Object.entries(prompts.consistencyRules).map(([key, rules]) => (
+                    <section key={key}>
+                      <h3>{key.toUpperCase()}</h3>
+                      <ul className="vnext-frame-rule-chips">{rules.map((rule) => <li key={rule}>{rule}</li>)}</ul>
+                    </section>
+                  ))}
+                </div>
+              </details>
+              <section className="vnext-frame-negative">
+                <PromptEditor key={`${shot.shotId}-negative`} label="NEGATIVE PROMPT" value={prompts.negativePrompt} automaticValue={automatic.negativePrompt} hasOverride={Boolean(currentOverride?.negativePrompt)} onChange={(value) => updatePrompt("negativePrompt", value)} onReset={() => resetPrompt("negativePrompt")} compact />
+              </section>
             </div>
-            <div className="vnext-frame-prompt-cell">
-              <PromptEditor key={`${shot.shotId}-video`} label="VIDEO PROMPT" value={prompts.videoPrompt} automaticValue={automatic.videoPrompt} onChange={(value) => updatePrompt("videoPrompt", value)} />
-              <div className="vnext-frame-video-future"><button type="button" disabled>准备视频 →</button><span>视频生成将在下一阶段接入</span></div>
-            </div>
-          <section className="vnext-frame-consistency">
-            <h3>CONSISTENCY · 一致性规则</h3>
-            <div>
-              {Object.entries(prompts.consistencyRules).map(([key, rules]) => (
-                <section key={key}>
-                  <h3>{key.toUpperCase()}</h3>
-                  <ul className="vnext-frame-rule-chips">
-                    {rules.map((rule) => (
-                      <li key={rule}>{rule}</li>
-                    ))}
-                  </ul>
-                </section>
-              ))}
-            </div>
-          </section>
-          <section className="vnext-frame-negative">
-            <PromptEditor
-              key={`${shot.shotId}-negative`}
-              label="NEGATIVE PROMPT"
-              value={prompts.negativePrompt}
-              automaticValue={automatic.negativePrompt}
-              onChange={(value) => updatePrompt("negativePrompt", value)}
-              compact
-            />
-            <div className="vnext-frame-negative-chips">{prompts.negativePrompt.split(",").map((item, index) => <span key={`${item}-${index}`}>{item.trim()}</span>)}</div>
-          </section>
-          </div>
+          </details>
         </main>
-        <VisualAssistant key={shot.shotId} shot={shot} request={request} prompts={prompts} referenceImages={projectAssets} onAction={assistantAction} onInstruction={(instruction) => updatePrompt("imagePrompt", `${prompts.imagePrompt}\n${instruction}`)} />
+        <VisualAssistant key={shot.shotId} shot={shot} request={request} prompts={prompts} referenceImages={projectAssets} collapsed={assistantCollapsed} onToggle={() => setAssistantCollapsed((current) => !current)} onAction={assistantAction} onInstruction={(instruction) => updatePrompt("imagePrompt", `${prompts.imagePrompt}\n${instruction}`)} />
       </div>
 
       {lightbox ? (

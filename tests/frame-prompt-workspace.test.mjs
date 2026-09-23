@@ -107,7 +107,7 @@ test("Frame Prompt presentation reuses current Director, Images and project stat
     "END FRAME",
     "IMAGE PROMPT",
     "VIDEO PROMPT",
-    "CONSISTENCY",
+    "一致性规则",
     "NEGATIVE PROMPT",
   ]) assert.ok(`${workspace}\n${frameCard}`.includes(marker), marker);
   assert.match(page, /active === "frames"/);

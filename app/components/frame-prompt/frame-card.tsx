@@ -22,7 +22,7 @@ export default function FrameCard({
   error?: string;
 }) {
   return (
-    <article className={`vnext-frame-card is-${kind}`} aria-busy={generating}>
+    <article className={`vnext-frame-card is-${kind} ${imageUrl ? "has-image" : "is-empty"}`} aria-busy={generating}>
       <header>
         <span aria-hidden="true">{kind === "start" ? "◧" : "◇"}</span>
         <h2>{title}</h2>
@@ -49,16 +49,15 @@ export default function FrameCard({
           <div><span className="vnext-frame-placeholder-mark" aria-hidden="true">✦</span><b>正在生成{title}…</b></div>
         ) : (
           <div>
-            <span className="vnext-frame-placeholder-mark" aria-hidden="true">✧</span>
-            <b>尚未生成{title}</b>
             <button
               type="button"
               className="vf-button vf-button-secondary"
               onClick={onGenerate}
               disabled={generating}
             >
-              生成{title} →
+              <span aria-hidden="true">＋</span> 生成{title}
             </button>
+            <b>尚未生成</b>
           </div>
         )}
       </div>

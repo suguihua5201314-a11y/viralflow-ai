@@ -1,4 +1,5 @@
 import type { ActiveView } from "./navigation";
+import type { FramePromptOverride } from "./frame-prompt-overrides";
 
 export const PROJECT_MEMORY_KEY = "viralflow-project-memory-v1";
 export const PROJECT_MEMORY_VERSION = 1;
@@ -9,6 +10,7 @@ export type ProjectAssetBundle = {
   scriptVersions: unknown[];
   directorResult?: unknown;
   voiceResult?: unknown;
+  framePromptOverrides?: FramePromptOverride[];
 };
 
 export type PersistentProject = {
