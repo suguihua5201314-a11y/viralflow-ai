@@ -4,6 +4,7 @@ import fs from "node:fs";
 
 const helper = fs.readFileSync(new URL("../app/director-image.ts", import.meta.url), "utf8");
 const panel = fs.readFileSync(new URL("../app/director-shot-image.tsx", import.meta.url), "utf8");
+const action = fs.readFileSync(new URL("../app/image-generation-action.ts", import.meta.url), "utf8");
 const director = fs.readFileSync(new URL("../app/shooting-director.tsx", import.meta.url), "utf8");
 const route = fs.readFileSync(new URL("../app/api/images/generate/route.ts", import.meta.url), "utf8");
 const provider = fs.readFileSync(new URL("../app/image-provider-router.ts", import.meta.url), "utf8");
@@ -21,15 +22,16 @@ test("Step 6.3 A: Shot Image Prompt 使用现有画面、镜头、动作、产�
 });
 
 test("Step 6.3 B/C: Director 复用 POST images generate 与 Image Provider Router", () => {
-  assert.match(panel, /fetch\("\/api\/images\/generate"/);
-  assert.match(panel, /JSON\.stringify\(spec\)/);
+  assert.match(panel, /generateAndSaveImage\(\{ request: spec, sourceReference/);
+  assert.match(action, /fetch\("\/api\/images\/generate"/);
+  assert.match(action, /JSON\.stringify\(request\)/);
   assert.match(route, /routeImageGeneration\(provider, body\)/);
   assert.match(provider, /doubaoImageAdapter/);
   assert.doesNotMatch(director + panel, /\/api\/director-image/);
 });
 
 test("Step 6.3 D: 单镜头成功后展示真实图片、Prompt、模型与时间", () => {
-  assert.match(panel, /validGeneratedImageUrl/);
+  assert.match(action, /validImageUrl/);
   assert.match(panel, /<Image src=\{asset\.imageUrl\}/);
   assert.match(panel, /asset\.prompt/);
   assert.match(panel, /asset\.model/);
@@ -38,16 +40,16 @@ test("Step 6.3 D: 单镜头成功后展示真实图片、Prompt、模型与时�
 });
 
 test("Step 6.3 E/F: Image Asset 使用 metadata sourceReference 关联 Project 与 Shot", () => {
-  assert.match(panel, /saveImageAssets\(\[nextAsset, \.\.\.readImageAssets\(\)\]\)/);
-  assert.match(panel, /\.\.\.spec/);
+  assert.match(action, /saveImageAssets\(next\)/);
+  assert.match(panel, /request: spec/);
   assert.match(panel + assets, /sourceReference/);
-  assert.match(panel, /type: "director-shot", shotId: shot\.shotId, sourceBlockId: shot\.sourceBlockId/);
+  assert.match(panel, /type: "director-shot", projectId: spec\.projectId, shotId: shot\.shotId, sourceBlockId: shot\.sourceBlockId/);
   assert.doesNotMatch(memory, /sourceReference|imageAssets|shotImages/);
 });
 
 test("Step 6.3 G: 重新生成创建新 ID 并保留已有图片资产", () => {
-  assert.match(panel, /director-image-\$\{Date\.now\(\)\}/);
-  assert.match(panel, /\[nextAsset, \.\.\.readImageAssets\(\)\]/);
+  assert.match(panel, /assetIdPrefix: "director-image"/);
+  assert.match(action, /\.\.\.readImageAssets\(\)\.filter/);
   assert.match(assets, /IMAGE_ASSET_LIMIT = 60/);
   assert.match(panel, /重新生成/);
 });

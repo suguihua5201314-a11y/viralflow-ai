@@ -92,7 +92,7 @@ test("Director Shot deterministically builds every Frame Prompt output", async (
 });
 
 test("Frame Prompt presentation reuses current Director, Images and project state", async () => {
-  const [workspace, frameCard, page, images, assets, director, navigation] = await Promise.all([
+  const [workspace, frameCard, page, images, assets, director, navigation, generationAction] = await Promise.all([
     read("app/frame-prompt-workspace.tsx"),
     read("app/components/frame-prompt/frame-card.tsx"),
     read("app/page.tsx"),
@@ -100,6 +100,7 @@ test("Frame Prompt presentation reuses current Director, Images and project stat
     read("app/image-assets.ts"),
     read("app/shooting-director.tsx"),
     read("app/navigation.ts"),
+    read("app/image-generation-action.ts"),
   ]);
   for (const marker of [
     "START FRAME",
@@ -118,8 +119,10 @@ test("Frame Prompt presentation reuses current Director, Images and project stat
   assert.match(assets, /type: "frame-prompt"/);
   assert.match(assets, /shotId: string/);
   assert.match(images, /takeImageStudioDraft/);
-  assert.match(images, /saveImageAssets/);
-  assert.doesNotMatch(workspace, /\/api\/images\/generate|fetch\(/);
+  assert.match(images, /generateAndSaveImage/);
+  assert.match(generationAction, /saveImageAssets/);
+  assert.match(workspace, /generateAndSaveImage/);
+  assert.doesNotMatch(workspace, /fetch\(/);
 });
 
 test("Frame Prompt keeps project isolation and explicit missing-shot states", async () => {

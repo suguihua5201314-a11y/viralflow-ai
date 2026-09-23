@@ -8,6 +8,7 @@ const workspace = fs.readFileSync(new URL("../app/project-asset-workspace.tsx", 
 const router = fs.readFileSync(new URL("../app/image-provider-router.ts", import.meta.url), "utf8");
 const route = fs.readFileSync(new URL("../app/api/images/generate/route.ts", import.meta.url), "utf8");
 const assets = fs.readFileSync(new URL("../app/image-assets.ts", import.meta.url), "utf8");
+const action = fs.readFileSync(new URL("../app/image-generation-action.ts", import.meta.url), "utf8");
 const memory = fs.readFileSync(new URL("../app/project-memory.ts", import.meta.url), "utf8");
 const navigation = fs.readFileSync(new URL("../app/navigation.ts", import.meta.url), "utf8");
 
@@ -38,7 +39,7 @@ test("C: API 通过 Image Provider Router 调用真实豆包 Ark Adapter", () =>
 
 test("D: 生成成功组装并保存完整 Image Asset", () => {
   for (const field of ["imageUrl", "prompt", "imageType", "style", "camera", "ratio", "model", "createdAt", "projectId", "metadata"]) assert.match(assets + workspace + router, new RegExp(field));
-  assert.match(workspace, /saveImageAssets\(next\)/);
+  assert.match(action, /saveImageAssets\(next\)/);
   assert.match(assets, /assets\.slice\(0, IMAGE_ASSET_LIMIT\)/);
   assert.match(assets, /asset\.projectId === projectId/);
 });

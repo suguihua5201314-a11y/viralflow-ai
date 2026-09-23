@@ -6,20 +6,19 @@ import { Inspector } from "./components/workspace/workspace";
 import Image from "next/image";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
-  IMAGE_ASSET_LIMIT,
   assetsForProject,
   currentDirectorAssetIds,
   frameLabel,
   frameReturnContext,
   imageAssetSource,
   readImageAssets,
-  saveImageAssets,
   saveImageStudioDraft,
   takeImageStudioDraft,
   type ImageAsset,
   type ImageReturnContext,
   type ImageSourceReference,
 } from "./image-assets";
+import { generateAndSaveImage, ImageGenerationActionError } from "./image-generation-action";
 import type { ImageGenerationRequest, ImageProviderId, ImageProviderStatus } from "./image-provider-router";
 import type { ActiveView } from "./navigation";
 
@@ -149,23 +148,17 @@ export default function ProjectAssetWorkspace({ mode, projects, currentProjectId
     if (!requestedPrompt || !currentProjectId || status === "loading") return;
     setStatus("loading"); setError(null);
     try {
-      const response = await fetch("/api/images/generate", {
-        method: "POST", headers: { "content-type": "application/json" },
-        body: JSON.stringify({ prompt: requestedPrompt, imageType: generation.imageType, style: generation.style, camera: generation.camera, ratio: generation.ratio, model: generation.provider, projectId: currentProjectId }),
+      const { asset, persisted } = await generateAndSaveImage({
+        request: { prompt: requestedPrompt, imageType: generation.imageType, style: generation.style, camera: generation.camera, ratio: generation.ratio, model: generation.provider, projectId: currentProjectId },
+        sourceReference: preservedReference,
       });
-      const data = await response.json() as { image?: Pick<ImageAsset, "provider" | "model" | "imageUrl" | "createdAt" | "metadata">; error?: ApiError };
-      if (!response.ok || !data.image) throw data.error || { type: "provider_error", message: "图片生成失败，请稍后重试。", retryable: true };
-      const asset: ImageAsset = {
-        id: `image-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
-        prompt: requestedPrompt, imageType: generation.imageType, style: generation.style, camera: generation.camera, ratio: generation.ratio, projectId: currentProjectId,
-        ...data.image,
-        metadata: { size: data.image.metadata?.size || generation.ratio, requestId: data.image.metadata?.requestId, ...(preservedReference ? { sourceReference: preservedReference } : {}) },
-      };
-      const next = [asset, ...readImageAssets().filter(item => item.id !== asset.id)].slice(0, IMAGE_ASSET_LIMIT);
+      const next = [asset, ...readImageAssets().filter((item) => item.id !== asset.id)];
       setAssets(next); setSelectedAssetId(asset.id); setSourceReference(preservedReference); setStatus("success");
-      if (!saveImageAssets(next)) setError({ type: "storage_full", message: "图片已生成，但浏览器存储空间不足，刷新后记录可能无法保留。", retryable: false });
+      if (!persisted) setError({ type: "storage_full", message: "图片已生成，但浏览器存储空间不足，刷新后记录可能无法保留。", retryable: false });
     } catch (caught) {
-      const failure = caught && typeof caught === "object" && "message" in caught ? caught as ApiError : { type: "provider_error", message: "图片生成暂时中断，请稍后重试。", retryable: true };
+      const failure = caught instanceof ImageGenerationActionError
+        ? { type: caught.category, message: caught.message, retryable: caught.retryable }
+        : { type: "provider_error", message: "图片生成暂时中断，请稍后重试。", retryable: true };
       setError(failure); setStatus("error");
     }
   }

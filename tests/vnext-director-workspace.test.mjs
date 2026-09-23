@@ -22,16 +22,18 @@ test("vNext Director uses the shot rail, storyboard canvas and assistant archite
 });
 
 test("vNext Director keeps image generation and Image Studio transfer on the existing component", async () => {
-  const [canvas, image] = await Promise.all([
+  const [canvas, image, action] = await Promise.all([
     read("app/components/director/storyboard-canvas.tsx"),
     read("app/director-shot-image.tsx"),
+    read("app/image-generation-action.ts"),
   ]);
 
   assert.match(canvas, /DirectorShotImage/);
   assert.match(image, /sourceReference/);
   assert.match(image, /shotId/);
   assert.match(image, /sourceBlockId/);
-  assert.match(image, /\/api\/images\/generate/);
+  assert.match(image, /generateAndSaveImage/);
+  assert.match(action, /\/api\/images\/generate/);
 });
 
 test("vNext Director is light, responsive and keeps the canvas as the flexible primary region", async () => {

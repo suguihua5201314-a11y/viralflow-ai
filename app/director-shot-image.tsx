@@ -2,15 +2,14 @@
 
 import Image from "next/image";
 import { useEffect, useState } from "react";
-import { readImageAssets, saveImageAssets, saveImageStudioDraft, type ImageAsset } from "./image-assets";
-import { shotImageSpec, validGeneratedImageUrl } from "./director-image";
+import { readImageAssets, saveImageAssets, saveImageStudioDraft, type ImageAsset, type ImageSourceReference } from "./image-assets";
+import { generateAndSaveImage, ImageGenerationActionError } from "./image-generation-action";
+import { shotImageSpec } from "./director-image";
 import type { DirectorRequest } from "./director-core";
 import type { WorkspaceShot } from "./director-workspace";
 import { notifyWorkspace } from "./components/ui/workspace-feedback";
 
 type ImageStatus = "idle" | "loading" | "success" | "error";
-type GeneratedImage = Pick<ImageAsset, "provider" | "model" | "imageUrl" | "createdAt" | "metadata">;
-type ApiResult = { image?: GeneratedImage; error?: { type?: string; message?: string; retryable?: boolean } };
 
 export default function DirectorShotImage({ shot, input, visualStyle, projectId, onNavigate }: { shot: WorkspaceShot; input: DirectorRequest; visualStyle: string; projectId: string | null; onNavigate?: () => void }) {
   const [status, setStatus] = useState<ImageStatus>("idle");
@@ -32,24 +31,12 @@ export default function DirectorShotImage({ shot, input, visualStyle, projectId,
     if (!spec || status === "loading") return;
     setStatus("loading"); setError("");
     try {
-      const response = await fetch("/api/images/generate", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(spec) });
-      const data = await response.json() as ApiResult;
-      if (!response.ok || !data.image) throw new Error(data.error?.message || "镜头图片生成失败，请稍后重试。");
-      if (!validGeneratedImageUrl(data.image.imageUrl)) throw new Error("图片服务返回了无效地址，请重新生成。");
-      const nextAsset: ImageAsset = {
-        id: `director-image-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-        ...spec,
-        provider: data.image.provider,
-        model: data.image.model,
-        imageUrl: data.image.imageUrl,
-        createdAt: data.image.createdAt,
-        metadata: { size: data.image.metadata?.size || spec.ratio, requestId: data.image.metadata?.requestId, sourceReference: { type: "director-shot", shotId: shot.shotId, sourceBlockId: shot.sourceBlockId } },
-      };
-      const saved = saveImageAssets([nextAsset, ...readImageAssets()]);
+      const sourceReference: ImageSourceReference = { type: "director-shot", projectId: spec.projectId, shotId: shot.shotId, sourceBlockId: shot.sourceBlockId };
+      const { asset: nextAsset, persisted } = await generateAndSaveImage({ request: spec, sourceReference, assetIdPrefix: "director-image" });
       setAsset(nextAsset); setStatus("success");
-      if (!saved) setError("图片已生成，但浏览器资产存储失败；请先下载图片。");
+      if (!persisted) setError("图片已生成，但浏览器资产存储失败；请先下载图片。");
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "镜头图片生成失败，请稍后重试。");
+      setError(caught instanceof ImageGenerationActionError ? caught.message : "镜头图片生成失败，请稍后重试。");
       setStatus("error");
     }
   }

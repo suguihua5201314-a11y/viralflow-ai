@@ -75,6 +75,24 @@ test("Phase 5.1: different scripts and revisions do not share new assets", async
   assert.equal(matchesFrameAsset(asset("other-script", "2026-09-23T01:00:00.000Z", { scriptIdentity: "script:202", scriptVersion: "Script V2" }), query), false);
 });
 
+test("Phase 5.5A regression: stable Director identity can restore legacy script identity", async () => {
+  const { matchesFrameAsset } = await loadAssets();
+  const persisted = asset("legacy-script-id", "2026-09-23T01:00:00.000Z");
+  const directorQuery = {
+    ...query,
+    scriptIdentity: "director:director-stable-context",
+    scriptIdentityAliases: ["script:101"],
+  };
+  assert.equal(matchesFrameAsset(persisted, directorQuery), true);
+  assert.equal(
+    matchesFrameAsset(
+      asset("other-revision", "2026-09-23T01:01:00.000Z", { scriptIdentity: "script:202" }),
+      directorQuery,
+    ),
+    false,
+  );
+});
+
 test("Phase 5.1: legacy assets remain readable through scriptVersion compatibility", async () => {
   const { matchesFrameAsset, frameReturnContext } = await loadAssets();
   const legacy = asset("legacy", "2026-09-23T01:00:00.000Z");
@@ -116,11 +134,11 @@ test("Phase 5.1: Draft and return navigation retain complete source context", as
 
 test("Phase 5.1: successful generation stays in the sole ImageAsset store", async () => {
   const [workspace, assets, memory] = await Promise.all([
-    read("app/project-asset-workspace.tsx"),
+    read("app/image-generation-action.ts"),
     read("app/image-assets.ts"),
     read("app/project-memory.ts"),
   ]);
-  assert.ok(workspace.includes("const next = [asset, ...readImageAssets().filter(item => item.id !== asset.id)]"));
+  assert.match(workspace, /const next = \[[\s\S]*asset,[\s\S]*readImageAssets\(\)\.filter/);
   assert.match(assets, /viralflow-image-assets-v1/);
   assert.doesNotMatch(memory, /imageAssets|shotImages|generationStore/i);
 });

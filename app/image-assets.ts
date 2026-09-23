@@ -38,6 +38,7 @@ export type ImageStudioDraft = Pick<ImageAsset, "projectId" | "prompt" | "imageT
 export type FrameAssetQuery = {
   projectId: string;
   scriptIdentity: string;
+  scriptIdentityAliases?: string[];
   scriptVersion: string;
   shotId: string;
   frameType: ImageFrameType;
@@ -69,7 +70,9 @@ export function matchesFrameAsset(asset: ImageAsset, query: FrameAssetQuery) {
   const reference = asset.metadata?.sourceReference;
   if (asset.projectId !== query.projectId || reference?.type !== "frame-prompt") return false;
   if (reference.projectId !== query.projectId || reference.shotId !== query.shotId || reference.frameType !== query.frameType) return false;
-  if (reference.scriptIdentity) return reference.scriptIdentity === query.scriptIdentity;
+  if (reference.scriptIdentity) {
+    return [query.scriptIdentity, ...(query.scriptIdentityAliases || [])].includes(reference.scriptIdentity);
+  }
   return reference.scriptVersion === query.scriptVersion;
 }
 

@@ -21,6 +21,7 @@ import {
 } from "./image-assets";
 import type { ActiveView } from "./navigation";
 import type { PersistentProject } from "./project-memory";
+import { generateAndSaveImage, ImageGenerationActionError } from "./image-generation-action";
 
 type DirectorWorkspaceValue = {
   result: DirectorResult;
@@ -38,6 +39,11 @@ type PromptEdits = Partial<
     | "negativePrompt"
   >
 >;
+
+type FrameGenerationState = {
+  status: "idle" | "loading" | "success" | "error";
+  error: string;
+};
 
 function directorWorkspace(value: unknown): DirectorWorkspaceValue | null {
   if (!value || typeof value !== "object") return null;
@@ -93,9 +99,21 @@ export default function FramePromptWorkspace({
   );
   const [assets, setAssets] = useState<ImageAsset[]>(readImageAssets);
   const [edits, setEdits] = useState<Record<string, PromptEdits>>({});
+  const [generationStates, setGenerationStates] = useState<Record<string, FrameGenerationState>>({});
   const [lightbox, setLightbox] = useState<ImageAsset | null>(null);
   const shot = shots[selected] || null;
-  const scriptIdentity = resolveScriptIdentity(scriptId, scriptVersion);
+  const requestScriptId = (request?.script as { id?: string | number } | undefined)?.id;
+  const legacyScriptIdentity = resolveScriptIdentity(
+    requestScriptId ?? scriptId,
+    scriptVersion,
+  );
+  const directorContextId = director?.result.metadata.contextId?.trim();
+  const scriptIdentity = directorContextId
+    ? `director:${directorContextId}`
+    : legacyScriptIdentity;
+  const scriptIdentityAliases = legacyScriptIdentity === scriptIdentity
+    ? []
+    : [legacyScriptIdentity];
 
   useEffect(() => {
     setAssets(readImageAssets());
@@ -131,17 +149,22 @@ export default function FramePromptWorkspace({
     shots.flatMap((item) => {
       if (!project) return [];
       const asset =
-        newestFrameAsset(projectAssets, { projectId: project.id, scriptIdentity, scriptVersion, shotId: item.shotId, frameType: "start-frame" }) ||
+        newestFrameAsset(projectAssets, { projectId: project.id, scriptIdentity, scriptIdentityAliases, scriptVersion, shotId: item.shotId, frameType: "start-frame" }) ||
         newestShotAsset(projectAssets, item.shotId);
       return asset ? [[item.shotId, asset.imageUrl]] : [];
     }),
   );
   const startAsset = shot && project
-    ? newestFrameAsset(projectAssets, { projectId: project.id, scriptIdentity, scriptVersion, shotId: shot.shotId, frameType: "start-frame" })
+    ? newestFrameAsset(projectAssets, { projectId: project.id, scriptIdentity, scriptIdentityAliases, scriptVersion, shotId: shot.shotId, frameType: "start-frame" })
     : undefined;
   const endAsset = shot && project
-    ? newestFrameAsset(projectAssets, { projectId: project.id, scriptIdentity, scriptVersion, shotId: shot.shotId, frameType: "end-frame" })
+    ? newestFrameAsset(projectAssets, { projectId: project.id, scriptIdentity, scriptIdentityAliases, scriptVersion, shotId: shot.shotId, frameType: "end-frame" })
     : undefined;
+  const generationScope = project && shot
+    ? `${project.id}:${scriptIdentity}:${shot.shotId}`
+    : "";
+  const startGeneration = generationStates[`${generationScope}:start-frame`];
+  const endGeneration = generationStates[`${generationScope}:end-frame`];
 
   function chooseShot(index: number) {
     setSelected(index);
@@ -215,6 +238,63 @@ export default function FramePromptWorkspace({
       },
     });
     onNavigate("images");
+  }
+
+  async function generateFrame(prompt: string, frameType: "start-frame" | "end-frame") {
+    if (!project || !request || !shot || !director) return;
+
+    const targetProjectId = project.id;
+    const targetShot = shot;
+    const targetScriptIdentity = scriptIdentity;
+    const targetScriptVersion = scriptVersion;
+    const stateKey = `${targetProjectId}:${targetScriptIdentity}:${targetShot.shotId}:${frameType}`;
+    if (generationStates[stateKey]?.status === "loading") return;
+
+    const spec = shotImageSpec(
+      targetShot,
+      request,
+      director.result.directorPlan.visualStyle,
+      targetProjectId,
+    );
+    const sourceReference: ImageSourceReference = {
+      type: "frame-prompt",
+      projectId: targetProjectId,
+      scriptIdentity: targetScriptIdentity,
+      scriptVersion: targetScriptVersion,
+      shotId: targetShot.shotId,
+      sourceBlockId: targetShot.sourceBlockId,
+      frameType,
+      promptType: frameType,
+    };
+
+    setGenerationStates((current) => ({
+      ...current,
+      [stateKey]: { status: "loading", error: "" },
+    }));
+
+    try {
+      const { asset, persisted } = await generateAndSaveImage({
+        request: { ...spec, prompt },
+        sourceReference,
+        assetIdPrefix: frameType,
+      });
+      setAssets((current) => [asset, ...current.filter((item) => item.id !== asset.id)]);
+      setGenerationStates((current) => ({
+        ...current,
+        [stateKey]: {
+          status: "success",
+          error: persisted ? "" : "图片已生成，但浏览器未能保存本地记录。",
+        },
+      }));
+    } catch (caught) {
+      const message = caught instanceof ImageGenerationActionError
+        ? caught.message
+        : "图片生成失败，请稍后重试。";
+      setGenerationStates((current) => ({
+        ...current,
+        [stateKey]: { status: "error", error: message },
+      }));
+    }
   }
 
   if (!project) {
@@ -305,9 +385,9 @@ export default function FramePromptWorkspace({
               kind="start"
               title="首帧"
               imageUrl={startAsset?.imageUrl}
-              onGenerate={() =>
-                openImages(prompts.startFramePrompt, "start-frame")
-              }
+              generating={startGeneration?.status === "loading"}
+              error={startGeneration?.error}
+              onGenerate={() => void generateFrame(prompts.startFramePrompt, "start-frame")}
               onOpen={() => startAsset && setLightbox(startAsset)}
               onDownload={() => downloadFrame(startAsset, `shot-${shot.order}-start`)}
               onEdit={() => editFramePrompt("start-frame-prompt")}
@@ -316,7 +396,9 @@ export default function FramePromptWorkspace({
               kind="end"
               title="尾帧"
               imageUrl={endAsset?.imageUrl}
-              onGenerate={() => openImages(prompts.endFramePrompt, "end-frame")}
+              generating={endGeneration?.status === "loading"}
+              error={endGeneration?.error}
+              onGenerate={() => void generateFrame(prompts.endFramePrompt, "end-frame")}
               onOpen={() => endAsset && setLightbox(endAsset)}
               onDownload={() => downloadFrame(endAsset, `shot-${shot.order}-end`)}
               onEdit={() => editFramePrompt("end-frame-prompt")}

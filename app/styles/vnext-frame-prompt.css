@@ -688,12 +688,14 @@
 .vnext-frame-card > header span { font-size: 9px; }
 .vnext-frame-card h2 { margin: 0; font-size: 12px; }
 .vnext-frame-card h2 small { color: var(--vf-text-secondary); font-size: 10px; font-weight: 500; }
+.vnext-frame-card > header em { margin-left: auto; color: var(--vf-brand); font-size: 10px; font-style: normal; font-weight: 700; }
 .vnext-frame-preview { aspect-ratio: 16 / 9; max-height: 175px; }
 .vnext-frame-preview > div { padding: 8px; }
 .vnext-frame-preview > div > span { font-size: 16px; }
 .vnext-frame-preview > div > b { margin-top: 2px; font-size: 11px; }
 .vnext-frame-preview > div > p { display: none; }
 .vnext-frame-preview > div > button { margin-top: 5px; padding: 5px 9px; font-size: 10px; }
+.vnext-frame-generation-error { margin: 0; padding: 6px 10px; background: #fff1f2; color: #be123c; font-size: 11px; line-height: 1.45; }
 .vnext-frame-card footer { display: flex; gap: 5px; padding: 7px 8px; }
 .vnext-frame-card footer button { padding: 4px 7px; border: 1px solid var(--vf-border); border-radius: 6px; background: #fff; color: var(--vf-text-secondary); font-size: 10px; }
 .vnext-frame-card footer button:first-child { color: var(--vf-brand); }

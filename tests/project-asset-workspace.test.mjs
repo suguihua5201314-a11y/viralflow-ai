@@ -11,6 +11,7 @@ const assets = fs.readFileSync(new URL("../app/image-assets.ts", import.meta.url
 const memory = fs.readFileSync(new URL("../app/project-memory.ts", import.meta.url), "utf8");
 const directorImage = fs.readFileSync(new URL("../app/director-shot-image.tsx", import.meta.url), "utf8");
 const directorUi = fs.readFileSync(new URL("../app/styles/workspace-components.css", import.meta.url), "utf8");
+const action = fs.readFileSync(new URL("../app/image-generation-action.ts", import.meta.url), "utf8");
 
 test("Step 7.0-C 1: Assets 与 Script History 使用独立 routing", () => {
   assert.match(navigation, /"assets"/);
@@ -50,7 +51,7 @@ test("Step 7.0-C 8: 同 Shot Current 由 shotId 与 createdAt 推导", () => {
 
 test("Step 7.0-C 9/10: Draft 与 Regenerate 保留 sourceReference", () => {
   assert.match(workspace, /setSourceReference\(draft\.sourceReference \|\| null\)/);
-  assert.match(workspace, /metadata: \{ size: data\.image\.metadata\?\.size.*requestId: data\.image\.metadata\?\.requestId.*sourceReference: preservedReference/s);
+  assert.match(action, /metadata: \{[\s\S]*size: data\.image\.metadata\?\.size[\s\S]*requestId: data\.image\.metadata\?\.requestId[\s\S]*sourceReference/);
   assert.match(workspace, /generateImage\(selectedAsset\.prompt, selectedAsset\.metadata\?\.sourceReference \|\| null, selectedAsset\)/);
   assert.match(workspace, /shotId/);
   assert.match(workspace, /sourceBlockId/);
@@ -78,7 +79,7 @@ test("Step 7.0-C 13: Script History 查看、Director 与 Excel 能力保留", (
 
 test("Step 7.0-C 14: 唯一 Image Store 与现有 API/Director loop 保持不变", () => {
   assert.match(assets, /viralflow-image-assets-v1/);
-  assert.match(workspace, /fetch\("\/api\/images\/generate"/);
+  assert.match(action, /fetch\("\/api\/images\/generate"/);
   assert.match(workspace, /readImageAssets/);
   assert.doesNotMatch(memory, /sourceReference|imageAssets|shotImages/);
 });
@@ -93,8 +94,8 @@ test("Step 7.0-C.1: Director 图片操作在桌面布局保持可访问", () => 
 test("Step 7.0-C.1: Prompt 长度在调用 API 前完成前端校验", () => {
   assert.match(workspace, /const MAX_PROMPT_LENGTH = 2000/);
   const validationIndex = workspace.indexOf("promptValue.length > MAX_PROMPT_LENGTH");
-  const fetchIndex = workspace.indexOf('fetch("/api/images/generate"', validationIndex);
-  assert.ok(validationIndex >= 0 && fetchIndex > validationIndex, "长度校验必须发生在 POST 之前");
+  const actionIndex = workspace.indexOf("generateAndSaveImage", validationIndex);
+  assert.ok(validationIndex >= 0 && actionIndex > validationIndex, "长度校验必须发生在共享生成动作之前");
   assert.match(workspace, /提示词最多支持 \$\{MAX_PROMPT_LENGTH\} 个字符/);
   assert.match(workspace, /prompt\.length > MAX_PROMPT_LENGTH/);
   assert.match(workspace, /\{prompt\.length\} \/ \{MAX_PROMPT_LENGTH\}/);
