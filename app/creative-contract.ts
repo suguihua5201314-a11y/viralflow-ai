@@ -60,6 +60,7 @@ export type CreativeSignalProfile = {
 export type CreativeBriefSourceReferences = {
   analyzerSourceId?: string;
   replicationSourceId?: string;
+  referenceScriptSourceId?: string;
   recentScriptRevisionIds: string[];
 };
 
@@ -70,11 +71,17 @@ export type CreativeBriefPreferences = {
   creativity?: string;
 };
 
+export type CreativeOpportunityReference = {
+  canonicalOpportunityId: string;
+  sourceCandidateId?: string;
+};
+
 export type CreativeBriefV2 = {
   schemaVersion: typeof CREATIVE_BRIEF_SCHEMA_VERSION;
   id: string;
   revisionId: string;
   projectId: string;
+  opportunityReference?: CreativeOpportunityReference;
   productReference: {
     productProfileId?: string | number;
     productName: string;
@@ -122,6 +129,7 @@ export type CreativeBriefLineage = {
 
 const briefPrefix = "creative-brief-";
 const revisionPrefix = "creative-brief-revision-";
+const opportunityPrefix = "creative-opportunity-";
 
 function secureId(prefix: string) {
   if (typeof globalThis.crypto?.randomUUID === "function") return `${prefix}${globalThis.crypto.randomUUID()}`;
@@ -137,6 +145,10 @@ export function createCreativeBriefId() {
 
 export function createCreativeBriefRevisionId() {
   return secureId(revisionPrefix);
+}
+
+export function createCanonicalCreativeOpportunityId() {
+  return secureId(opportunityPrefix);
 }
 
 export function createCreativeBrief(
