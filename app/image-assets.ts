@@ -9,13 +9,14 @@ export type ImageReturnContext = {
   view: "frames";
   projectId: string;
   scriptIdentity: string;
+  sourceScriptRevisionId?: string;
   scriptVersion: string;
   shotId: string;
   frameType: ImageFrameType;
 };
 export type ImageSourceReference =
   | { type: "director-shot"; projectId?: string; scriptIdentity?: string; scriptVersion?: string; shotId: string; sourceBlockId: string }
-  | { type: "frame-prompt"; projectId: string; scriptIdentity?: string; scriptVersion: string; shotId: string; sourceBlockId: string; frameType: ImageFrameType; promptType: ImageFrameType };
+  | { type: "frame-prompt"; projectId: string; scriptIdentity?: string; sourceScriptRevisionId?: string; scriptVersion: string; shotId: string; sourceBlockId: string; frameType: ImageFrameType; promptType: ImageFrameType };
 export type ImageAssetMetadata = { size: string; requestId?: string; sourceReference?: ImageSourceReference };
 
 export type ImageAsset = {
@@ -60,6 +61,7 @@ export function frameReturnContext(reference: ImageSourceReference | undefined):
     view: "frames",
     projectId: reference.projectId,
     scriptIdentity: reference.scriptIdentity || resolveScriptIdentity(undefined, reference.scriptVersion),
+    ...(reference.sourceScriptRevisionId ? { sourceScriptRevisionId: reference.sourceScriptRevisionId } : {}),
     scriptVersion: reference.scriptVersion,
     shotId: reference.shotId,
     frameType: reference.frameType,

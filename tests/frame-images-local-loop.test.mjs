@@ -128,7 +128,8 @@ test("Phase 5.1: Draft and return navigation retain complete source context", as
   assert.match(images, /setReturnContext\(draft\.returnContext \|\| frameReturnContext/);
   assert.match(images, /if \(initializedContext\.current === contextKey\) return/);
   assert.match(images, /返回画面提示词 · \{returnContext\.shotId\}/);
-  assert.match(page, /workspace\.shots\?\.findIndex\(shot=>shot\.shotId===context\.shotId\)/);
+  assert.match(page, /sourceScriptRevisionId/);
+  assert.match(page, /activateDirectorContext\(project,identity,\{shotId:context\.shotId\}\)/);
   assert.match(page, /currentProjectId:context\.projectId,activeView:"frames"/);
 });
 

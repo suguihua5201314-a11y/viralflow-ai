@@ -12,6 +12,8 @@ export type ProjectAssetBundle = {
   replicationResult?: unknown;
   scriptVersions: unknown[];
   directorResult?: unknown;
+  directorContexts?: Record<string, unknown>;
+  currentDirectorContextId?: string;
   voiceResult?: unknown;
   framePromptOverrides?: FramePromptOverride[];
   creativeBriefRevisions?: CreativeBriefV2[];

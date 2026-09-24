@@ -545,6 +545,7 @@ export default function ShootingDirector({
       ShotIntelligenceBatchResult["metadata"] | null
     >(() => initial?.intelligenceMetadata || null);
   const dragged = useRef<number | null>(null),
+    requestIdentity = useRef(""),
     currentContextId = input ? directorContextId(input) : "",
     target = input?.context.targetDuration || 30,
     planned = plannedDuration(shots),
@@ -553,6 +554,7 @@ export default function ShootingDirector({
       result && (result.metadata.contextId !== currentContextId ||
         (result.metadata.sourceScriptRevisionId && result.metadata.sourceScriptRevisionId !== input?.scriptRevisionId)),
     );
+  requestIdentity.current = `${currentProjectId || ""}:${input?.scriptRevisionId || ""}:${currentContextId}`;
   useEffect(() => {
     const restored = restoredWorkspace(initialWorkspace);
     setResult(restored?.result || null);
@@ -709,6 +711,8 @@ export default function ShootingDirector({
   }
   async function generate() {
     if (!input || busy) return;
+    const requestedIdentity = requestIdentity.current;
+    const requestedOnChange = onChange;
     setBusy(true);
     setError("");
     try {
@@ -739,6 +743,17 @@ export default function ShootingDirector({
         setVersions((value) => [...value, archived]);
       }
       const generatedShots = workspaceShots(data.shots);
+      const generatedWorkspace = {
+        result: data,
+        shots: generatedShots,
+        listStatus: "Draft" as const,
+        selectedShot: generatedShots.length ? 0 : null,
+        intelligence: {},
+        intelligenceMetadata: null,
+        updatedAt: new Date().toISOString(),
+      };
+      requestedOnChange?.(generatedWorkspace);
+      if (requestIdentity.current !== requestedIdentity) return;
       setResult(data);
       setShots(generatedShots);
       setIntelligence({});
@@ -747,15 +762,6 @@ export default function ShootingDirector({
       setPreview(null);
       setShowArchived(false);
       setListStatus("Draft");
-      onChange?.({
-        result: data,
-        shots: generatedShots,
-        listStatus: "Draft",
-        selectedShot: generatedShots.length ? 0 : null,
-        intelligence: {},
-        intelligenceMetadata: null,
-        updatedAt: new Date().toISOString(),
-      });
       window.setTimeout(() => void analyzeGenerated(data, generatedShots), 0);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Director生成失败");
