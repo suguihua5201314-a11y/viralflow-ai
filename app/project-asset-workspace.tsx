@@ -57,6 +57,11 @@ function withinCreatedTime(asset: ImageAsset, value: string) {
   const days = Number(value);
   return Date.parse(asset.createdAt) >= Date.now() - days * 86400000;
 }
+function imageWorkspaceIdentity(projectId: string | null, reference: ImageSourceReference | null) {
+  if (!projectId) return "none";
+  if (!reference) return `${projectId}:standalone`;
+  return `${projectId}:${reference.scriptIdentity || "legacy"}:${reference.shotId}:${"frameType" in reference ? reference.frameType : "shot-image"}`;
+}
 export default function ProjectAssetWorkspace({ mode, projects, currentProjectId, onNavigate, onReturnToFrame }: {
   mode: WorkspaceMode;
   projects: ProjectOption[];
@@ -86,6 +91,8 @@ export default function ProjectAssetWorkspace({ mode, projects, currentProjectId
   const [showLarge, setShowLarge] = useState(false);
   const [copied, setCopied] = useState(false);
   const initializedContext = useRef<string | null>(null);
+  const activeGenerationIdentity = useRef("");
+  activeGenerationIdentity.current = imageWorkspaceIdentity(currentProjectId, sourceReference);
 
   const project = projects.find(item => item.id === currentProjectId) || null;
   const projectAssets = useMemo(() => assetsForProject(assets, currentProjectId).sort(newestFirst), [assets, currentProjectId]);
@@ -146,6 +153,7 @@ export default function ProjectAssetWorkspace({ mode, projects, currentProjectId
       return;
     }
     if (!requestedPrompt || !currentProjectId || status === "loading") return;
+    const requestedIdentity = imageWorkspaceIdentity(currentProjectId, preservedReference);
     setStatus("loading"); setError(null);
     try {
       const { asset, persisted } = await generateAndSaveImage({
@@ -153,13 +161,15 @@ export default function ProjectAssetWorkspace({ mode, projects, currentProjectId
         sourceReference: preservedReference,
       });
       const next = [asset, ...readImageAssets().filter((item) => item.id !== asset.id)];
-      setAssets(next); setSelectedAssetId(asset.id); setSourceReference(preservedReference); setStatus("success");
+      setAssets(next);
+      if (activeGenerationIdentity.current !== requestedIdentity) return;
+      setSelectedAssetId(asset.id); setSourceReference(preservedReference); setStatus("success");
       if (!persisted) setError({ type: "storage_full", message: "图片已生成，但浏览器存储空间不足，刷新后记录可能无法保留。", retryable: false });
     } catch (caught) {
       const failure = caught instanceof ImageGenerationActionError
         ? { type: caught.category, message: caught.message, retryable: caught.retryable }
         : { type: "provider_error", message: "图片生成暂时中断，请稍后重试。", retryable: true };
-      setError(failure); setStatus("error");
+      if (activeGenerationIdentity.current === requestedIdentity) { setError(failure); setStatus("error"); }
     }
   }
 

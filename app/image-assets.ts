@@ -34,6 +34,21 @@ export type ImageAsset = {
   metadata?: ImageAssetMetadata;
 };
 
+export type ImageRequestIdentity = {
+  projectId: string;
+  scriptIdentity: string;
+  shotId: string;
+  frameType: ImageFrameType;
+};
+
+export function imageRequestIdentityKey(identity: ImageRequestIdentity) {
+  return `${identity.projectId}:${identity.scriptIdentity}:${identity.shotId}:${identity.frameType}`;
+}
+
+export function sameImageRequestIdentity(left: ImageRequestIdentity, right: ImageRequestIdentity) {
+  return imageRequestIdentityKey(left) === imageRequestIdentityKey(right);
+}
+
 export type ImageStudioDraft = Pick<ImageAsset, "projectId" | "prompt" | "imageType" | "style" | "camera" | "ratio"> & { sourceReference?: ImageSourceReference; returnContext?: ImageReturnContext };
 
 export type FrameAssetQuery = {

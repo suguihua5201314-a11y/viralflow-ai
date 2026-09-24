@@ -171,7 +171,7 @@ test("Phase 5.5A: Visual generation captures identity and isolates frame state",
   ]);
   for (const captured of ["targetProjectId", "targetShot", "targetScriptIdentity", "targetScriptVersion"])
     assert.match(workspace, new RegExp(`const ${captured}`));
-  assert.match(workspace, /stateKey = `\$\{targetProjectId\}:\$\{targetScriptIdentity\}:\$\{targetShot\.shotId\}:\$\{frameType\}`/);
+  assert.match(workspace, /stateKey = imageRequestIdentityKey\(\{ projectId: targetProjectId, scriptIdentity: targetScriptIdentity, shotId: targetShot\.shotId, frameType \}\)/);
   assert.match(workspace, /director:\$\{directorContextId\}/);
   assert.match(workspace, /frameType: "start-frame"/);
   assert.match(workspace, /frameType: "end-frame"/);

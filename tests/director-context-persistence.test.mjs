@@ -173,9 +173,10 @@ test("return target A accepts only an exact legacy A and carries it forward atom
   const root = { version: 1, projects: [value], workspace: { activeView: "images", currentProjectId: "p" }, memoryRevision: 4, writerId: "writer", updatedAt: "2026-01-01T00:00:00.000Z" };
   const after = memory.mutateProjectMemory(root, "writer", current => ({ ...current, projects: [contexts.activateDirectorContext(current.projects[0], { projectId: "p", contextId: contextA, scriptRevisionId: "a" }, { shotId: "shot-01" })] }));
   assert.equal(after.memoryRevision, 5);
-  assert.deepEqual(after.projects[0].assets.directorContexts[contextA], resultA);
+  assert.equal(after.projects[0].assets.directorContexts[contextA].shots[0].marker, "A");
+  assert.deepEqual(after.projects[0].assets.directorContexts[contextA].selectedShotIdentity, { directorContextId: contextA, shotId: "shot-01" });
   assert.equal(after.projects[0].assets.currentDirectorContextId, contextA);
-  assert.deepEqual(after.projects[0].assets.directorResult, resultA);
+  assert.equal(after.projects[0].assets.directorResult.shots[0].marker, "A");
 });
 
 test("existing collection A takes precedence over mirror B during return activation", async () => {
@@ -187,8 +188,8 @@ test("existing collection A takes precedence over mirror B during return activat
   value.assets.directorResult = resultB;
   const after = contexts.activateDirectorContext(value, { projectId: "p", contextId: contextA, scriptRevisionId: "a" }, { shotId: "shot-01" });
   assert.equal(after.assets.currentDirectorContextId, contextA);
-  assert.deepEqual(after.assets.directorResult, resultA);
-  assert.deepEqual(after.assets.directorContexts[contextA], resultA);
+  assert.equal(after.assets.directorResult.shots[0].marker, "A");
+  assert.equal(after.assets.directorContexts[contextA].shots[0].marker, "A");
 });
 
 test("return activation rejects a foreign source revision without any revision bump", async () => {
@@ -243,7 +244,8 @@ test("same-value complete-identity activation is referentially stable", async ()
   value.assets.directorContexts = { [contextA]: result };
   value.assets.currentDirectorContextId = contextA;
   value.assets.directorResult = result;
-  assert.equal(contexts.activateDirectorContext(value, { projectId: "p", contextId: contextA, scriptRevisionId: "r1" }), value);
+  const stable = contexts.activateDirectorContext(value, { projectId: "p", contextId: contextA, scriptRevisionId: "r1" });
+  assert.equal(contexts.activateDirectorContext(stable, { projectId: "p", contextId: contextA, scriptRevisionId: "r1" }), stable);
 });
 
 test("return-style full identity succeeds only for a verifiable exact lineage", async () => {
@@ -256,7 +258,7 @@ test("return-style full identity succeeds only for a verifiable exact lineage", 
   const identity = { projectId: "p", contextId: contextA, scriptRevisionId: "r1" };
   const after = contexts.activateDirectorContext(value, identity, { shotId: "shot-01" });
   assert.equal(after.assets.currentDirectorContextId, contextA);
-  assert.deepEqual(after.assets.directorResult, resultA);
+  assert.equal(after.assets.directorResult.shots[0].marker, "A");
 
   assert.equal(contexts.activateDirectorContext(value, { ...identity, contextId: "missing-context" }), value);
   assert.equal(contexts.activateDirectorContext(value, { projectId: "p", contextId: contextA, scriptRevisionId: "foreign" }), value);

@@ -21,6 +21,7 @@ import {
 import {
   readImageAssets,
   newestFrameAsset,
+  imageRequestIdentityKey,
   resolveScriptIdentity,
   saveImageStudioDraft,
   type ImageAsset,
@@ -255,7 +256,7 @@ export default function FramePromptWorkspace({
     const targetShot = shot;
     const targetScriptIdentity = scriptIdentity;
     const targetScriptVersion = scriptVersion;
-    const stateKey = `${targetProjectId}:${targetScriptIdentity}:${targetShot.shotId}:${frameType}`;
+    const stateKey = imageRequestIdentityKey({ projectId: targetProjectId, scriptIdentity: targetScriptIdentity, shotId: targetShot.shotId, frameType });
     if (generationStates[stateKey]?.status === "loading") return;
 
     const spec = shotImageSpec(

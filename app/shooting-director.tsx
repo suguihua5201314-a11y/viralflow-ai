@@ -41,6 +41,7 @@ import type {
   ShotIntelligenceScores,
 } from "./director-intelligence";
 import { readImageAssets } from "./image-assets";
+import { stabilizeDirectorShotSelection } from "./director-contexts";
 
 type Props = {
   input: DirectorRequest | null;
@@ -73,6 +74,7 @@ type PersistedDirectorWorkspace = {
   shots: WorkspaceShot[];
   listStatus?: "Draft" | "Confirmed";
   selectedShot?: number | null;
+  selectedShotIdentity?: { directorContextId: string; shotId: string } | null;
   intelligence?: Record<string, ShotIntelligenceState>;
   intelligenceMetadata?: ShotIntelligenceBatchResult["metadata"] | null;
 };
@@ -219,7 +221,7 @@ const restoredWorkspace = (
   if (!value || typeof value !== "object") return null;
   const candidate = value as Partial<PersistedDirectorWorkspace>;
   return candidate.result && Array.isArray(candidate.shots)
-    ? (candidate as PersistedDirectorWorkspace)
+    ? (stabilizeDirectorShotSelection(candidate) as PersistedDirectorWorkspace)
     : null;
 };
 
@@ -563,6 +565,7 @@ export default function ShootingDirector({
     setSelected(restored?.selectedShot ?? (restored?.shots.length ? 0 : null));
     setIntelligence(restored?.intelligence || {});
     setIntelligenceMetadata(restored?.intelligenceMetadata || null);
+    setBusy(false);
     setError("");
     setPreview(null);
   }, [currentProjectId, initialWorkspace]);
@@ -594,9 +597,13 @@ export default function ShootingDirector({
     ? intelligence[activeShot.shotId]
     : undefined;
   function commit(next: WorkspaceShot[]) {
+    const selectedShotId = selected === null ? null : shots[selected]?.shotId || null;
     const updated = recalculateTimeline(
       next.map((x) => ({ ...x, status: "Draft" })),
     );
+    const nextSelected = selectedShotId ? updated.findIndex((shot) => shot.shotId === selectedShotId) : -1;
+    const stableSelected = updated.length ? (nextSelected >= 0 ? nextSelected : Math.min(selected ?? 0, updated.length - 1)) : null;
+    setSelected(stableSelected);
     setShots(updated);
     setIntelligence((previous) => {
       const nextIntelligence = Object.fromEntries(
@@ -611,7 +618,8 @@ export default function ShootingDirector({
         result,
         shots: updated,
         listStatus: "Draft",
-        selectedShot: selected,
+        selectedShot: stableSelected,
+        selectedShotIdentity: stableSelected === null || !result ? null : { directorContextId: result.metadata.contextId, shotId: updated[stableSelected].shotId },
         intelligence: nextIntelligence,
         intelligenceMetadata,
         updatedAt: new Date().toISOString(),
@@ -627,6 +635,7 @@ export default function ShootingDirector({
     neighbors?: { previousShot?: WorkspaceShot; nextShot?: WorkspaceShot },
   ) {
     if (!input || !result || !targetShots.length || contextChanged) return;
+    const requestedIdentity = requestIdentity.current;
     const ids = targetShots.map((shot) => shot.shotId);
     setIntelligence((previous) => ({
       ...previous,
@@ -665,6 +674,7 @@ export default function ShootingDirector({
       };
       if (!response.ok)
         throw new Error(data.error || "Shot Intelligence 暂时不可用");
+      if (requestIdentity.current !== requestedIdentity) return;
       setIntelligence((previous) => {
         const next = {
           ...previous,
@@ -688,6 +698,7 @@ export default function ShootingDirector({
       });
       setIntelligenceMetadata(data.metadata);
     } catch (caught) {
+      if (requestIdentity.current !== requestedIdentity) return;
       const message =
         caught instanceof Error
           ? caught.message
@@ -748,6 +759,9 @@ export default function ShootingDirector({
         shots: generatedShots,
         listStatus: "Draft" as const,
         selectedShot: generatedShots.length ? 0 : null,
+        selectedShotIdentity: generatedShots.length
+          ? { directorContextId: data.metadata.contextId, shotId: generatedShots[0].shotId }
+          : null,
         intelligence: {},
         intelligenceMetadata: null,
         updatedAt: new Date().toISOString(),
@@ -764,9 +778,10 @@ export default function ShootingDirector({
       setListStatus("Draft");
       window.setTimeout(() => void analyzeGenerated(data, generatedShots), 0);
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Director生成失败");
+      if (requestIdentity.current === requestedIdentity)
+        setError(e instanceof Error ? e.message : "Director生成失败");
     } finally {
-      setBusy(false);
+      if (requestIdentity.current === requestedIdentity) setBusy(false);
     }
   }
   async function analyzeGenerated(
@@ -830,6 +845,7 @@ export default function ShootingDirector({
     requestedInstruction = instruction,
   ) {
     if (!input || !result || busy || contextChanged) return null;
+    const requestedIdentity = requestIdentity.current;
     const current = shots[index] || shots.at(-1);
     if (!current) return null;
     if (
@@ -862,6 +878,7 @@ export default function ShootingDirector({
       });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || "镜头生成失败");
+      if (requestIdentity.current !== requestedIdentity) return null;
       return {
         ...data.candidate,
         locked: false,
@@ -869,10 +886,11 @@ export default function ShootingDirector({
         metadata: data.metadata,
       };
     } catch (e) {
-      setError(e instanceof Error ? e.message : "镜头生成失败");
+      if (requestIdentity.current === requestedIdentity)
+        setError(e instanceof Error ? e.message : "镜头生成失败");
       return null;
     } finally {
-      setBusy(false);
+      if (requestIdentity.current === requestedIdentity) setBusy(false);
     }
   }
   async function regenerate(index: number) {
@@ -999,7 +1017,6 @@ export default function ShootingDirector({
   function confirmDelete() {
     if (pendingDelete === null) return;
     commit(deleteShot(shots, pendingDelete));
-    setSelected(null);
     setPendingDelete(null);
     notifyWorkspace("镜头已删除", {
       detail: "导演完整性检查已同步更新",
@@ -1040,11 +1057,13 @@ export default function ShootingDirector({
   }
   function selectShot(index: number) {
     setSelected(index);
+    const selectedShotId = shots[index]?.shotId;
     onChange?.({
       result,
       shots,
       listStatus,
       selectedShot: index,
+      selectedShotIdentity: result && selectedShotId ? { directorContextId: result.metadata.contextId, shotId: selectedShotId } : null,
       intelligence,
       intelligenceMetadata,
       updatedAt: new Date().toISOString(),

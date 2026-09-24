@@ -5,6 +5,7 @@ export type PersistedDirectorWorkspace = {
   result: DirectorResult;
   shots: Array<{ shotId?: string }>;
   selectedShot?: number | null;
+  selectedShotIdentity?: { directorContextId: string; shotId: string } | null;
   [key: string]: unknown;
 };
 
@@ -73,12 +74,38 @@ function workspaceMatchesCompleteIdentity(
 }
 
 function safeShotSelection(workspace: PersistedDirectorWorkspace) {
+  const contextId = workspace.result.metadata.contextId;
+  const identity = workspace.selectedShotIdentity;
+  if (identity?.directorContextId === contextId) {
+    const identityIndex = workspace.shots.findIndex((shot) => shot.shotId === identity.shotId);
+    if (identityIndex >= 0) {
+      return workspace.selectedShot === identityIndex
+        ? workspace
+        : { ...workspace, selectedShot: identityIndex };
+    }
+  }
   const selected = workspace.selectedShot;
   if (!workspace.shots.length) {
-    return selected === null ? workspace : { ...workspace, selectedShot: null };
+    return selected === null && workspace.selectedShotIdentity === null
+      ? workspace
+      : { ...workspace, selectedShot: null, selectedShotIdentity: null };
   }
-  if (typeof selected === "number" && selected >= 0 && selected < workspace.shots.length) return workspace;
-  return { ...workspace, selectedShot: 0 };
+  const fallbackIndex = identity
+    ? identity.directorContextId === contextId
+      ? Math.min(typeof selected === "number" && selected >= 0 ? selected : 0, workspace.shots.length - 1)
+      : 0
+    : typeof selected === "number" && selected >= 0 && selected < workspace.shots.length ? selected : 0;
+  const fallbackShotId = workspace.shots[fallbackIndex]?.shotId;
+  return {
+    ...workspace,
+    selectedShot: fallbackIndex,
+    selectedShotIdentity: fallbackShotId ? { directorContextId: contextId, shotId: fallbackShotId } : null,
+  };
+}
+
+export function stabilizeDirectorShotSelection(value: unknown) {
+  const workspace = persistedDirectorWorkspace(value);
+  return workspace ? safeShotSelection(workspace) : null;
 }
 
 export function resolveDirectorWorkspace(
@@ -107,9 +134,10 @@ export function saveDirectorWorkspace(
   value: unknown,
   activate: boolean,
 ): PersistentProject {
-  const workspace = persistedDirectorWorkspace(value);
+  const parsed = persistedDirectorWorkspace(value);
   const identity = directorRequestIdentity(project.id, request);
-  if (!workspace || !identity || !workspaceMatchesIdentity(workspace, identity)) return project;
+  if (!parsed || !identity || !workspaceMatchesIdentity(parsed, identity)) return project;
+  const workspace = safeShotSelection(parsed);
   const contexts = carryLegacyContext(project.assets);
   contexts[identity.contextId] = workspace;
   const assets: ProjectAssetBundle = {
@@ -129,12 +157,17 @@ export function saveDirectorWorkspace(
 export function selectDirectorShot(
   project: PersistentProject,
   request: DirectorRequest,
-  selectedShot: number,
+  shotId: string,
 ) {
   const identity = directorRequestIdentity(project.id, request);
   const workspace = resolveDirectorWorkspace(project, request);
-  if (!identity || !workspace || selectedShot < 0 || selectedShot >= workspace.shots.length) return project;
-  return saveDirectorWorkspace(project, request, { ...workspace, selectedShot }, true);
+  const selectedShot = workspace?.shots.findIndex((shot) => shot.shotId === shotId) ?? -1;
+  if (!identity || !workspace || selectedShot < 0) return project;
+  return saveDirectorWorkspace(project, request, {
+    ...workspace,
+    selectedShot,
+    selectedShotIdentity: { directorContextId: identity.contextId, shotId },
+  }, true);
 }
 
 export function activateDirectorContext(
