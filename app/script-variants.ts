@@ -1,4 +1,5 @@
 export type VariantIdentitySource = {
+  revisionId?: string;
   id?: number;
   createdAt?: string;
   title: string;
@@ -14,6 +15,7 @@ export type ScriptVariant<TScript, TBlock> = {
 };
 
 export function variantIdentity(script: VariantIdentitySource) {
+  if (script.revisionId?.trim()) return `revision:${script.revisionId.trim()}`;
   if (script.id != null) return `id:${script.id}`;
   if (script.createdAt) return `created:${script.createdAt}`;
   return `script:${script.title}:${script.product}:${script.narration || ""}`;

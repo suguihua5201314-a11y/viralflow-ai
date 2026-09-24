@@ -33,7 +33,7 @@ test("sending to Director persists the current draft first",()=>{
 });
 
 test("project recovery follows project-owned versions, scoped workspace, replication, empty order",()=>{
-  const expressions=["workspaceScript||versions.at(-1)||replicationScript||null","versionIds.has(identity(snapshot.currentScript))","belongsToProject(script,project)"];
+  const expressions=["workspaceScript||versions.at(-1)||replicationScript||null","versionIds.has(identity(snapshot.currentScript))","belongsToProject(snapshot.currentScript,project)"];
   for(const expression of expressions) assert.ok(recovery.includes(expression),expression);
   assert.match(page,/restoreProjectScriptState\(project,projectMemory\.workspace\)/);
   assert.doesNotMatch(page,/setResult\(projectMemory\.workspace\.currentScript as StudioScript\)/);

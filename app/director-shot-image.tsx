@@ -5,7 +5,7 @@ import { useEffect, useState } from "react";
 import { readImageAssets, saveImageAssets, saveImageStudioDraft, type ImageAsset, type ImageSourceReference } from "./image-assets";
 import { generateAndSaveImage, ImageGenerationActionError } from "./image-generation-action";
 import { shotImageSpec } from "./director-image";
-import type { DirectorRequest } from "./director-core";
+import { directorContextId, type DirectorRequest } from "./director-core";
 import type { WorkspaceShot } from "./director-workspace";
 import { notifyWorkspace } from "./components/ui/workspace-feedback";
 
@@ -17,21 +17,22 @@ export default function DirectorShotImage({ shot, input, visualStyle, projectId,
   const [error, setError] = useState("");
   const [showLarge, setShowLarge] = useState(false);
   const spec = projectId ? shotImageSpec(shot, input, visualStyle, projectId) : null;
+  const scriptIdentity = `director:${directorContextId(input)}`;
 
   useEffect(() => {
     if (!projectId) return;
     const timer = window.setTimeout(() => {
-      const existing = readImageAssets().find(item => item.projectId === projectId && item.metadata?.sourceReference?.type === "director-shot" && item.metadata.sourceReference.shotId === shot.shotId);
+      const existing = readImageAssets().find(item => item.projectId === projectId && item.metadata?.sourceReference?.type === "director-shot" && item.metadata.sourceReference.shotId === shot.shotId && (item.metadata.sourceReference.scriptIdentity === scriptIdentity || (!input.scriptRevisionId && !item.metadata.sourceReference.scriptIdentity)));
       if (existing) { setAsset(existing); setStatus("success"); }
     }, 0);
     return () => window.clearTimeout(timer);
-  }, [projectId, shot.shotId]);
+  }, [input.scriptRevisionId, projectId, scriptIdentity, shot.shotId]);
 
   async function generateImage() {
     if (!spec || status === "loading") return;
     setStatus("loading"); setError("");
     try {
-      const sourceReference: ImageSourceReference = { type: "director-shot", projectId: spec.projectId, shotId: shot.shotId, sourceBlockId: shot.sourceBlockId };
+      const sourceReference: ImageSourceReference = { type: "director-shot", projectId: spec.projectId, scriptIdentity, scriptVersion: input.scriptRevisionId, shotId: shot.shotId, sourceBlockId: shot.sourceBlockId };
       const { asset: nextAsset, persisted } = await generateAndSaveImage({ request: spec, sourceReference, assetIdPrefix: "director-image" });
       setAsset(nextAsset); setStatus("success");
       if (!persisted) setError("图片已生成，但浏览器资产存储失败；请先下载图片。");
@@ -51,7 +52,7 @@ export default function DirectorShotImage({ shot, input, visualStyle, projectId,
 
   function openImageStudio() {
     if (!spec) return;
-    saveImageStudioDraft({ ...spec, sourceReference: { type: "director-shot", shotId: shot.shotId, sourceBlockId: shot.sourceBlockId } });
+    saveImageStudioDraft({ ...spec, sourceReference: { type: "director-shot", projectId: spec.projectId, scriptIdentity, scriptVersion: input.scriptRevisionId, shotId: shot.shotId, sourceBlockId: shot.sourceBlockId } });
     onNavigate?.();
   }
 

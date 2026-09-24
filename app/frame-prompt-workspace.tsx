@@ -103,9 +103,10 @@ export default function FramePromptWorkspace({
   const [lightbox, setLightbox] = useState<ImageAsset | null>(null);
   const [assistantCollapsed, setAssistantCollapsed] = useState(false);
   const shot = shots[selected] || null;
+  const requestRevisionId = request?.scriptRevisionId || (request?.script as { revisionId?: string } | undefined)?.revisionId;
   const requestScriptId = (request?.script as { id?: string | number } | undefined)?.id;
   const legacyScriptIdentity = resolveScriptIdentity(
-    requestScriptId ?? scriptId,
+    requestRevisionId ?? requestScriptId ?? scriptId,
     scriptVersion,
   );
   const directorContextId = director?.result.metadata.contextId?.trim();

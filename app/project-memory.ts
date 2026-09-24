@@ -17,6 +17,7 @@ export type PersistentProject = {
   id: string;
   name: string;
   product: string;
+  productProfileId?: number;
   market: string;
   platform: string;
   language: string;

@@ -37,9 +37,11 @@ import type { ImageReturnContext } from "./image-assets";
 import ProjectAssetWorkspace from "./project-asset-workspace";
 import FramePromptWorkspace from "./frame-prompt-workspace";
 import {mergeReplicationAdoption,restoreProjectAnalyzer,restoreProjectReplication,type ReplicationWorkspaceAsset} from "./analyzer-replication-workspace";
+import {createScriptRevisionId,ensureScriptRevision,scriptRevisionIdentity} from "./script-foundation";
+import {resolveCanonicalProductContext} from "./product-context";
 
 type Scene = { time: string; visual: string; line: string; edit: string };
-type Script = { id?: number; title: string; product: string; language: string; country: string; style: string; hook: string; alternateHooks: string[]; narration: string; scenes: Scene[]; createdAt?: string; aiGenerated?: boolean; creativeAngle?:string; hookType?:string; framework?:string; conflict?:string; productReveal?:string; proof?:string; sellingPoints?:string; cta?:string; shootingSuggestion?:string; scenario?:string; proofMechanism?:string; ctaStyle?:string };
+type Script = { revisionId?: string; id?: number; title: string; product: string; language: string; country: string; style: string; hook: string; alternateHooks: string[]; narration: string; scenes: Scene[]; createdAt?: string; aiGenerated?: boolean; creativeAngle?:string; hookType?:string; framework?:string; conflict?:string; productReveal?:string; proof?:string; sellingPoints?:string; cta?:string; shootingSuggestion?:string; scenario?:string; proofMechanism?:string; ctaStyle?:string };
 type ImportedHook = { url: string; market: string; hook: string; createdAt: string };
 type MonitorAccount = { id?: number; handle: string; market: string; product: string; url: string };
 type HookItem = { id: number; title: string; language: string; copy: string };
@@ -195,6 +197,7 @@ export default function Home() {
       if(typeof snapshot.referenceScript==="string")setReferenceScript(snapshot.referenceScript);
       if(snapshot.directorContext){setAdoptedDirectorContext({duration:snapshot.directorContext.duration,offer:snapshot.directorContext.offer});setDirectorSourceType(snapshot.directorContext.sourceType as DirectorSourceType);}
       setSelectedProjectKey(snapshot.currentProjectId);
+      setSelectedProductId(project?.productProfileId??productProfiles.find(item=>item.name.trim().toLowerCase()===project?.product.trim().toLowerCase())?.id??null);
       setActive(snapshot.activeView||"dashboard");
     };
     if(local)hydrate(local);
@@ -210,6 +213,7 @@ export default function Home() {
     setResult((restored.currentScript||(demo?demoScript:null)) as Script|null);
     setRaceResults((restored.raceResults.length?restored.raceResults:(demo?demoScriptVariations:[])) as Script[]);
     if(project)setForm(previous=>({...previous,product:project.product,country:project.market,language:project.language}));
+    setSelectedProductId(project?.productProfileId??productProfiles.find(item=>item.name.trim().toLowerCase()===project?.product.trim().toLowerCase())?.id??null);
   },[projectMemory.workspace.currentProjectId]);
 
   useEffect(()=>{
@@ -283,13 +287,13 @@ export default function Home() {
   function saveReviews(items: ReviewRecord[]) { setReviewRecords(items); localStorage.setItem("susu-publish-reviews", JSON.stringify(items)); void syncTeam(currentTeamPayload({ reviews: items })); }
   function saveViralCases(items:ViralCase[]){setViralCases(items);localStorage.setItem("viralflow-viral-cases-v1",JSON.stringify(items));void syncTeam(currentTeamPayload({viralCases:items}));}
   function replicateViralCase(item:ViralCase){const reference=viralCaseReference(item);setReplicationCase(item);setReferenceScript(reference);setActive("replicate");updateProjectMemory({analyzerResult:item,replicationResult:{sourceId:item.id,source:item}},{stage:"复刻",progress:30});saveWorkspaceSnapshot({activeView:"replicate",referenceScript:reference});}
-  function adoptCurrentScript(script:Script,context:AdoptedDirectorContext){setResult(script);setAdoptedDirectorContext(context);updateProjectMemory({scriptVersions:[...((projectMemory.projects.find(x=>x.id===projectMemory.workspace.currentProjectId)?.assets.scriptVersions||[]).filter(item=>(item as Script).id!==script.id)),script]},{stage:"脚本",progress:55});saveWorkspaceSnapshot({currentScript:script,directorContext:{...context,sourceType:directorSourceType}});}
-  function adoptReplication(script:StructuredScript,reference:string,setup:ReplicationSetup,candidate:import("./replication-core").ReplicationCandidate,workspace:ReplicationWorkspaceAsset,next:"create"|"director"="create"){const generated=script as Script;const adopted={...script,id:Date.now(),product:generated.product||form.product,language:generated.language||setup.language,country:generated.country||setup.market,style:script.style||form.style,alternateHooks:generated.alternateHooks||[],scenes:script.scenes||[],sourceCaseReference:reference} as Script;const nextForm={...form,product:adopted.product,language:adopted.language,country:adopted.country,duration:setup.duration};const currentProject=projectMemory.projects.find(x=>x.id===projectMemory.workspace.currentProjectId);const mergedReplication=mergeReplicationAdoption(currentProject?.assets.replicationResult,workspace,candidate,adopted as StructuredScript,reference,setup);setForm(nextForm);setReferenceScript(reference);setResult(adopted);setAdoptedDirectorContext({duration:Number(setup.duration)||30,offer:""});setRaceResults([]);setDirectorSourceType("viral-replication");setActive(next);updateProjectMemory({replicationResult:mergedReplication,scriptVersions:[...currentProject?.assets.scriptVersions||[],adopted]},{stage:next==="director"?"导演":"脚本",progress:next==="director"?68:55});saveWorkspaceSnapshot({activeView:next,currentScript:adopted,raceResults:[],referenceScript:reference,form:nextForm,directorContext:{duration:Number(setup.duration)||30,offer:"",sourceType:"viral-replication"}});}
+  function adoptCurrentScript(script:Script,context:AdoptedDirectorContext){const adopted=ensureScriptRevision(script);setResult(adopted);setAdoptedDirectorContext(context);updateProjectMemory({scriptVersions:[...((projectMemory.projects.find(x=>x.id===projectMemory.workspace.currentProjectId)?.assets.scriptVersions||[]).filter(item=>scriptRevisionIdentity(item as Script)!==adopted.revisionId)),adopted]},{stage:"脚本",progress:55});saveWorkspaceSnapshot({currentScript:adopted,directorContext:{...context,sourceType:directorSourceType}});return adopted;}
+  function adoptReplication(script:StructuredScript,reference:string,setup:ReplicationSetup,candidate:import("./replication-core").ReplicationCandidate,workspace:ReplicationWorkspaceAsset,next:"create"|"director"="create"){const generated=script as Script;const adopted=ensureScriptRevision({...script,product:generated.product||form.product,language:generated.language||setup.language,country:generated.country||setup.market,style:script.style||form.style,alternateHooks:generated.alternateHooks||[],scenes:script.scenes||[],sourceCaseReference:reference} as Script);const nextForm={...form,product:adopted.product,language:adopted.language,country:adopted.country,duration:setup.duration};const currentProject=projectMemory.projects.find(x=>x.id===projectMemory.workspace.currentProjectId);const mergedReplication=mergeReplicationAdoption(currentProject?.assets.replicationResult,workspace,candidate,adopted as StructuredScript,reference,setup);setForm(nextForm);setReferenceScript(reference);setResult(adopted);setAdoptedDirectorContext({duration:Number(setup.duration)||30,offer:""});setRaceResults([]);setDirectorSourceType("viral-replication");setActive(next);updateProjectMemory({replicationResult:mergedReplication,scriptVersions:[...currentProject?.assets.scriptVersions||[],adopted]},{stage:next==="director"?"导演":"脚本",progress:next==="director"?68:55});saveWorkspaceSnapshot({activeView:next,currentScript:adopted,raceResults:[],referenceScript:reference,form:nextForm,directorContext:{duration:Number(setup.duration)||30,offer:"",sourceType:"viral-replication"}});}
   function addHookItem() { if (!hookDraft.title.trim() || !hookDraft.copy.trim()) return; saveHooks([{ id: Date.now(), title: hookDraft.title.trim(), language: hookDraft.language, copy: hookDraft.copy.trim() }, ...hookLibrary]); setHookDraft({ title: "", language: "中文", copy: "" }); }
   function addPointItem() { if (!pointDraft.product.trim() || !pointDraft.points.trim()) return; savePoints([{ id: Date.now(), product: pointDraft.product.trim(), points: pointDraft.points.trim() }, ...pointLibrary]); setPointDraft({ product: "", points: "" }); }
   function saveProductProfile() { if (!productDraft.name.trim() || !productDraft.sellingPoints.trim()) return; const item:ProductProfile = { id:editingProductId ?? Date.now(), ...productDraft, updatedAt:new Date().toISOString() }; saveProducts(editingProductId ? productProfiles.map(x => x.id === editingProductId ? item : x) : [item, ...productProfiles]); setEditingProductId(null); setProductDraft(emptyProductDraft); }
   function editProductProfile(item:ProductProfile) { const { id, updatedAt, ...draft } = item; void updatedAt; setEditingProductId(id); setProductDraft(draft); }
-  function applyProductProfile(item:ProductProfile) { setSelectedProductId(item.id); setForm(prev => ({ ...prev, product:item.name, sellingPoints:[item.sellingPoints,item.parameters].filter(Boolean).join("；"), audience:item.audience || prev.audience, country:item.markets.split(/[、,，]/)[0]?.trim() || prev.country, offer:[item.offer,item.price].filter(Boolean).join("；") || prev.offer })); setActive("create"); }
+  function applyProductProfile(item:ProductProfile) { setSelectedProductId(item.id); updateProjectMemory({}, {product:item.name,productProfileId:item.id}); setForm(prev => ({ ...prev, product:item.name, sellingPoints:[item.sellingPoints,item.parameters].filter(Boolean).join("；"), audience:item.audience || prev.audience, country:item.markets.split(/[、,，]/)[0]?.trim() || prev.country, offer:[item.offer,item.price].filter(Boolean).join("；") || prev.offer })); setActive("create"); }
   function addReviewRecord() { if (!reviewDraft.title.trim() || !reviewDraft.product.trim()) return; const item:ReviewRecord = { id:Date.now(), ...reviewDraft, createdAt:new Date().toISOString() }; saveReviews([item,...reviewRecords]); setReviewDraft(emptyReviewDraft); }
 
   async function addMonitorAccount() {
@@ -306,18 +310,23 @@ export default function Home() {
     finally { setAccountSaving(false); }
   }
 
+  function currentProductContext(productName=form.product){
+    const project=projectMemory.projects.find(item=>item.id===projectMemory.workspace.currentProjectId);
+    return resolveCanonicalProductContext({productName,selectedProductId,projectProductProfileId:project?.productProfileId,profiles:productProfiles});
+  }
+
   async function generate(controls:GenerationControls) {
     if (!inputReady || loading) return;
     setLoading(true); setError("");
     try {
       const recent = history.filter(item => item.product === form.product && item.language === form.language).slice(0, 6).map(({title,hook,narration,creativeAngle,scenario,proofMechanism,cta,product,language}) => ({title,hook,narration,creativeAngle,scenario,proofMechanism,cta,product,language}));
-      const productKnowledge=productProfiles.find(item=>item.id===selectedProductId&&item.name.trim().toLowerCase()===form.product.trim().toLowerCase());
+      const productKnowledge=currentProductContext().productKnowledge;
       const sellingPointKnowledge=pointLibrary.filter(item=>item.product.trim().toLowerCase()===form.product.trim().toLowerCase());
       const res = await fetch("/api/scripts", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ ...form, ...controls, outputCount:1, projectId:projectMemory.workspace.currentProjectId, productKnowledge, sellingPointKnowledge, referenceScript: referenceScript || undefined, recent, nonce: Date.now() + Math.random() }) });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "生成失败");
       if(data.provider)setLastProviderRun(data.provider);
-      const nextHistory = [data.script, ...history].slice(0, 100); adoptCurrentScript(data.script,{duration:Number(form.duration)||30,offer:form.offer}); setHistory(nextHistory); localStorage.setItem("viralcraft-history", JSON.stringify(nextHistory)); void syncTeam(currentTeamPayload({ history: nextHistory }));saveWorkspaceSnapshot({activeView:"create",form,currentScript:data.script,raceResults:[]});
+      const adopted=adoptCurrentScript(data.script,{duration:Number(form.duration)||30,offer:form.offer}); const nextHistory = [adopted, ...history].slice(0, 100); setHistory(nextHistory); localStorage.setItem("viralcraft-history", JSON.stringify(nextHistory)); void syncTeam(currentTeamPayload({ history: nextHistory }));saveWorkspaceSnapshot({activeView:"create",form,currentScript:adopted,raceResults:[]});
     } catch (e) { setError(e instanceof Error ? e.message : "生成失败，请重试。"); }
     finally { setLoading(false); }
   }
@@ -326,22 +335,24 @@ export default function Home() {
     setRaceLoading(true); setError("");
     try {
       const recent = history.filter(item=>item.product===form.product&&item.language===form.language).slice(0,6).map(({title,hook,narration,creativeAngle,scenario,proofMechanism,cta,product,language}) => ({title,hook,narration,creativeAngle,scenario,proofMechanism,cta,product,language}));
-      const productKnowledge=productProfiles.find(item=>item.id===selectedProductId&&item.name.trim().toLowerCase()===form.product.trim().toLowerCase());
+      const productKnowledge=currentProductContext().productKnowledge;
       const sellingPointKnowledge=pointLibrary.filter(item=>item.product.trim().toLowerCase()===form.product.trim().toLowerCase());
       const res=await fetch("/api/scripts",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({...form,...controls,outputCount:5,projectId:projectMemory.workspace.currentProjectId,productKnowledge,sellingPointKnowledge,referenceScript:referenceScript||undefined,recent,nonce:Date.now()+Math.random()})});
       const data=await res.json(); if(!res.ok)throw new Error(data.error||"生成失败");
       if(data.providerRuns?.[0])setLastProviderRun(data.providerRuns[0]);
-      const scripts=(data.scripts || (data.script?[data.script]:[])) as Script[]; if(scripts.length!==5)throw new Error("赛马生成结果不完整");
+      const scripts=((data.scripts || (data.script?[data.script]:[])) as Script[]).map(script=>ensureScriptRevision(script)); if(scripts.length!==5)throw new Error("赛马生成结果不完整");
       const nextHistory = [...scripts, ...history].slice(0, 100);
       setRaceResults(scripts); adoptCurrentScript(scripts[0],{duration:Number(form.duration)||30,offer:form.offer}); setHistory(nextHistory); localStorage.setItem("viralcraft-history", JSON.stringify(nextHistory)); void syncTeam(currentTeamPayload({ history: nextHistory }));updateProjectMemory({scriptVersions:[...projectMemory.projects.find(x=>x.id===projectMemory.workspace.currentProjectId)?.assets.scriptVersions||[],...scripts]},{stage:"脚本",progress:55});saveWorkspaceSnapshot({activeView:"create",form,currentScript:scripts[0],raceResults:scripts});
     } catch (e) { setError(e instanceof Error ? e.message : "赛马稿生成失败"); }
     finally { setRaceLoading(false); }
   }
-  function update(key: keyof typeof form, value: string) { if(key==="product"&&productProfiles.find(item=>item.id===selectedProductId)?.name!==value)setSelectedProductId(null); setForm(prev => {const next={...prev,[key]:value};saveWorkspaceSnapshot({form:next});return next;}); }
+  function update(key: keyof typeof form, value: string) { if(key==="product")updateProjectMemory({}, {product:value}); setForm(prev => {const next={...prev,[key]:value};saveWorkspaceSnapshot({form:next});return next;}); }
   function saveScriptVersion(script: Script) {
+    const {id:_legacyId,revisionId:_previousRevision,...revisionSource}=script;
+    void _legacyId;void _previousRevision;
     const saved: Script = {
-      ...script,
-      id: Date.now(),
+      ...revisionSource,
+      revisionId:createScriptRevisionId(),
       createdAt: new Date().toISOString(),
       title: `${script.title.replace(/ · V\d+$/, "")} · V${history.filter(item => item.title.startsWith(script.title.replace(/ · V\d+$/, ""))).length + 1}`,
     };
@@ -371,13 +382,13 @@ export default function Home() {
     a.href = URL.createObjectURL(blob); a.download = `${script.product}-${script.language}-脚本.xls`; a.click(); URL.revokeObjectURL(a.href); notifyWorkspace("脚本导出已开始",{detail:"文件使用当前真实脚本内容生成"});
   }
 
-  const directorProduct=productProfiles.find(item=>item.name.trim().toLowerCase()===(result?.product||form.product).trim().toLowerCase());
   const currentDirectorProject=projectMemory.projects.find(project=>project.id===projectMemory.workspace.currentProjectId);
+  const directorProduct=currentProductContext(result?.product||form.product).productKnowledge;
   const currentAnalyzerCase=restoreProjectAnalyzer(currentDirectorProject);
   const currentReplicationWorkspace=restoreProjectReplication(currentDirectorProject);
   const currentReplicationSource=currentReplicationWorkspace?.source||currentAnalyzerCase||null;
   const persistentDirectorWorkspace=currentDirectorProject?.assets.directorResult;
-  const directorInput:DirectorRequest|null=result?{script:result as StructuredScript,context:{product:result.product||form.product,sellingPoints:result.sellingPoints||directorProduct?.sellingPoints||form.sellingPoints,audience:form.audience,market:result.country||form.country,language:result.language||form.language,platform:"TikTok",targetDuration:adoptedDirectorContext.duration,creativeMode:result.style||form.style,hookStrategy:result.hookType||"好奇",framework:result.framework||form.framework,creativeAngle:result.creativeAngle||"",offer:adoptedDirectorContext.offer,productKnowledge:directorProduct?{...directorProduct,offer:adoptedDirectorContext.offer}:undefined,sourceType:directorSourceType,...(directorSourceType==="viral-replication"?{replication:{sourceMechanism:result.creativeAngle||result.hookType||"",replicationStrategy:`${result.hookType||""} · ${result.framework||""}`,proofMapping:result.proof||"",sellingPointMapping:result.sellingPoints||""}}:{})},settings:{provider:"doubao"}}:null;
+  const directorInput:DirectorRequest|null=result?{projectId:currentDirectorProject?.id,scriptRevisionId:scriptRevisionIdentity(result),script:result as StructuredScript,context:{product:result.product||form.product,sellingPoints:result.sellingPoints||directorProduct?.sellingPoints||form.sellingPoints,audience:form.audience,market:result.country||form.country,language:result.language||form.language,platform:"TikTok",targetDuration:adoptedDirectorContext.duration,creativeMode:result.style||form.style,hookStrategy:result.hookType||"好奇",framework:result.framework||form.framework,creativeAngle:result.creativeAngle||"",offer:adoptedDirectorContext.offer,productKnowledge:directorProduct?{...directorProduct,offer:adoptedDirectorContext.offer}:undefined,sourceType:directorSourceType,...(directorSourceType==="viral-replication"?{replication:{sourceMechanism:result.creativeAngle||result.hookType||"",replicationStrategy:`${result.hookType||""} · ${result.framework||""}`,proofMapping:result.proof||"",sellingPointMapping:result.sellingPoints||""}}:{})},settings:{provider:"doubao"}}:null;
   const directorDisplayInput=directorInput||(DATA_MODE==="demo"?demoDirectorInput:null);
   const currentDirectorWorkspace=persistentDirectorWorkspace||(DATA_MODE==="demo"&&!result?demoDirectorWorkspace:undefined);
 
@@ -415,10 +426,10 @@ export default function Home() {
     workflow={projectMode?<WorkflowStepBar active={active} onNavigate={view=>{setActive(view);saveWorkspaceSnapshot({activeView:view});}}/>:null}
   >
       {active === "dashboard" && <Dashboard metrics={dashboardMetrics} recent={dashboardRecent} dataMode={DATA_MODE} onNavigate={setActive} onOpenRecent={openRecent} onOpenProject={openProject} />}
-      {active === "brain" && <ProjectBrainWorkspace project={projectMemory.projects.find(item=>item.id===projectMemory.workspace.currentProjectId)} knowledge={productProfiles.find(item=>item.name===projectMemory.projects.find(project=>project.id===projectMemory.workspace.currentProjectId)?.product)} reference={projectMemory.workspace.referenceScript} onEdit={()=>setActive("products")} />}
+      {active === "brain" && <ProjectBrainWorkspace project={projectMemory.projects.find(item=>item.id===projectMemory.workspace.currentProjectId)} knowledge={currentProductContext(currentDirectorProject?.product||form.product).profile} reference={projectMemory.workspace.referenceScript} onEdit={()=>setActive("products")} />}
       {active === "projects" && <ProjectWorkspace projects={persistentProjects} initialProjectKey={selectedProjectKey} saveState={memorySaveState} onCreate={createProject} onRename={renameProject} onDuplicate={duplicateProject} onDelete={deleteProject} onSelect={id=>saveWorkspaceSnapshot({currentProjectId:id,activeView:"projects"})} onNavigate={view=>{setActive(view);saveWorkspaceSnapshot({activeView:view});}} />}
       {active === "images" && <ImageStudio projects={projectMemory.projects.map(project=>({id:project.id,name:project.name,product:project.product}))} currentProjectId={projectMemory.workspace.currentProjectId} onNavigate={view=>{setActive(view);saveWorkspaceSnapshot({activeView:view});}} onReturnToFrame={returnToFramePrompt} />}
-      {active === "frames" && <FramePromptWorkspace project={currentDirectorProject||null} request={directorDisplayInput} workspace={currentDirectorWorkspace} scriptId={result?.id} scriptVersion={result?.title||"当前脚本"} promptOverrides={currentDirectorProject?.assets.framePromptOverrides||[]} onPromptOverridesChange={records=>updateProjectMemory({framePromptOverrides:records})} onNavigate={view=>{setActive(view);saveWorkspaceSnapshot({activeView:view});}} onSelectShot={index=>{if(!currentDirectorWorkspace||typeof currentDirectorWorkspace!=="object")return;updateProjectMemory({directorResult:{...currentDirectorWorkspace,selectedShot:index}});saveWorkspaceSnapshot({activeView:"frames"});}} />}
+      {active === "frames" && <FramePromptWorkspace project={currentDirectorProject||null} request={directorDisplayInput} workspace={currentDirectorWorkspace} scriptId={result?scriptRevisionIdentity(result):undefined} scriptVersion={result?.title||"当前脚本"} promptOverrides={currentDirectorProject?.assets.framePromptOverrides||[]} onPromptOverridesChange={records=>updateProjectMemory({framePromptOverrides:records})} onNavigate={view=>{setActive(view);saveWorkspaceSnapshot({activeView:view});}} onSelectShot={index=>{if(!currentDirectorWorkspace||typeof currentDirectorWorkspace!=="object")return;updateProjectMemory({directorResult:{...currentDirectorWorkspace,selectedShot:index}});saveWorkspaceSnapshot({activeView:"frames"});}} />}
       {active === "assets" && <ProjectAssetWorkspace mode="assets" projects={projectMemory.projects.map(project=>({id:project.id,name:project.name,product:project.product}))} currentProjectId={projectMemory.workspace.currentProjectId} onNavigate={view=>{setActive(view);saveWorkspaceSnapshot({activeView:view});}} />}
       {active === "video" && <VideoAnalyzer products={productProfiles.map(x=>x.name)} />}
       {active === "director" && <ShootingDirector input={directorDisplayInput} currentProjectId={projectMemory.workspace.currentProjectId} initialWorkspace={currentDirectorWorkspace} onNavigate={view=>setActive(view)} onChange={value=>{updateProjectMemory({directorResult:value},{stage:"导演",progress:72});saveWorkspaceSnapshot({activeView:"director"});}} />}
@@ -454,7 +465,7 @@ export default function Home() {
         onGenerate={generate}
         onGenerateRace={generateRace}
         onAdopt={script=>adoptCurrentScript(script,{duration:Number(form.duration)||30,offer:form.offer})}
-        onDraftChange={script=>{setResult(script);updateProjectMemory({scriptVersions:[...((projectMemory.projects.find(x=>x.id===projectMemory.workspace.currentProjectId)?.assets.scriptVersions||[]).filter(item=>(item as Script).id!==script.id)),script]},{stage:"脚本",progress:55});saveWorkspaceSnapshot({currentScript:script,activeView:"create"});}}
+        onDraftChange={script=>{const revised=ensureScriptRevision(script);setResult(revised);updateProjectMemory({scriptVersions:[...((projectMemory.projects.find(x=>x.id===projectMemory.workspace.currentProjectId)?.assets.scriptVersions||[]).filter(item=>scriptRevisionIdentity(item as Script)!==revised.revisionId)),revised]},{stage:"脚本",progress:55});saveWorkspaceSnapshot({currentScript:revised,activeView:"create"});}}
         onSaveVersion={saveScriptVersion}
         onCopy={copyText}
         onExport={exportExcel}

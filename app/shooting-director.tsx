@@ -550,7 +550,8 @@ export default function ShootingDirector({
     planned = plannedDuration(shots),
     delta = Math.round((planned - target) * 10) / 10,
     contextChanged = Boolean(
-      result && result.metadata.contextId !== currentContextId,
+      result && (result.metadata.contextId !== currentContextId ||
+        (result.metadata.sourceScriptRevisionId && result.metadata.sourceScriptRevisionId !== input?.scriptRevisionId)),
     );
   useEffect(() => {
     const restored = restoredWorkspace(initialWorkspace);

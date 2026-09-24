@@ -22,6 +22,7 @@ import {
   variantIdentity,
   type ScriptVariant,
 } from "./script-variants";
+import { synchronizeScriptScenes } from "./script-foundation";
 
 export type StudioScene = {
   time: string;
@@ -30,6 +31,7 @@ export type StudioScene = {
   edit: string;
 };
 export type StudioScript = {
+  revisionId?: string;
   id?: number;
   title: string;
   product: string;
@@ -251,6 +253,7 @@ function withBlocks(script: StudioScript, blocks: EditorBlock[]): StudioScript {
       .map((block) => block.text.trim())
       .filter(Boolean)
       .join(" "),
+    scenes: synchronizeScriptScenes(script.scenes, blocks),
   };
 }
 

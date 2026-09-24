@@ -43,7 +43,7 @@ test("Step 6.3 E/F: Image Asset 使用 metadata sourceReference 关联 Project �
   assert.match(action, /saveImageAssets\(next\)/);
   assert.match(panel, /request: spec/);
   assert.match(panel + assets, /sourceReference/);
-  assert.match(panel, /type: "director-shot", projectId: spec\.projectId, shotId: shot\.shotId, sourceBlockId: shot\.sourceBlockId/);
+  assert.match(panel, /type: "director-shot", projectId: spec\.projectId, scriptIdentity, scriptVersion: input\.scriptRevisionId, shotId: shot\.shotId, sourceBlockId: shot\.sourceBlockId/);
   assert.doesNotMatch(memory, /sourceReference|imageAssets|shotImages/);
 });
 
