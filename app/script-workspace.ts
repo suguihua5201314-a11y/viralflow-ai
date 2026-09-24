@@ -1,4 +1,5 @@
-import type {PersistentProject,ProjectWorkspaceSnapshot} from "./project-memory";
+import type {PersistentProject,ProjectWorkspaceSnapshot,ProjectMemory} from "./project-memory";
+import {resolveProjectMemoryState} from "./project-memory";
 import {scriptRevisionIdentity} from "./script-foundation";
 
 export type RestorableScript={revisionId?:string;sourceCreativeBriefId?:string;sourceCreativeBriefRevisionId?:string;id?:number;title:string;product:string;language:string;country:string;narration:string;[key:string]:unknown};
@@ -12,7 +13,7 @@ export function projectScriptVersions(project:PersistentProject|undefined){
 
 export function projectScriptVersionCount(project:PersistentProject|undefined){return projectScriptVersions(project).length;}
 
-export function resolveProjectMemorySource<T>(local:T|null|undefined,remote:T|null|undefined,fallback:T){return remote??local??fallback;}
+export function resolveProjectMemorySource(local:ProjectMemory|null|undefined,remote:ProjectMemory|null|undefined,fallback:ProjectMemory){return resolveProjectMemoryState(local,remote,fallback).memory;}
 
 export function restoreProjectScriptState(project:PersistentProject|undefined,snapshot:ProjectWorkspaceSnapshot){
  if(!project)return{currentScript:null,raceResults:[] as RestorableScript[],versions:[] as RestorableScript[]};

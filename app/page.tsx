@@ -28,10 +28,10 @@ import DataCenter from "./data-center";
 import {DATA_MODE,demoAnalytics,demoDashboardData,demoProjects,type DemoProject} from "./demo-data";
 import {demoDirectorInput,demoDirectorWorkspace} from "./demo-director";
 import {demoScript,demoScriptVariations} from "./demo-script";
-import {projectScriptVersionCount,resolveProjectMemorySource,restoreProjectScriptState} from "./script-workspace";
+import {projectScriptVersionCount,restoreProjectScriptState} from "./script-workspace";
 import ProjectBrainWorkspace from "./components/project-brain/project-brain-workspace";
 import ProjectWorkspace from "./project-workspace";
-import {cacheProjectMemory,readProjectMemory,touchProject,type PersistentProject,type ProjectMemory} from "./project-memory";
+import {cacheProjectMemory,getOrCreateProjectMemoryWriterId,mutateProjectMemory,normalizeProjectMemory,readProjectMemory,resolveProjectMemoryState,shouldPersistProjectMemory,touchProject,type PersistentProject,type ProjectMemory,type ProjectMemoryHydrationState,type ProjectMemoryResolution} from "./project-memory";
 import ImageStudio from "./image-studio";
 import type { ImageReturnContext } from "./image-assets";
 import ProjectAssetWorkspace from "./project-asset-workspace";
@@ -156,7 +156,12 @@ export default function Home() {
   const [accountError, setAccountError] = useState("");
   const [accountForm, setAccountForm] = useState({ url: "", market: "西班牙", product: "钢化膜" });
   const [form, setForm] = useState({ product: "变形金刚钢化膜", sellingPoints: "10秒自动除尘安装；无气泡、不歪；28°防窥；表层电镀疏水疏油层；抗刮耐磨、抗冲击；贴合紧密、不易翘边", audience: "经常自己贴坏钢化膜、在意隐私的手机用户", country: "西班牙", language: "西班牙语", style: "强冲突测评", framework: "智能随机", duration: "45", offer: "库存有限；买一份到手两张膜；现在下单加赠镜头保护膜" });
-  const memoryReady=useRef(false);
+  const memoryHydrationState=useRef<ProjectMemoryHydrationState>("uninitialized");
+  const memoryWriterId=useRef("");
+  const remoteMemoryRevision=useRef(0);
+  const hydratedMemory=useRef<ProjectMemory|null>(null);
+  const memoryResolution=useRef<ProjectMemoryResolution|null>(null);
+  const remoteSaveQueue=useRef<Promise<void>>(Promise.resolve());
   const [memorySaveState,setMemorySaveState]=useState<"saved"|"saving">("saved");
   const [projectMemory,setProjectMemory]=useState<ProjectMemory>(()=>({
     version:1,
@@ -185,8 +190,13 @@ export default function Home() {
   }, []);
 
   useEffect(()=>{
+    memoryHydrationState.current="hydrating";
+    memoryWriterId.current=getOrCreateProjectMemoryWriterId();
     const local=readProjectMemory();
-    const hydrate=(memory:ProjectMemory)=>{
+    const hydrate=(resolution:ProjectMemoryResolution)=>{
+      const memory=resolution.memory;
+      memoryResolution.current=resolution;
+      hydratedMemory.current=memory;
       setProjectMemory(memory);
       const snapshot=memory.workspace;
       const project=memory.projects.find(item=>item.id===snapshot.currentProjectId);
@@ -200,15 +210,22 @@ export default function Home() {
       setSelectedProductId(project?.productProfileId??productProfiles.find(item=>item.name.trim().toLowerCase()===project?.product.trim().toLowerCase())?.id??null);
       setActive(snapshot.activeView||"dashboard");
     };
-    if(local)hydrate(local);
     fetch("/api/project-memory",{cache:"no-store"}).then(response=>response.ok?response.json():Promise.reject()).then(data=>{
-      const resolved=resolveProjectMemorySource(local,data.memory as ProjectMemory|null,projectMemory);
-      if(resolved!==local)hydrate(resolved);
-    }).catch(()=>{if(!local)hydrate(projectMemory);}).finally(()=>{memoryReady.current=true;});
+      const remote=data.memory as ProjectMemory|null;
+      const resolution=resolveProjectMemoryState(local,remote,projectMemory);
+      remoteMemoryRevision.current=remote?normalizeProjectMemory(remote).memoryRevision:0;
+      hydrate(resolution);
+      memoryHydrationState.current="ready";
+    }).catch(()=>{
+      const resolution=resolveProjectMemoryState(local,null,projectMemory);
+      remoteMemoryRevision.current=0;
+      hydrate(resolution);
+      memoryHydrationState.current=resolution.memory?"ready":"failed";
+    });
   },[]);
 
   useEffect(()=>{
-    if(!memoryReady.current)return;
+    if(memoryHydrationState.current!=="ready")return;
     const project=projectMemory.projects.find(item=>item.id===projectMemory.workspace.currentProjectId);
     setReplicationCase(null);
     const restored=restoreProjectScriptState(project,projectMemory.workspace);
@@ -220,23 +237,41 @@ export default function Home() {
   },[projectMemory.workspace.currentProjectId]);
 
   useEffect(()=>{
-    if(!memoryReady.current)return;
+    if(!shouldPersistProjectMemory(memoryHydrationState.current,projectMemory,hydratedMemory.current))return;
+    if(hydratedMemory.current){hydratedMemory.current=null;}
     setMemorySaveState("saving");
     cacheProjectMemory(projectMemory);
-    const timer=window.setTimeout(()=>{void fetch("/api/project-memory",{method:"PUT",headers:{"content-type":"application/json"},body:JSON.stringify(projectMemory)}).finally(()=>setMemorySaveState("saved"));},450);
+    const timer=window.setTimeout(()=>{
+      remoteSaveQueue.current=remoteSaveQueue.current.then(async()=>{
+        const expectedRemoteRevision=remoteMemoryRevision.current;
+        try{
+          const response=await fetch("/api/project-memory",{method:"PUT",headers:{"content-type":"application/json"},body:JSON.stringify({memory:projectMemory,expectedRemoteRevision})});
+          const data=await response.json().catch(()=>({}));
+          if(response.ok){remoteMemoryRevision.current=projectMemory.memoryRevision??0;memoryResolution.current=null;}
+          else memoryResolution.current={memory:normalizeProjectMemory(projectMemory),source:"local",conflict:response.status===409,localRevision:projectMemory.memoryRevision??0,remoteRevision:expectedRemoteRevision,localWriterId:projectMemory.writerId||null,remoteWriterId:null};
+          void data;
+        }catch{
+          memoryResolution.current={memory:normalizeProjectMemory(projectMemory),source:"local",conflict:false,localRevision:projectMemory.memoryRevision??0,remoteRevision:expectedRemoteRevision,localWriterId:projectMemory.writerId||null,remoteWriterId:null};
+        }finally{setMemorySaveState("saved");}
+      });
+    },450);
     return()=>window.clearTimeout(timer);
   },[projectMemory]);
 
+  function mutateMemory(mutation:(memory:ProjectMemory)=>ProjectMemory){
+    setProjectMemory(current=>mutateProjectMemory(current,memoryWriterId.current||getOrCreateProjectMemoryWriterId(),memory=>mutation(memory)));
+  }
+
   function updateProjectMemory(assetPatch:Partial<PersistentProject["assets"]>,projectPatch:Partial<PersistentProject>={}){
-    setProjectMemory(current=>{
+    mutateMemory(current=>{
       const currentId=current.workspace.currentProjectId||current.projects[0]?.id||null;
       const projects=current.projects.map(project=>project.id===currentId?touchProject(project,{...projectPatch,assets:{...project.assets,...assetPatch}}):project);
       return{...current,projects,updatedAt:new Date().toISOString()};
     });
   }
-  function saveWorkspaceSnapshot(patch:Partial<ProjectMemory["workspace"]>){setProjectMemory(current=>({...current,workspace:{...current.workspace,...patch},updatedAt:new Date().toISOString()}));}
+  function saveWorkspaceSnapshot(patch:Partial<ProjectMemory["workspace"]>){mutateMemory(current=>({...current,workspace:{...current.workspace,...patch}}));}
   function returnToFramePrompt(context:ImageReturnContext){
-    setProjectMemory(current=>{
+    mutateMemory(current=>{
       const projects=current.projects.map(project=>{
         if(project.id!==context.projectId)return project;
         const directorResult=project.assets.directorResult;
@@ -254,11 +289,11 @@ export default function Home() {
   function createProject(input:{name:string;product:string;market:string;platform:string;language:string}){
     const now=new Date().toISOString();const id=`project-${Date.now()}`;
     const project:PersistentProject={id,name:input.name.trim(),product:input.product.trim(),market:input.market.trim(),platform:input.platform,language:input.language,stage:"洞察",createdAt:now,updatedAt:now,status:"创作中",progress:0,owner:"苏苏",assets:{scriptVersions:[]}};
-    setProjectMemory(current=>({...current,projects:[project,...current.projects],workspace:{...current.workspace,currentProjectId:id,activeView:"projects"},updatedAt:now}));setSelectedProjectKey(id);
+    mutateMemory(current=>({...current,projects:[project,...current.projects],workspace:{...current.workspace,currentProjectId:id,activeView:"projects"}}));setSelectedProjectKey(id);
   }
-  function renameProject(id:string,name:string){setProjectMemory(current=>({...current,projects:current.projects.map(project=>project.id===id?touchProject(project,{name:name.trim()}):project),updatedAt:new Date().toISOString()}));}
-  function duplicateProject(id:string){const copyId=`project-${Date.now()}`;setProjectMemory(current=>{const source=current.projects.find(project=>project.id===id);if(!source)return current;const now=new Date().toISOString();const copy:PersistentProject={...source,id:copyId,name:`${source.name} 副本`,createdAt:now,updatedAt:now,assets:{...source.assets,scriptVersions:[...source.assets.scriptVersions]}};return{...current,projects:[copy,...current.projects],workspace:{...current.workspace,currentProjectId:copy.id,activeView:"projects"},updatedAt:now};});setSelectedProjectKey(copyId);}
-  function deleteProject(id:string){setProjectMemory(current=>{const projects=current.projects.filter(project=>project.id!==id);const nextId=current.workspace.currentProjectId===id?projects[0]?.id||null:current.workspace.currentProjectId;return{...current,projects,workspace:{...current.workspace,currentProjectId:nextId},updatedAt:new Date().toISOString()};});setSelectedProjectKey(null);}
+  function renameProject(id:string,name:string){mutateMemory(current=>({...current,projects:current.projects.map(project=>project.id===id?touchProject(project,{name:name.trim()}):project)}));}
+  function duplicateProject(id:string){const copyId=`project-${Date.now()}`;mutateMemory(current=>{const source=current.projects.find(project=>project.id===id);if(!source)return current;const now=new Date().toISOString();const copy:PersistentProject={...source,id:copyId,name:`${source.name} 副本`,createdAt:now,updatedAt:now,assets:{...source.assets,scriptVersions:[...source.assets.scriptVersions]}};return{...current,projects:[copy,...current.projects],workspace:{...current.workspace,currentProjectId:copy.id,activeView:"projects"}};});setSelectedProjectKey(copyId);}
+  function deleteProject(id:string){mutateMemory(current=>{const projects=current.projects.filter(project=>project.id!==id);const nextId=current.workspace.currentProjectId===id?projects[0]?.id||null:current.workspace.currentProjectId;return{...current,projects,workspace:{...current.workspace,currentProjectId:nextId}};});setSelectedProjectKey(null);}
 
   async function syncTeam(payload: TeamPayload) {
     if (!teamConnected || !teamPassword) return;

@@ -6,14 +6,17 @@ import ts from "typescript";
 const read = (path) => readFile(new URL(`../${path}`, import.meta.url), "utf8");
 
 async function loadRecovery() {
-  const [source, foundationSource] = await Promise.all([read("app/script-workspace.ts"), read("app/script-foundation.ts")]);
+  const [source, foundationSource, memorySource] = await Promise.all([read("app/script-workspace.ts"), read("app/script-foundation.ts"), read("app/project-memory.ts")]);
   const options = { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } };
   const foundationOutput = ts.transpileModule(foundationSource, options).outputText;
   const foundation = { exports: {} };
   new Function("module", "exports", foundationOutput)(foundation, foundation.exports);
+  const memoryOutput = ts.transpileModule(memorySource, options).outputText;
+  const memoryModule = { exports: {} };
+  new Function("module", "exports", memoryOutput)(memoryModule, memoryModule.exports);
   const output = ts.transpileModule(source, options).outputText;
   const module = { exports: {} };
-  const require = (path) => path === "./script-foundation" ? foundation.exports : {};
+  const require = (path) => path === "./script-foundation" ? foundation.exports : path === "./project-memory" ? memoryModule.exports : {};
   new Function("module", "exports", "require", output)(module, module.exports, require);
   return { ...module.exports, foundation: foundation.exports };
 }
@@ -74,11 +77,11 @@ test("10 Workspace snapshot cannot restore a Script outside the current project'
   assert.deepEqual(restored.raceResults.map((item) => item.id), [1]);
 });
 
-test("11 persisted API Project Memory has priority over local and fallback data", async () => {
+test("11 higher-revision persisted Project Memory has priority while local survives a missing remote", async () => {
   const api = await loadRecovery();
   const fallback = memory([project("fallback", [script(1)])], "fallback");
-  const local = memory([project("local", [script(2)])], "local");
-  const remote = memory([project("remote", [script(3)])], "remote");
+  const local = {...memory([project("local", [script(2)])], "local"),memoryRevision:1,writerId:"local-writer"};
+  const remote = {...memory([project("remote", [script(3)])], "remote"),memoryRevision:2,writerId:"remote-writer"};
   assert.equal(api.resolveProjectMemorySource(local, remote, fallback).workspace.currentProjectId, "remote");
   assert.equal(api.resolveProjectMemorySource(local, null, fallback).workspace.currentProjectId, "local");
 });
