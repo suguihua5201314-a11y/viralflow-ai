@@ -38,11 +38,25 @@ export type PersistentProject = {
 export type ProjectWorkspaceSnapshot = {
   activeView: ActiveView;
   currentProjectId: string | null;
+  workspaceByProject?: Record<string, ProjectWorkspaceState>;
+  // Legacy global fields remain readable for the selected project only.
   form?: Record<string, string>;
   currentScript?: unknown;
   raceResults?: unknown[];
   referenceScript?: string;
   directorContext?: { duration: number; offer: string; sourceType: string };
+};
+
+export type ProjectWorkspaceState = {
+  form?: Record<string, string>;
+  selectedScriptRevisionId?: string;
+  referenceScript?: string;
+  directorContext?: { duration: number; offer: string; sourceType: string };
+};
+
+export type ResolvedProjectWorkspace = ProjectWorkspaceState & {
+  legacyCurrentScript?: unknown;
+  legacyRaceResults?: unknown[];
 };
 
 export type ProjectMemory = {
@@ -199,6 +213,67 @@ export function readProjectMemory(): ProjectMemory | null {
 
 export function cacheProjectMemory(memory: ProjectMemory) {
   if (typeof window !== "undefined") localStorage.setItem(PROJECT_MEMORY_KEY, JSON.stringify(memory));
+}
+
+function legacySelectedScriptRevisionId(value: unknown) {
+  if (!value || typeof value !== "object") return undefined;
+  const script = value as { revisionId?: unknown; id?: unknown; title?: unknown; product?: unknown; narration?: unknown };
+  if (typeof script.revisionId === "string" && script.revisionId.trim()) return script.revisionId.trim();
+  if (script.id !== undefined && script.id !== null && String(script.id).trim()) return `legacy-script:${String(script.id).trim()}`;
+  if (typeof script.title === "string" && typeof script.narration === "string") return `legacy-copy:${script.title}|${typeof script.product === "string" ? script.product : ""}|${script.narration}`;
+  return undefined;
+}
+
+export function resolveProjectWorkspace(memory: ProjectMemory, projectId: string | null): ResolvedProjectWorkspace {
+  if (!projectId) return {};
+  const scoped = memory.workspace.workspaceByProject?.[projectId];
+  if (scoped) return scoped;
+  if (memory.workspace.currentProjectId !== projectId) return {};
+  return {
+    form: memory.workspace.form,
+    selectedScriptRevisionId: legacySelectedScriptRevisionId(memory.workspace.currentScript),
+    referenceScript: memory.workspace.referenceScript,
+    directorContext: memory.workspace.directorContext,
+    legacyCurrentScript: memory.workspace.currentScript,
+    legacyRaceResults: memory.workspace.raceResults,
+  };
+}
+
+export function cloneProjectWorkspace(memory: ProjectMemory, sourceProjectId: string, targetProjectId: string): ProjectMemory {
+  const source = resolveProjectWorkspace(memory, sourceProjectId);
+  return updateProjectWorkspace(memory, targetProjectId, {
+    form: source.form ? { ...source.form } : undefined,
+    selectedScriptRevisionId: source.selectedScriptRevisionId,
+    referenceScript: source.referenceScript,
+    directorContext: source.directorContext ? { ...source.directorContext } : undefined,
+  });
+}
+
+export function updateProjectWorkspace(
+  memory: ProjectMemory,
+  projectId: string,
+  patch: Partial<ProjectWorkspaceState>,
+): ProjectMemory {
+  const current = resolveProjectWorkspace(memory, projectId);
+  const { legacyCurrentScript: _legacyScript, legacyRaceResults: _legacyRace, ...state } = current;
+  void _legacyScript; void _legacyRace;
+  return {
+    ...memory,
+    workspace: {
+      ...memory.workspace,
+      workspaceByProject: {
+        ...memory.workspace.workspaceByProject,
+        [projectId]: { ...state, ...patch },
+      },
+    },
+  };
+}
+
+export function removeProjectWorkspace(memory: ProjectMemory, projectId: string): ProjectMemory {
+  if (!memory.workspace.workspaceByProject?.[projectId]) return memory;
+  const workspaceByProject = { ...memory.workspace.workspaceByProject };
+  delete workspaceByProject[projectId];
+  return { ...memory, workspace: { ...memory.workspace, workspaceByProject } };
 }
 
 export function touchProject(project: PersistentProject, patch: Partial<PersistentProject>): PersistentProject {

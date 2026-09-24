@@ -1,4 +1,4 @@
-import type {PersistentProject,ProjectWorkspaceSnapshot,ProjectMemory} from "./project-memory";
+import type {PersistentProject,ProjectWorkspaceSnapshot,ProjectMemory,ResolvedProjectWorkspace} from "./project-memory";
 import {resolveProjectMemoryState} from "./project-memory";
 import {scriptRevisionIdentity} from "./script-foundation";
 
@@ -15,14 +15,18 @@ export function projectScriptVersionCount(project:PersistentProject|undefined){r
 
 export function resolveProjectMemorySource(local:ProjectMemory|null|undefined,remote:ProjectMemory|null|undefined,fallback:ProjectMemory){return resolveProjectMemoryState(local,remote,fallback).memory;}
 
-export function restoreProjectScriptState(project:PersistentProject|undefined,snapshot:ProjectWorkspaceSnapshot){
+export function restoreProjectScriptState(project:PersistentProject|undefined,snapshot:ProjectWorkspaceSnapshot|ResolvedProjectWorkspace){
  if(!project)return{currentScript:null,raceResults:[] as RestorableScript[],versions:[] as RestorableScript[]};
  const versions=projectScriptVersions(project),versionIds=new Set(versions.map(identity));
- const workspaceScript=isScript(snapshot.currentScript)&&(!versions.length?belongsToProject(snapshot.currentScript,project):versionIds.has(identity(snapshot.currentScript)))?snapshot.currentScript:null;
+ const selectedId="selectedScriptRevisionId" in snapshot?snapshot.selectedScriptRevisionId:undefined;
+ const selectedScript=selectedId?versions.find(script=>identity(script)===selectedId)||null:null;
+ const legacyScript="legacyCurrentScript" in snapshot?snapshot.legacyCurrentScript:"currentScript" in snapshot?snapshot.currentScript:undefined;
+ const workspaceScript=isScript(legacyScript)&&(!versions.length?belongsToProject(legacyScript,project):versionIds.has(identity(legacyScript)))?legacyScript:null;
  const replication=project.assets.replicationResult&&typeof project.assets.replicationResult==="object"?((project.assets.replicationResult as {script?:unknown}).script):null;
  const replicationScript=isScript(replication)&&belongsToProject(replication,project)?replication:null;
- const currentScript=workspaceScript||versions.at(-1)||replicationScript||null;
- const restoredRaceResults=Array.isArray(snapshot.raceResults)?snapshot.raceResults.filter(isScript).filter(script=>versionIds.has(identity(script))):[];
+ const currentScript=selectedScript||workspaceScript||versions.at(-1)||replicationScript||null;
+ const legacyRace="legacyRaceResults" in snapshot?snapshot.legacyRaceResults:"raceResults" in snapshot?snapshot.raceResults:undefined;
+ const restoredRaceResults=Array.isArray(legacyRace)?legacyRace.filter(isScript).filter(script=>versionIds.has(identity(script))):[];
  const raceResults=restoredRaceResults.length?restoredRaceResults:versions;
  return{currentScript,raceResults,versions};
 }
