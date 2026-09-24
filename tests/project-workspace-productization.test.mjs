@@ -12,7 +12,7 @@ test("Test C: 项目详情展示完整 AI Creative Pipeline",()=>{for(const labe
 test("Test D: 刷新恢复仍使用既有读写链路",()=>{assert.match(page,/readProjectMemory\(\)/);assert.match(page,/cacheProjectMemory\(projectMemory\)/);});
 test("Test E: 多项目按 currentProjectId 隔离",()=>{assert.match(page,/project\.id===currentId/);assert.match(page,/currentProjectId:id/);});
 test("Test F: Analyzer 资产映射到项目",()=>{assert.match(page,/analyzerResult\?1:0/);assert.match(workspace,/Analyzer ·/);});
-test("Test G: Script Versions 资产映射到项目",()=>{assert.match(page,/scriptVersions\.length/);assert.match(workspace,/Scripts ·/);});
+test("Test G: Script Versions 资产映射到项目",()=>{assert.match(page,/scripts:projectScriptVersionCount\(project\)/);assert.match(workspace,/Scripts ·/);});
 test("Test H: 复制项目复制资产并生成新 ID",()=>{assert.match(page,/function duplicateProject/);assert.match(page,/scriptVersions:\[\.\.\.source\.assets\.scriptVersions\]/);});
 test("Test I: 删除项目必须经过确认对话框",()=>{assert.match(workspace,/setDialog\("delete"\)/);assert.match(workspace,/确认删除/);assert.match(workspace,/aria-modal="true"/);});
 test("Project Memory schema version and key remain unchanged",()=>{assert.match(memory,/PROJECT_MEMORY_VERSION = 1/);assert.match(memory,/version: 1/);});

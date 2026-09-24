@@ -28,7 +28,7 @@ import DataCenter from "./data-center";
 import {DATA_MODE,demoAnalytics,demoDashboardData,demoProjects,type DemoProject} from "./demo-data";
 import {demoDirectorInput,demoDirectorWorkspace} from "./demo-director";
 import {demoScript,demoScriptVariations} from "./demo-script";
-import {restoreProjectScriptState} from "./script-workspace";
+import {projectScriptVersionCount,resolveProjectMemorySource,restoreProjectScriptState} from "./script-workspace";
 import ProjectBrainWorkspace from "./components/project-brain/project-brain-workspace";
 import ProjectWorkspace from "./project-workspace";
 import {cacheProjectMemory,readProjectMemory,touchProject,type PersistentProject,type ProjectMemory} from "./project-memory";
@@ -201,7 +201,10 @@ export default function Home() {
       setActive(snapshot.activeView||"dashboard");
     };
     if(local)hydrate(local);
-    fetch("/api/project-memory",{cache:"no-store"}).then(response=>response.ok?response.json():Promise.reject()).then(data=>{if(data.memory)hydrate(data.memory as ProjectMemory);}).catch(()=>undefined).finally(()=>{memoryReady.current=true;});
+    fetch("/api/project-memory",{cache:"no-store"}).then(response=>response.ok?response.json():Promise.reject()).then(data=>{
+      const resolved=resolveProjectMemorySource(local,data.memory as ProjectMemory|null,projectMemory);
+      if(resolved!==local)hydrate(resolved);
+    }).catch(()=>{if(!local)hydrate(projectMemory);}).finally(()=>{memoryReady.current=true;});
   },[]);
 
   useEffect(()=>{
@@ -413,7 +416,7 @@ export default function Home() {
   ];
   const realDashboardMetrics=buildDashboardMetrics({products:productProfiles,cases:viralCases,scripts:history,currentScript:result,recentCount:recentWork.length,providers:providerStatuses});
   const dashboardMetrics=DATA_MODE==="demo"?demoDashboardData:realDashboardMetrics;
-  const persistentProjects:DemoProject[]=projectMemory.projects.map((project,index)=>{const counts={analysis:project.assets.analyzerResult?1:0,replication:project.assets.replicationResult?1:0,scripts:project.assets.scriptVersions.length,director:project.assets.directorResult?1:0,voice:project.assets.voiceResult?1:0,reviews:0};const type:DemoProject["type"]=project.stage==="导演"?"导演":project.stage==="语音"?"语音":project.stage==="洞察"||project.stage==="复刻"?"洞察":"脚本";return{key:project.id,projectName:project.name,title:(project.assets.scriptVersions.at(-1) as Script|undefined)?.title||project.name,product:project.product,market:project.market,language:project.language,platform:project.platform,duration:Number(projectMemory.workspace.form?.duration)||30,createdAt:project.createdAt,updatedAt:project.updatedAt,current:project.id===projectMemory.workspace.currentProjectId,type,status:(project.status as DemoProject["status"])||"创作中",stage:project.stage as DemoProject["stage"],nextAction:project.stage==="导演"?"完善 AI 导演方案":project.stage==="语音"?"继续 AI 语音":"继续创作",progress:project.progress??Math.min(95,20+Object.values(counts).reduce((sum,value)=>sum+value,0)*8),owner:project.owner||"苏苏",assets:counts};}).sort((a,b)=>Date.parse(b.updatedAt||"")-Date.parse(a.updatedAt||""));
+  const persistentProjects:DemoProject[]=projectMemory.projects.map((project,index)=>{const counts={analysis:project.assets.analyzerResult?1:0,replication:project.assets.replicationResult?1:0,scripts:projectScriptVersionCount(project),director:project.assets.directorResult?1:0,voice:project.assets.voiceResult?1:0,reviews:0};const type:DemoProject["type"]=project.stage==="导演"?"导演":project.stage==="语音"?"语音":project.stage==="洞察"||project.stage==="复刻"?"洞察":"脚本";return{key:project.id,projectName:project.name,title:(project.assets.scriptVersions.at(-1) as Script|undefined)?.title||project.name,product:project.product,market:project.market,language:project.language,platform:project.platform,duration:Number(projectMemory.workspace.form?.duration)||30,createdAt:project.createdAt,updatedAt:project.updatedAt,current:project.id===projectMemory.workspace.currentProjectId,type,status:(project.status as DemoProject["status"])||"创作中",stage:project.stage as DemoProject["stage"],nextAction:project.stage==="导演"?"完善 AI 导演方案":project.stage==="语音"?"继续 AI 语音":"继续创作",progress:project.progress??Math.min(95,20+Object.values(counts).reduce((sum,value)=>sum+value,0)*8),owner:project.owner||"苏苏",assets:counts};}).sort((a,b)=>Date.parse(b.updatedAt||"")-Date.parse(a.updatedAt||""));
   const demoRecent=DATA_MODE==="demo"?demoProjects:recentWork;
   const dashboardRecent=persistentProjects.length?persistentProjects:(DATA_MODE==="demo"?demoRecent:[]);
   const openProject=(key:string)=>{setSelectedProjectKey(key);setActive("projects");saveWorkspaceSnapshot({activeView:"projects",currentProjectId:key});};
@@ -457,7 +460,7 @@ export default function Home() {
         selectedProvider={selectedProvider}
         lastProviderRun={lastProviderRun}
         onProviderChange={provider=>{setSelectedProvider(provider);setLastProviderRun(null);setError("");}}
-        historyCount={history.length}
+        historyCount={projectScriptVersionCount(currentDirectorProject)}
         sellingPointKnowledge={pointLibrary}
         onUpdate={update}
         onUseProduct={applyProductProfile}
