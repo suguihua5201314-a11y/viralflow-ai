@@ -1,10 +1,19 @@
 export type ScriptRevisionSource = {
   revisionId?: string;
+  sourceCreativeBriefId?: string;
+  sourceCreativeBriefRevisionId?: string;
   id?: string | number;
   title?: string;
   product?: string;
   narration?: string;
 };
+
+export function bindScriptToCreativeBrief<T extends ScriptRevisionSource>(
+  script: T,
+  source: { id: string; revisionId: string },
+): T & { sourceCreativeBriefId: string; sourceCreativeBriefRevisionId: string } {
+  return { ...script, sourceCreativeBriefId: source.id, sourceCreativeBriefRevisionId: source.revisionId };
+}
 
 export type ScriptScene = { time: string; visual: string; line: string; edit: string };
 export type ScriptBlockValue = {

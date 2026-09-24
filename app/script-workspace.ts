@@ -1,7 +1,7 @@
 import type {PersistentProject,ProjectWorkspaceSnapshot} from "./project-memory";
 import {scriptRevisionIdentity} from "./script-foundation";
 
-export type RestorableScript={revisionId?:string;id?:number;title:string;product:string;language:string;country:string;narration:string;[key:string]:unknown};
+export type RestorableScript={revisionId?:string;sourceCreativeBriefId?:string;sourceCreativeBriefRevisionId?:string;id?:number;title:string;product:string;language:string;country:string;narration:string;[key:string]:unknown};
 const isScript=(value:unknown):value is RestorableScript=>Boolean(value&&typeof value==="object"&&typeof (value as RestorableScript).title==="string"&&typeof (value as RestorableScript).narration==="string");
 const identity=(script:RestorableScript)=>scriptRevisionIdentity(script);
 const belongsToProject=(script:RestorableScript,project:PersistentProject)=>script.product.trim().toLowerCase()===project.product.trim().toLowerCase()&&(!project.market||!script.country||script.country===project.market)&&(!project.language||!script.language||script.language===project.language);

@@ -27,6 +27,8 @@ export type StrategyPayload = {
 
 export type StructuredScript = {
   revisionId?: string;
+  sourceCreativeBriefId?: string;
+  sourceCreativeBriefRevisionId?: string;
   title: string; hook: string; narration: string;
   product?:string;language?:string;country?:string;alternateHooks?:string[];
   creativeAngle?: string; hookType?: string; framework?: string; style?: string;

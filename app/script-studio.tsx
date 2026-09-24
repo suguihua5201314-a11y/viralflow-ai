@@ -32,6 +32,8 @@ export type StudioScene = {
 };
 export type StudioScript = {
   revisionId?: string;
+  sourceCreativeBriefId?: string;
+  sourceCreativeBriefRevisionId?: string;
   id?: number;
   title: string;
   product: string;

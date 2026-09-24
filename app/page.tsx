@@ -41,7 +41,7 @@ import {createScriptRevisionId,ensureScriptRevision,scriptRevisionIdentity} from
 import {resolveCanonicalProductContext} from "./product-context";
 
 type Scene = { time: string; visual: string; line: string; edit: string };
-type Script = { revisionId?: string; id?: number; title: string; product: string; language: string; country: string; style: string; hook: string; alternateHooks: string[]; narration: string; scenes: Scene[]; createdAt?: string; aiGenerated?: boolean; creativeAngle?:string; hookType?:string; framework?:string; conflict?:string; productReveal?:string; proof?:string; sellingPoints?:string; cta?:string; shootingSuggestion?:string; scenario?:string; proofMechanism?:string; ctaStyle?:string };
+type Script = { revisionId?: string; sourceCreativeBriefId?: string; sourceCreativeBriefRevisionId?: string; id?: number; title: string; product: string; language: string; country: string; style: string; hook: string; alternateHooks: string[]; narration: string; scenes: Scene[]; createdAt?: string; aiGenerated?: boolean; creativeAngle?:string; hookType?:string; framework?:string; conflict?:string; productReveal?:string; proof?:string; sellingPoints?:string; cta?:string; shootingSuggestion?:string; scenario?:string; proofMechanism?:string; ctaStyle?:string };
 type ImportedHook = { url: string; market: string; hook: string; createdAt: string };
 type MonitorAccount = { id?: number; handle: string; market: string; product: string; url: string };
 type HookItem = { id: number; title: string; language: string; copy: string };
