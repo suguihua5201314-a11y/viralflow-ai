@@ -159,3 +159,45 @@ test("missing Ark configuration returns diagnostics without a provider request",
   assert.equal(result.timeoutStage, "configuration");
   assert.equal(result.modelConfigured, false);
 });
+
+test("Ark differential probe runs A, B, C once with production messages and scaled output", async () => {
+  process.env.ARK_API_KEY = "test-key";
+  process.env.ARK_MODEL_ID = "test-model";
+  const calls = [];
+  const results = await route.runArkDifferentialProbe(async (url, init) => {
+    calls.push({ url, init, body: JSON.parse(init.body) });
+    return new Response("{}", { status: 200, headers: { "content-type": "application/json" } });
+  });
+  assert.equal(results.length, 3);
+  assert.deepEqual(calls.map(call => call.body.max_tokens), [8, 600, 2400]);
+  assert.deepEqual(calls.map(call => call.body.response_format), [{ type: "json_object" }, { type: "json_object" }, { type: "json_object" }]);
+  assert.equal(calls[0].body.messages.length, 1);
+  assert.equal(calls[1].body.messages.length, 2);
+  assert.equal(JSON.parse(calls[1].body.messages[1].content).candidateCount, 1);
+  assert.equal(JSON.parse(calls[2].body.messages[1].content).candidateCount, 3);
+  assert.equal(calls.every(call => call.url === "https://ark.cn-beijing.volces.com/api/v3/chat/completions"), true);
+});
+
+test("Ark differential probe stops after first timeout or HTTP failure", async () => {
+  process.env.ARK_API_KEY = "test-key";
+  process.env.ARK_MODEL_ID = "test-model";
+  let calls = 0;
+  const failed = await route.runArkDifferentialProbe(async () => { calls += 1; return new Response("{}", { status: 400 }); });
+  assert.equal(calls, 1); assert.equal(failed.length, 1); assert.equal(failed[0].test, "A");
+  calls = 0;
+  const timeout = Object.assign(new Error("timed out"), { name: "TimeoutError" });
+  const timedOut = await route.runArkDifferentialProbe(async () => { calls += 1; throw timeout; });
+  assert.equal(calls, 1); assert.equal(timedOut[0].timeoutStage, "waiting_for_headers");
+});
+
+test("differential route rejects caller overrides and exposes no request content", async () => {
+  process.env.VERCEL_ENV = "preview";
+  process.env.ARK_API_KEY = "test-key";
+  process.env.ARK_MODEL_ID = "test-model";
+  globalThis.fetch = async () => new Response("private body", { status: 200 });
+  const rejected = await route.POST(new Request("http://localhost/api/diagnostics/provider-connectivity", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ action: "arkDifferentialProbe", prompt: "override" }) }));
+  assert.equal(rejected.status, 400);
+  const response = await route.POST(new Request("http://localhost/api/diagnostics/provider-connectivity", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ action: "arkDifferentialProbe" }) }));
+  const text = await response.text();
+  for (const forbidden of ["test-key", "test-model", "private body", "Reply with OK.", "CrystalArmor", "authorization", "Bearer"]) assert.equal(text.includes(forbidden), false, forbidden);
+});
