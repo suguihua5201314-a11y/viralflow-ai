@@ -77,6 +77,61 @@ export type CreativeBrainResult = {
   validationSummary: { issues: OpportunityValidationIssue[]; diversityPassed: boolean };
 };
 
+export const CREATIVE_BRAIN_RUNTIME_BUDGET = {
+  routeMaxDurationSeconds: 120,
+  initialProviderTimeoutMs: 45_000,
+  repairProviderTimeoutMs: 45_000,
+  responseBufferMs: 15_000,
+} as const;
+
+export const creativeBrainWorstCaseApplicationBudgetMs =
+  CREATIVE_BRAIN_RUNTIME_BUDGET.initialProviderTimeoutMs
+  + CREATIVE_BRAIN_RUNTIME_BUDGET.repairProviderTimeoutMs
+  + CREATIVE_BRAIN_RUNTIME_BUDGET.responseBufferMs;
+
+const transportErrorTypes = new Set<ProviderErrorType>([
+  "timeout", "provider_http_error", "unauthorized", "invalid_model_or_endpoint", "rate_limit", "missing_field",
+]);
+
+export function creativeBrainErrorType(error: unknown): CreativeBrainMetadata["errorType"] {
+  return error && typeof error === "object" && "category" in error
+    ? (error as { category: ProviderErrorType }).category
+    : "invalid_output";
+}
+
+export function isCreativeBrainTransportFailure(error: unknown) {
+  const type = creativeBrainErrorType(error);
+  return type !== null && transportErrorTypes.has(type as ProviderErrorType);
+}
+
+function safeCreativeBrainErrorMessage(status: number, errorType?: string | null) {
+  return status === 504 || errorType === "timeout"
+    ? "创意方向生成超时，请重试。"
+    : "创意方向生成失败，请重试。";
+}
+
+export async function parseCreativeBrainApiResponse(response: Response): Promise<CreativeBrainResult> {
+  const isJson = response.headers.get("content-type")?.toLowerCase().includes("application/json");
+  let data: unknown = null;
+  if (isJson) {
+    try { data = await response.json(); }
+    catch { throw new Error(safeCreativeBrainErrorMessage(response.status)); }
+  } else {
+    await response.text().catch(() => "");
+    throw new Error(safeCreativeBrainErrorMessage(response.status));
+  }
+  const value = data as Partial<CreativeBrainResult> & { error?: string | { type?: string; message?: string } };
+  const errorType = typeof value.error === "object" ? value.error?.type : value.metadata?.errorType;
+  if (!response.ok || value.status === "failure") {
+    throw new Error(typeof value.error === "object" && value.error?.message
+      ? value.error.message
+      : typeof value.error === "string" && value.error.trim()
+        ? value.error
+        : safeCreativeBrainErrorMessage(response.status, errorType));
+  }
+  return value as CreativeBrainResult;
+}
+
 const evidenceTypes = new Set<EvidenceStrategyType>([
   "observable-demonstration", "application", "before-after", "sensory", "fit-movement", "preparation",
   "reaction", "routine-context", "comparison", "education", "testimonial", "none-required",
@@ -258,7 +313,13 @@ export async function generateCreativeOpportunities(input: CreativeBrainInput, p
     try {
       const missingCount = Math.max(0, requestedCount - preserved.length);
       const repair = attempt ? { preserved, missingCount: Math.max(1, missingCount), issues: [...allIssues] } : undefined;
-      const response = await provider({ messages: creativeBrainMessages(input, repair), temperature: attempt ? .72 : .88, topP: .9, maxTokens: 5200, timeoutMs: 45_000 });
+      const response = await provider({
+        messages: creativeBrainMessages(input, repair),
+        temperature: attempt ? .72 : .88,
+        topP: .9,
+        maxTokens: 5200,
+        timeoutMs: attempt ? CREATIVE_BRAIN_RUNTIME_BUDGET.repairProviderTimeoutMs : CREATIVE_BRAIN_RUNTIME_BUDGET.initialProviderTimeoutMs,
+      });
       metadata.providerRequested = response.providerRequested;
       metadata.providerUsed = response.providerUsed;
       metadata.model = response.model;
@@ -294,8 +355,8 @@ export async function generateCreativeOpportunities(input: CreativeBrainInput, p
       const partial = preserved.length > 0 && preserved.length <= 5;
       return { status: partial ? "partial" : "failure", opportunities: partial ? preserved : [], metadata, validationSummary: { issues: allIssues, diversityPassed: diversity.passed } };
     } catch (error) {
-      metadata.errorType = error && typeof error === "object" && "category" in error ? (error as { category: ProviderErrorType }).category : "invalid_output";
-      if (attempt === 0) { metadata.repairAttempted = true; continue; }
+      metadata.errorType = creativeBrainErrorType(error);
+      if (attempt === 0 && !isCreativeBrainTransportFailure(error)) { metadata.repairAttempted = true; continue; }
       metadata.candidateCount = preserved.length;
       metadata.validCandidateCount = preserved.length;
       const partial = preserved.length > 0;

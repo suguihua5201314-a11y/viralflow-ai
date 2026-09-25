@@ -114,14 +114,35 @@ test("6d repair provider failure preserves one candidate and fails only with non
   }
 });
 
-test("9 provider failure never creates deterministic opportunities", async () => {
-  let calls = 0;
-  const result = await brain.generateCreativeOpportunities(baseInput, async () => { calls++; throw Object.assign(new Error("offline"), { category: "provider_http_error" }); });
-  assert.equal(calls, 2);
-  assert.equal(result.status, "failure");
-  assert.deepEqual(result.opportunities, []);
-  assert.equal(result.metadata.fallbackUsed, false);
-  assert.equal(result.metadata.errorType, "provider_http_error");
+test("9 initial transport failures stop without repair or deterministic opportunities", async () => {
+  for (const category of ["timeout", "provider_http_error", "missing_field"]) {
+    let calls = 0;
+    const result = await brain.generateCreativeOpportunities(baseInput, async () => { calls++; throw Object.assign(new Error("offline"), { category }); });
+    assert.equal(calls, 1);
+    assert.equal(result.status, "failure");
+    assert.deepEqual(result.opportunities, []);
+    assert.equal(result.metadata.repairAttempted, false);
+    assert.equal(result.metadata.fallbackUsed, false);
+    assert.equal(result.metadata.errorType, category);
+  }
+});
+
+test("9b malformed model output and validation shortage remain repair eligible", async () => {
+  for (const initial of ["not json", payload([opportunity("A")])]) {
+    let calls = 0;
+    const result = await brain.generateCreativeOpportunities(baseInput, async request => {
+      calls++;
+      return { content: calls === 1 ? initial : payload([opportunity("B"), opportunity("C"), opportunity("D"), opportunity("E"), opportunity("F")]), providerRequested: "doubao", providerUsed: "doubao", model: "mock", responseTimeMs: 2, request };
+    });
+    assert.equal(calls, 2);
+    assert.equal(result.metadata.repairAttempted, true);
+  }
+});
+
+test("9c timeout budget remains below route maxDuration", () => {
+  const budget = brain.CREATIVE_BRAIN_RUNTIME_BUDGET;
+  assert.equal(brain.creativeBrainWorstCaseApplicationBudgetMs, budget.initialProviderTimeoutMs + budget.repairProviderTimeoutMs + budget.responseBufferMs);
+  assert.ok(brain.creativeBrainWorstCaseApplicationBudgetMs < budget.routeMaxDurationSeconds * 1000);
 });
 
 test("10 provider metadata is preserved", async () => {
@@ -168,4 +189,13 @@ test("20-22 runtime has no persistence, legacy concept fallback or real provider
   assert.doesNotMatch(source, /ProjectMemory|localStorage|creativeBriefRevisions|buildCreativeConcepts/);
   assert.match(route, /generateCreativeOpportunities/);
   assert.doesNotMatch(scriptsRoute, /creative-brain|generateCreativeOpportunities/);
+});
+
+test("route-caught provider timeout produces a safe JSON failure contract", async () => {
+  const route = await jiti.import("../app/api/creative-brain/route.ts");
+  const failure = route.creativeBrainRouteError(Object.assign(new Error("secret provider detail"), { category: "timeout" }));
+  assert.deepEqual(failure, { status: "failure", error: { type: "timeout", message: "创意方向生成超时，请重试。" } });
+  assert.doesNotMatch(JSON.stringify(failure), /secret provider detail/);
+  const runtimeFailure = route.creativeBrainFailurePayload({ status: "failure", opportunities: [], metadata: { providerRequested: "doubao", providerUsed: null, model: null, candidateCount: 0, validCandidateCount: 0, repairAttempted: false, fallbackUsed: false, errorType: "timeout", responseTimeMs: null }, validationSummary: { issues: [], diversityPassed: false } });
+  assert.deepEqual(runtimeFailure.error, { type: "timeout", message: "创意方向生成超时，请重试。" });
 });

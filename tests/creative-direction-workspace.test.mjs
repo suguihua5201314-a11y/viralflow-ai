@@ -5,6 +5,7 @@ import { createJiti } from "jiti";
 
 const jiti = createJiti(import.meta.url, { interopDefault: true });
 const state = await jiti.import("../app/creative-direction-state.ts");
+const brain = await jiti.import("../app/creative-brain.ts");
 
 const opportunity = id => ({
   id, targetAudience: "commuters", useMoment: "on a train", purchaseMotivation: "privacy", tensionOrObjection: "side viewing", opportunity: `direction ${id}`, contentMechanisms: [`mechanism ${id}`], creativeAngle: `angle ${id}`,
@@ -72,6 +73,7 @@ test("UI wiring uses canonical Product Context, Creative Brain API and 2A select
   const selectionPath = page.slice(page.indexOf("function selectCreativeDirection"), page.indexOf("function update("));
   assert.match(generationPath, /resolveCanonicalProductContext/);
   assert.match(generationPath, /fetch\("\/api\/creative-brain"/);
+  assert.match(generationPath, /parseCreativeBrainApiResponse/);
   assert.doesNotMatch(generationPath, /\/api\/scripts|generate\(|Director|Image/);
   assert.match(selectionPath, /selectCreativeOpportunity/);
   assert.match(selectionPath, /capturedInput\.input\.productContext/);
@@ -81,4 +83,26 @@ test("UI wiring uses canonical Product Context, Creative Brain API and 2A select
   assert.match(component, /生成创意方向/);
   assert.match(component, /当前创意方向/);
   assert.match(component, /Creative Brief 已创建/);
+});
+
+test("frontend safely normalizes platform text, HTML and invalid JSON responses", async () => {
+  for (const response of [
+    new Response("An error occurred", { status: 504, headers: { "content-type": "text/plain" } }),
+    new Response("<html>Gateway timeout</html>", { status: 504, headers: { "content-type": "text/html" } }),
+    new Response("not-json", { status: 504, headers: { "content-type": "application/json" } }),
+  ]) {
+    await assert.rejects(() => brain.parseCreativeBrainApiResponse(response), error => {
+      assert.equal(error.message, "创意方向生成超时，请重试。");
+      assert.doesNotMatch(error.message, /Unexpected token|An error occurred|<html>/);
+      return true;
+    });
+  }
+});
+
+test("frontend keeps normal success and partial JSON responses unchanged", async () => {
+  for (const status of ["success", "partial"]) {
+    const result = { status, opportunities: [opportunity("A")], metadata: { errorType: null }, validationSummary: { issues: [], diversityPassed: true } };
+    const parsed = await brain.parseCreativeBrainApiResponse(new Response(JSON.stringify(result), { status: status === "success" ? 201 : 206, headers: { "content-type": "application/json" } }));
+    assert.deepEqual(parsed, result);
+  }
 });

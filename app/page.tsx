@@ -42,7 +42,7 @@ import {resolveCanonicalProductContext} from "./product-context";
 import {activateDirectorContext,directorRequestIdentity,resolveDirectorWorkspace,sameDirectorRequestIdentity,saveDirectorWorkspace,selectDirectorShot,type DirectorRequestIdentity} from "./director-contexts";
 import {selectCreativeOpportunity,type CanonicalCreativeOpportunity} from "./creative-opportunity-selection";
 import {beginCreativeDirectionRequest,completeCreativeDirectionRequest,emptyCreativeDirectionSession,failCreativeDirectionRequest,markCreativeDirectionSelection,type CreativeDirectionSessions} from "./creative-direction-state";
-import type {CreativeBrainInput,CreativeBrainResult,RecentCreativeHistory} from "./creative-brain";
+import {parseCreativeBrainApiResponse,type CreativeBrainInput,type RecentCreativeHistory} from "./creative-brain";
 
 type Scene = { time: string; visual: string; line: string; edit: string };
 type Script = { revisionId?: string; sourceCreativeBriefId?: string; sourceCreativeBriefRevisionId?: string; id?: number; title: string; product: string; language: string; country: string; style: string; hook: string; alternateHooks: string[]; narration: string; scenes: Scene[]; createdAt?: string; aiGenerated?: boolean; creativeAngle?:string; hookType?:string; framework?:string; conflict?:string; productReveal?:string; proof?:string; sellingPoints?:string; cta?:string; shootingSuggestion?:string; scenario?:string; proofMechanism?:string; ctaStyle?:string };
@@ -457,8 +457,7 @@ export default function Home() {
     };
     try{
       const response=await fetch("/api/creative-brain",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({...brainInput,provider:controls.provider})});
-      const data=await response.json() as CreativeBrainResult&{error?:string};
-      if(data.status==="failure"||(!response.ok&&data.status!=="partial"))throw new Error(data.error||data.metadata?.errorType||"创意方向生成失败");
+      const data=await parseCreativeBrainApiResponse(response);
       if(activeCreativeDirectionRequests.current[projectId]!==requestId)return;
       creativeDirectionInputs.current[projectId]={input:brainInput,recentScriptRevisionIds:recentScripts.map(script=>scriptRevisionIdentity(script))};
       setCreativeDirectionSessions(current=>completeCreativeDirectionRequest(current,projectId,requestId,data));
