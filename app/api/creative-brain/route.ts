@@ -6,6 +6,16 @@ import { generateCreativeDirections, type CreativeDirectionResult } from "../../
 export const runtime = "nodejs";
 export const maxDuration = 120;
 
+export function resolveCreativeBrainProvider(
+  requested: ProviderId,
+  environment = process.env.VERCEL_ENV,
+  previewOverride = process.env.CREATIVE_BRAIN_PROVIDER,
+): ProviderId {
+  if (environment !== "preview") return requested;
+  const candidate = previewOverride?.trim();
+  return candidate === "deepseek" || candidate === "doubao" || candidate === "openai" ? candidate : requested;
+}
+
 export function creativeBrainRouteError(error: unknown) {
   const type = creativeBrainErrorType(error);
   return {
@@ -36,10 +46,12 @@ export async function POST(request: Request) {
     }
     const requested = body.provider || DEFAULT_PROVIDER;
     if (!(requested in getProviderStatuses())) return Response.json({ error: "Unknown provider" }, { status: 400 });
+    const providerUsed = resolveCreativeBrainProvider(requested);
+    if (!(providerUsed in getProviderStatuses())) return Response.json({ error: "Unknown provider" }, { status: 400 });
     const adapter = async (input: CreativeBrainProviderRequest): Promise<CreativeBrainProviderResponse> => {
-      const status = getProviderStatuses()[requested];
-      const response: ProviderResponse = await callProvider({ provider: requested, ...input, purpose: "creative-brain", candidateCount: 3 });
-      return { ...response, providerRequested: requested, providerUsed: requested, model: status.model };
+      const status = getProviderStatuses()[providerUsed];
+      const response: ProviderResponse = await callProvider({ provider: providerUsed, ...input, purpose: "creative-brain", candidateCount: 3 });
+      return { ...response, providerRequested: requested, providerUsed, model: status.model };
     };
     const result = await generateCreativeDirections(body, adapter);
     if (result.status === "failure") {

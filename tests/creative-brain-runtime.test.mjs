@@ -129,3 +129,20 @@ test("frontend safely handles non-JSON failures and valid direction results", as
   const value = { status: "success", directions: [direction("A"), direction("B"), direction("C")], metadata: { errorType: null }, validationSummary: { issues: [], diversityPassed: true } };
   assert.deepEqual(await runtime.parseCreativeDirectionApiResponse(new Response(JSON.stringify(value), { status: 201, headers: { "content-type": "application/json" } })), value);
 });
+
+test("Preview override routes only Creative Brain to DeepSeek", async () => {
+  const route = await jiti.import("../app/api/creative-brain/route.ts");
+  assert.equal(route.resolveCreativeBrainProvider("doubao", "preview", "deepseek"), "deepseek");
+  assert.equal(route.resolveCreativeBrainProvider("doubao", "production", "deepseek"), "doubao");
+  assert.equal(route.resolveCreativeBrainProvider("doubao", "preview", "invalid"), "doubao");
+  const providerRouter = await readFile(new URL("../app/provider-router.ts", import.meta.url), "utf8");
+  assert.doesNotMatch(providerRouter, /CREATIVE_BRAIN_PROVIDER/);
+});
+
+test("DeepSeek override leaves lightweight Stage 1 contract unchanged", async () => {
+  const route = await readFile(new URL("../app/api/creative-brain/route.ts", import.meta.url), "utf8");
+  assert.match(route, /candidateCount: 3/);
+  assert.equal(runtime.CREATIVE_DIRECTION_COUNT, 3);
+  assert.equal(runtime.CREATIVE_DIRECTION_MAX_TOKENS, 1200);
+  assert.doesNotMatch(route, /CreativeOpportunity|evidenceStrategy|ctaDirection|riskNotes/);
+});
