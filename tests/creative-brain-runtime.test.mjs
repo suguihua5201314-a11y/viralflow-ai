@@ -139,10 +139,13 @@ test("9b malformed model output and validation shortage remain repair eligible",
   }
 });
 
-test("9c timeout budget remains below route maxDuration", () => {
+test("9c timeout budget remains below the statically analyzable route maxDuration", async () => {
   const budget = brain.CREATIVE_BRAIN_RUNTIME_BUDGET;
+  const route = await readFile(new URL("../app/api/creative-brain/route.ts", import.meta.url), "utf8");
   assert.equal(brain.creativeBrainWorstCaseApplicationBudgetMs, budget.initialProviderTimeoutMs + budget.repairProviderTimeoutMs + budget.responseBufferMs);
-  assert.ok(brain.creativeBrainWorstCaseApplicationBudgetMs < budget.routeMaxDurationSeconds * 1000);
+  assert.equal(budget.routeMaxDurationSeconds, 120);
+  assert.match(route, /export const maxDuration = 120;/);
+  assert.ok(brain.creativeBrainWorstCaseApplicationBudgetMs < 120_000);
 });
 
 test("10 provider metadata is preserved", async () => {

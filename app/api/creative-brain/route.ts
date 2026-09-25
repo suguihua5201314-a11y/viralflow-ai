@@ -3,7 +3,7 @@ import type { ProviderId } from "../../provider-types";
 import { CREATIVE_BRAIN_RUNTIME_BUDGET, creativeBrainErrorType, generateCreativeOpportunities, type CreativeBrainInput, type CreativeBrainProviderRequest, type CreativeBrainProviderResponse, type CreativeBrainResult } from "../../creative-brain";
 
 export const runtime = "nodejs";
-export const maxDuration = CREATIVE_BRAIN_RUNTIME_BUDGET.routeMaxDurationSeconds;
+export const maxDuration = 120;
 
 export function creativeBrainRouteError(error: unknown) {
   const type = creativeBrainErrorType(error);
