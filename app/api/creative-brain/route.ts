@@ -37,7 +37,7 @@ export async function POST(request: Request) {
     if (!(requested in getProviderStatuses())) return Response.json({ error: "Unknown provider" }, { status: 400 });
     const adapter = async (input: CreativeBrainProviderRequest): Promise<CreativeBrainProviderResponse> => {
       const status = getProviderStatuses()[requested];
-      const response: ProviderResponse = await callProvider({ provider: requested, ...input });
+      const response: ProviderResponse = await callProvider({ provider: requested, ...input, purpose: "creative-brain", candidateCount: body.candidateCount || 5 });
       return { ...response, providerRequested: requested, providerUsed: requested, model: status.model };
     };
     const result = await generateCreativeOpportunities(body, adapter);
