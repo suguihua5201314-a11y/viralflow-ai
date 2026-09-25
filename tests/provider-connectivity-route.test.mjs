@@ -6,11 +6,17 @@ const jiti = createJiti(import.meta.url, { moduleCache: false, interopDefault: t
 const route = await jiti.import("../app/api/diagnostics/provider-connectivity/route.ts");
 const originalFetch = globalThis.fetch;
 const originalVercelEnv = process.env.VERCEL_ENV;
+const originalArkKey = process.env.ARK_API_KEY;
+const originalArkModel = process.env.ARK_MODEL_ID;
 
 test.afterEach(() => {
   globalThis.fetch = originalFetch;
   if (originalVercelEnv === undefined) delete process.env.VERCEL_ENV;
   else process.env.VERCEL_ENV = originalVercelEnv;
+  if (originalArkKey === undefined) delete process.env.ARK_API_KEY;
+  else process.env.ARK_API_KEY = originalArkKey;
+  if (originalArkModel === undefined) delete process.env.ARK_MODEL_ID;
+  else process.env.ARK_MODEL_ID = originalArkModel;
 });
 
 test("probe endpoints are fixed, unauthenticated, and do not read response bodies", async () => {
@@ -78,4 +84,78 @@ test("preview response contains only safe connectivity metadata", async () => {
   for (const forbidden of ["secret response body", "secret-token", "authorization", "Bearer", "apiKey", "model"]){
     assert.equal(text.includes(forbidden), false, forbidden);
   }
+});
+
+test("authenticated Ark inference uses one fixed minimal request and returns only safe metadata", async () => {
+  process.env.VERCEL_ENV = "preview";
+  process.env.ARK_API_KEY = "test-ark-secret";
+  process.env.ARK_MODEL_ID = "test-model-secret";
+  const calls = [];
+  globalThis.fetch = async (url, init) => {
+    calls.push({ url, init });
+    return new Response('{"choices":[{"message":{"content":"OK"}}]}', { status: 200, headers: { "content-type": "application/json" } });
+  };
+  const response = await route.POST(new Request("http://localhost/api/diagnostics/provider-connectivity", {
+    method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ action: "authenticatedArkInference" }),
+  }));
+  assert.equal(response.status, 200);
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].url, "https://ark.cn-beijing.volces.com/api/v3/chat/completions");
+  const requestBody = JSON.parse(calls[0].init.body);
+  assert.deepEqual(requestBody.messages, [{ role: "user", content: "Reply with OK." }]);
+  assert.equal(requestBody.max_tokens, 8);
+  assert.equal(requestBody.temperature, 0);
+  assert.equal(requestBody.stream, false);
+  assert.equal("response_format" in requestBody, false);
+  const text = await response.text();
+  const result = JSON.parse(text).authenticatedArkInference;
+  assert.equal(result.headersReceived, true);
+  assert.equal(result.bodyCompleted, true);
+  assert.equal(result.httpStatus, 200);
+  assert.equal(result.modelConfigured, true);
+  for (const forbidden of ["test-ark-secret", "test-model-secret", "Reply with OK.", "authorization", "Bearer", "choices", "OK"]){
+    assert.equal(text.includes(forbidden), false, forbidden);
+  }
+});
+
+test("authenticated action rejects caller-supplied URL, key, model, or prompt", async () => {
+  process.env.VERCEL_ENV = "preview";
+  let calls = 0;
+  globalThis.fetch = async () => { calls += 1; return new Response(null, { status: 200 }); };
+  for (const extra of [{ url: "https://example.com" }, { apiKey: "x" }, { model: "x" }, { prompt: "x" }]) {
+    const response = await route.POST(new Request("http://localhost/api/diagnostics/provider-connectivity", {
+      method: "POST", headers: { "content-type": "application/json" },
+      body: JSON.stringify({ action: "authenticatedArkInference", ...extra }),
+    }));
+    assert.equal(response.status, 400);
+  }
+  assert.equal(calls, 0);
+});
+
+test("authenticated Ark probe distinguishes header and body timeout stages", async () => {
+  process.env.ARK_API_KEY = "test-key";
+  process.env.ARK_MODEL_ID = "test-model";
+  const timeout = Object.assign(new Error("timed out"), { name: "TimeoutError" });
+  const headerTimeout = await route.probeAuthenticatedArkInference(async () => { throw timeout; }, 5);
+  assert.equal(headerTimeout.timeoutStage, "waiting_for_headers");
+  assert.equal(headerTimeout.headersReceived, false);
+  const bodyTimeout = await route.probeAuthenticatedArkInference(async () => ({
+    status: 200,
+    headers: new Headers({ "content-type": "application/json" }),
+    text: async () => { throw timeout; },
+  }), 5);
+  assert.equal(bodyTimeout.timeoutStage, "waiting_for_body");
+  assert.equal(bodyTimeout.headersReceived, true);
+  assert.equal(bodyTimeout.bodyCompleted, false);
+});
+
+test("missing Ark configuration returns diagnostics without a provider request", async () => {
+  delete process.env.ARK_API_KEY;
+  delete process.env.ARK_MODEL_ID;
+  let calls = 0;
+  const result = await route.probeAuthenticatedArkInference(async () => { calls += 1; return new Response(null); });
+  assert.equal(calls, 0);
+  assert.equal(result.errorType, "configuration");
+  assert.equal(result.timeoutStage, "configuration");
+  assert.equal(result.modelConfigured, false);
 });

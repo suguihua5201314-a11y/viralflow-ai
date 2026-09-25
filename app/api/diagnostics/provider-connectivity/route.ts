@@ -2,6 +2,7 @@ export const runtime = "nodejs";
 export const maxDuration = 30;
 
 const PROBE_TIMEOUT_MS = 10_000;
+const AUTHENTICATED_ARK_TIMEOUT_MS = 15_000;
 const PROVIDER_ENDPOINTS = {
   ark: "https://ark.cn-beijing.volces.com/api/v3/chat/completions",
   deepseek: "https://api.deepseek.com/chat/completions",
@@ -18,6 +19,21 @@ export type ConnectivityProbeResult = {
   contentType: string | null;
   timeoutStage: "waiting_for_headers" | null;
   totalElapsedMs: number;
+};
+
+export type AuthenticatedArkProbeResult = {
+  provider: "ark";
+  modelConfigured: boolean;
+  headersReceived: boolean;
+  elapsedToHeadersMs: number | null;
+  httpStatus: number | null;
+  contentType: string | null;
+  bodyCompleted: boolean;
+  elapsedToBodyMs: number | null;
+  totalElapsedMs: number;
+  responseSize: number | null;
+  timeoutStage: "configuration" | "waiting_for_headers" | "waiting_for_body" | null;
+  errorType: "configuration" | "timeout" | "network_error" | null;
 };
 
 function isTimeout(error: unknown) {
@@ -64,11 +80,77 @@ export async function probeProvider(
   }
 }
 
+export async function probeAuthenticatedArkInference(
+  fetchImpl: typeof fetch = fetch,
+  timeoutMs = AUTHENTICATED_ARK_TIMEOUT_MS,
+): Promise<AuthenticatedArkProbeResult> {
+  const started = Date.now();
+  const apiKey = process.env.ARK_API_KEY?.trim() || "";
+  const model = process.env.ARK_MODEL_ID?.trim() || "";
+  if (!apiKey || !model) {
+    return {
+      provider: "ark", modelConfigured: Boolean(model), headersReceived: false, elapsedToHeadersMs: null,
+      httpStatus: null, contentType: null, bodyCompleted: false, elapsedToBodyMs: null,
+      totalElapsedMs: Date.now() - started, responseSize: null, timeoutStage: "configuration", errorType: "configuration",
+    };
+  }
+
+  const signal = AbortSignal.timeout(timeoutMs);
+  let response: Response;
+  try {
+    response = await fetchImpl(PROVIDER_ENDPOINTS.ark, {
+      method: "POST",
+      headers: { "content-type": "application/json", authorization: `Bearer ${apiKey}` },
+      body: JSON.stringify({
+        model,
+        messages: [{ role: "user", content: "Reply with OK." }],
+        max_tokens: 8,
+        temperature: 0,
+        stream: false,
+      }),
+      redirect: "manual",
+      signal,
+    });
+  } catch (error) {
+    const timeout = isTimeout(error);
+    return {
+      provider: "ark", modelConfigured: true, headersReceived: false, elapsedToHeadersMs: null,
+      httpStatus: null, contentType: null, bodyCompleted: false, elapsedToBodyMs: null,
+      totalElapsedMs: Date.now() - started, responseSize: null, timeoutStage: timeout ? "waiting_for_headers" : null,
+      errorType: timeout ? "timeout" : "network_error",
+    };
+  }
+
+  const headersReceived = Date.now();
+  const contentType = response.headers.get("content-type")?.slice(0, 120) || null;
+  try {
+    const responseBody = await response.text();
+    const bodyCompleted = Date.now();
+    return {
+      provider: "ark", modelConfigured: true, headersReceived: true, elapsedToHeadersMs: headersReceived - started,
+      httpStatus: response.status, contentType, bodyCompleted: true, elapsedToBodyMs: bodyCompleted - started,
+      totalElapsedMs: bodyCompleted - started, responseSize: responseBody.length, timeoutStage: null, errorType: null,
+    };
+  } catch (error) {
+    const timeout = isTimeout(error);
+    return {
+      provider: "ark", modelConfigured: true, headersReceived: true, elapsedToHeadersMs: headersReceived - started,
+      httpStatus: response.status, contentType, bodyCompleted: false, elapsedToBodyMs: null,
+      totalElapsedMs: Date.now() - started, responseSize: null, timeoutStage: timeout ? "waiting_for_body" : null,
+      errorType: timeout ? "timeout" : "network_error",
+    };
+  }
+}
+
 export async function POST(request: Request) {
   if (process.env.VERCEL_ENV === "production") return Response.json({ error: "Not found" }, { status: 404 });
   let body: unknown = null;
   try { body = await request.json(); } catch {}
-  if (body && typeof body === "object" && "url" in body) {
+  if (body && typeof body === "object" && "action" in body && body.action === "authenticatedArkInference") {
+    if (Object.keys(body).some(key => key !== "action")) return Response.json({ error: "Unsupported diagnostic input" }, { status: 400 });
+    return Response.json({ authenticatedArkInference: await probeAuthenticatedArkInference() });
+  }
+  if (body && typeof body === "object" && Object.keys(body).length > 0) {
     return Response.json({ error: "Arbitrary URLs are not supported" }, { status: 400 });
   }
   const [ark, deepseek] = await Promise.all([
