@@ -23,6 +23,10 @@ import {
   type ScriptVariant,
 } from "./script-variants";
 import { synchronizeScriptScenes } from "./script-foundation";
+import CreativeDirectionWorkspace from "./components/script/creative-direction-workspace";
+import type { CreativeBriefV2 } from "./creative-contract";
+import type { CanonicalCreativeOpportunity } from "./creative-opportunity-selection";
+import type { CreativeDirectionSession } from "./creative-direction-state";
 
 export type StudioScene = {
   time: string;
@@ -144,6 +148,10 @@ type Props = {
     view: "history" | "director" | "voice" | "products" | "library",
   ) => void;
   scoreScript: (script: StudioScript) => StudioScore;
+  creativeDirectionSession: CreativeDirectionSession;
+  currentCreativeBrief: CreativeBriefV2 | null;
+  onGenerateCreativeDirections: (controls: GenerationControls) => void;
+  onSelectCreativeDirection: (opportunity: CanonicalCreativeOpportunity) => void;
 };
 
 type EditorBlock = CopilotBlock & { duration: string };
@@ -629,6 +637,14 @@ export default function ScriptStudio(props: Props) {
           </span>
         </div>
       </header>
+
+      <CreativeDirectionWorkspace
+        session={props.creativeDirectionSession}
+        currentBrief={props.currentCreativeBrief}
+        disabled={!props.inputReady || !providerReady}
+        onGenerate={() => props.onGenerateCreativeDirections(controls(1))}
+        onSelect={props.onSelectCreativeDirection}
+      />
 
       <section className="os-script-version-rail">
         <header>
