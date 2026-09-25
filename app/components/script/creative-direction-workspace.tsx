@@ -1,7 +1,6 @@
 "use client";
 
 import type { CreativeBriefV2 } from "../../creative-contract";
-import type { CanonicalCreativeOpportunity } from "../../creative-opportunity-selection";
 import type { CreativeDirectionSession } from "../../creative-direction-state";
 
 type Props = {
@@ -9,7 +8,6 @@ type Props = {
   currentBrief: CreativeBriefV2 | null;
   disabled: boolean;
   onGenerate: () => void;
-  onSelect: (opportunity: CanonicalCreativeOpportunity) => void;
 };
 
 const evidenceLabels: Record<string, string> = {
@@ -18,8 +16,8 @@ const evidenceLabels: Record<string, string> = {
   comparison: "对照", education: "知识解释", testimonial: "体验证言", "none-required": "无需额外证明",
 };
 
-export default function CreativeDirectionWorkspace({ session, currentBrief, disabled, onGenerate, onSelect }: Props) {
-  const hasDirections = session.opportunities.length > 0;
+export default function CreativeDirectionWorkspace({ session, currentBrief, disabled, onGenerate }: Props) {
+  const hasDirections = session.directions.length > 0;
   return (
     <section className="creative-direction-workspace" aria-labelledby="creative-direction-title">
       <header>
@@ -39,7 +37,7 @@ export default function CreativeDirectionWorkspace({ session, currentBrief, disa
 
       {hasDirections ? (
         <div className="creative-direction-grid">
-          {session.opportunities.map((canonical, index) => {
+          {session.directions.map((canonical, index) => {
             const item = canonical.value;
             const selected = session.selectedOpportunityId === canonical.id || currentBrief?.opportunityReference?.canonicalOpportunityId === canonical.id;
             const selecting = session.selectingOpportunityId === canonical.id;
@@ -51,22 +49,17 @@ export default function CreativeDirectionWorkspace({ session, currentBrief, disa
                 <dl>
                   <div><dt>开场画面</dt><dd>{item.openingVisual.subject} · {item.openingVisual.action}{item.openingVisual.visibleChangeOrQuestion ? ` · ${item.openingVisual.visibleChangeOrQuestion}` : ""}</dd></div>
                   <div><dt>使用时刻</dt><dd>{item.useMoment}</dd></div>
-                  <div><dt>证明方式</dt><dd>{evidenceLabels[item.evidenceStrategy.type] || item.evidenceStrategy.type} · {item.evidenceStrategy.objective}</dd></div>
-                  <div><dt>内容机制</dt><dd>{item.contentMechanisms.join(" · ")}</dd></div>
+                  <div><dt>目标观众</dt><dd>{item.targetAudience}</dd></div>
+                  <div><dt>内容机制</dt><dd>{item.contentMechanism}</dd></div>
                 </dl>
                 <details>
                   <summary>查看方向细节</summary>
                   <p><b>目标观众</b>{item.targetAudience}</p>
-                  <p><b>购买动机</b>{item.purchaseMotivation}</p>
-                  {item.tensionOrObjection && <p><b>张力 / 顾虑</b>{item.tensionOrObjection}</p>}
-                  {(item.creatorPersona || item.contentFormat) && <p><b>人物 / 形式</b>{[item.creatorPersona, item.contentFormat].filter(Boolean).join(" · ")}</p>}
-                  <p><b>行动方向</b>{item.ctaDirection}</p>
-                  {item.riskNotes.length > 0 && <small>注意：{item.riskNotes.join("；")}</small>}
+                  <p><b>核心动机</b>{item.coreMotivation}</p>
+                  {item.coreTension && <p><b>张力 / 顾虑</b>{item.coreTension}</p>}
+                  {item.rationale && <p><b>方向理由</b>{item.rationale}</p>}
                 </details>
-                <button disabled={selected || selecting} onClick={() => onSelect(canonical)}>
-                  {selecting ? "正在保存…" : selected ? "方向已选择" : "使用这个方向"}
-                </button>
-                {selected && <small className="creative-direction-saved">Creative Brief 已创建</small>}
+                <button disabled>使用这个方向 · 下一阶段开放</button>
               </article>
             );
           })}

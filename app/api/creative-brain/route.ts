@@ -1,6 +1,7 @@
 import { callProvider, DEFAULT_PROVIDER, getProviderStatuses, type ProviderResponse } from "../../provider-router";
 import type { ProviderId } from "../../provider-types";
-import { CREATIVE_BRAIN_RUNTIME_BUDGET, creativeBrainErrorType, generateCreativeOpportunities, type CreativeBrainInput, type CreativeBrainProviderRequest, type CreativeBrainProviderResponse, type CreativeBrainResult } from "../../creative-brain";
+import { creativeBrainErrorType, type CreativeBrainInput, type CreativeBrainProviderRequest, type CreativeBrainProviderResponse } from "../../creative-brain";
+import { generateCreativeDirections, type CreativeDirectionResult } from "../../creative-directions";
 
 export const runtime = "nodejs";
 export const maxDuration = 120;
@@ -16,7 +17,7 @@ export function creativeBrainRouteError(error: unknown) {
   };
 }
 
-export function creativeBrainFailurePayload(result: CreativeBrainResult) {
+export function creativeBrainFailurePayload(result: CreativeDirectionResult) {
   const type = result.metadata.errorType || "invalid_output";
   return {
     ...result,
@@ -37,10 +38,10 @@ export async function POST(request: Request) {
     if (!(requested in getProviderStatuses())) return Response.json({ error: "Unknown provider" }, { status: 400 });
     const adapter = async (input: CreativeBrainProviderRequest): Promise<CreativeBrainProviderResponse> => {
       const status = getProviderStatuses()[requested];
-      const response: ProviderResponse = await callProvider({ provider: requested, ...input, purpose: "creative-brain", candidateCount: body.candidateCount || 5 });
+      const response: ProviderResponse = await callProvider({ provider: requested, ...input, purpose: "creative-brain", candidateCount: 3 });
       return { ...response, providerRequested: requested, providerUsed: requested, model: status.model };
     };
-    const result = await generateCreativeOpportunities(body, adapter);
+    const result = await generateCreativeDirections(body, adapter);
     if (result.status === "failure") {
       const failure = creativeBrainFailurePayload(result);
       return Response.json(failure, { status: failure.error.type === "timeout" ? 504 : 502 });

@@ -1,8 +1,8 @@
-import type { CreativeBrainResult } from "./creative-brain";
-import { canonicalizeCreativeOpportunity, type CanonicalCreativeOpportunity } from "./creative-opportunity-selection";
+import type { CreativeDirectionResult } from "./creative-directions";
+import { canonicalizeCreativeDirection, type CanonicalCreativeDirection } from "./creative-opportunity-selection";
 
 export type CreativeDirectionSession = {
-  opportunities: CanonicalCreativeOpportunity[];
+  directions: CanonicalCreativeDirection[];
   status: "idle" | "loading" | "success" | "partial" | "error";
   error: string;
   requestId?: string;
@@ -12,7 +12,7 @@ export type CreativeDirectionSession = {
 
 export type CreativeDirectionSessions = Record<string, CreativeDirectionSession>;
 
-export const emptyCreativeDirectionSession = (): CreativeDirectionSession => ({ opportunities: [], status: "idle", error: "" });
+export const emptyCreativeDirectionSession = (): CreativeDirectionSession => ({ directions: [], status: "idle", error: "" });
 
 export function beginCreativeDirectionRequest(sessions: CreativeDirectionSessions, projectId: string, requestId: string) {
   const current = sessions[projectId] || emptyCreativeDirectionSession();
@@ -23,16 +23,16 @@ export function completeCreativeDirectionRequest(
   sessions: CreativeDirectionSessions,
   projectId: string,
   requestId: string,
-  result: Pick<CreativeBrainResult, "status" | "opportunities">,
+  result: Pick<CreativeDirectionResult, "status" | "directions">,
 ) {
   const current = sessions[projectId];
   if (!current || current.requestId !== requestId) return sessions;
-  const opportunities = result.opportunities.map((candidate) => canonicalizeCreativeOpportunity(candidate));
+  const directions = result.directions.map((candidate) => canonicalizeCreativeDirection(candidate));
   return {
     ...sessions,
     [projectId]: {
       ...current,
-      opportunities,
+      directions,
       status: result.status === "partial" ? "partial" as const : "success" as const,
       error: "",
       requestId: undefined,

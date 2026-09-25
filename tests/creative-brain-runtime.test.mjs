@@ -4,201 +4,128 @@ import { readFile } from "node:fs/promises";
 import { createJiti } from "jiti";
 
 const jiti = createJiti(import.meta.url, { interopDefault: true });
-const brain = await jiti.import("../app/creative-brain.ts");
+const runtime = await jiti.import("../app/creative-directions.ts");
 const productApi = await jiti.import("../app/product-context.ts");
 
-const profile = {
-  id: 7, name: "CrystalArmor Screen Protector", brand: "CrystalArmor", category: "Phone accessory",
-  sellingPoints: "alignment applicator; dust-removal strip; privacy viewing; oleophobic surface",
-  parameters: "privacy viewing", bannedWords: "100% unbreakable", markets: "Spain",
-  audience: "phone users", price: "", offer: "", notes: "Avoid destructive testing",
-};
+const profile = { id: 7, name: "CrystalArmor Screen Protector", brand: "CrystalArmor", category: "Phone accessory", sellingPoints: "alignment applicator; dust-removal strip; privacy viewing; oleophobic surface", parameters: "privacy viewing", bannedWords: "100% unbreakable", markets: "Spain", audience: "phone users", price: "", offer: "", notes: "Avoid destructive testing" };
 const productContext = productApi.resolveCanonicalProductContext({ productName: profile.name, selectedProductId: 7, profiles: [profile] });
-const baseInput = { projectId: "project-a", productContext, market: "Spain", language: "Spanish", platform: "TikTok", preferences: { hookStrategy: "curiosity", framework: "AIDA" }, recentCreativeHistory: [] };
-const evidence = (type = "observable-demonstration", objective = "Make the installation action visible") => ({ type, objective, visualEvidence: ["One continuous hand action"], limitations: ["Do not imply a guaranteed result"] });
+const input = { projectId: "project-a", productContext, market: "Spain", language: "Spanish", platform: "TikTok", preferences: { hookStrategy: "curiosity", framework: "AIDA" }, recentCreativeHistory: [] };
 const variants = {
-  A: ["commuters", "on a train", "keep screen content private", "public visibility", "privacy in motion", "continuous angle turn", "visual reveal", "Can you still read this?", "phone", "train seat", "rotate from front to side", "screen becomes harder to read", "routine-context", "Show privacy in an ordinary commute", "commuter", "observational diary", "check compatible models"],
-  B: ["first-time installers", "at a home desk", "avoid installation rework", "dust under film", "one-pass setup", "guided hand sequence", "process curiosity", "Watch what the strip removes", "dust strip", "clean desk", "slide across the screen", "dust lifts before placement", "application", "Make the setup steps observable", "new phone owner", "hands-only tutorial", "review the installation method"],
-  C: ["heavy phone users", "after a long workday", "keep daily swipes comfortable", "fingerprints build up", "surface routine", "wipe and swipe ritual", "sensory observation", "Look at the surface after this swipe", "fingertip", "window light", "swipe then tilt the phone", "marks become visible in reflection", "sensory", "Observe the surface during normal use", "office worker", "routine vignette", "consider whether the surface fits daily use"],
-  D: ["careful buyers", "while comparing accessories", "understand the applicator design", "uncertainty about setup", "design walkthrough", "object-led explanation", "guided reveal", "This part explains the whole setup", "alignment tray", "plain tabletop", "separate and reconnect the parts", "the alignment path becomes clear", "education", "Explain only the observable design", "practical reviewer", "object breakdown", "review the setup before choosing"],
-  E: ["case users", "when changing a phone case", "avoid lifted edges", "fit uncertainty", "case-fit check", "fit sequence", "compatibility question", "Will the edge stay clear?", "phone case", "home desk", "attach the case around the protected screen", "the edge spacing remains visible", "fit-movement", "Observe fit without claiming universal compatibility", "case collector", "fit check", "check the supported model and case"],
-  F: ["privacy-conscious workers", "during a coffee break", "control casual side viewing", "shared table exposure", "shared-space glance", "point-of-view switch", "perspective contrast", "What changes from the next seat?", "two chairs", "shared cafe table", "move the camera between seats", "the viewing angle visibly changes", "comparison", "Compare viewpoints without absolute privacy claims", "remote worker", "two-viewpoint vignette", "check whether the viewing behavior suits the setting"],
+  A: ["commuters", "on a train", "keep side viewing private", "shared seats", "privacy in motion", "camera viewpoint switch", "Can the next seat read this?", "phone", "train seat", "rotate from front to side", "the viewing angle changes"],
+  B: ["first-time installers", "at a home desk", "avoid installation rework", "dust under film", "one-pass setup", "guided hand sequence", "Watch what the strip removes", "dust strip", "clean desk", "slide across the screen", "dust lifts before placement"],
+  C: ["heavy phone users", "after a workday", "keep daily swipes comfortable", "surface marks", "surface routine", "wipe and swipe ritual", "Look after this swipe", "fingertip", "window light", "swipe then tilt", "marks appear in reflection"],
+  D: ["careful buyers", "while comparing accessories", "understand the applicator", "setup uncertainty", "design walkthrough", "object-led explanation", "This part explains setup", "alignment tray", "tabletop", "separate and reconnect parts", "alignment path becomes clear"],
 };
-const opportunity = (id, patch = {}) => { const v = variants[id] || variants.A; return ({
-  id, targetAudience: v[0], useMoment: v[1], purchaseMotivation: v[2], tensionOrObjection: v[3], opportunity: v[4], contentMechanisms: [v[5]],
-  creativeAngle: v[4], hookMechanism: v[6], hookLine: v[7], openingVisual: { subject: v[8], setup: v[9], action: v[10], visibleChangeOrQuestion: v[11] },
-  evidenceStrategy: evidence(v[12], v[13]), creatorPersona: v[14], contentFormat: v[15], ctaDirection: v[16], riskNotes: [], ...patch,
-}); };
-const payload = (items) => JSON.stringify({ opportunities: items });
+const direction = (id, patch = {}) => { const v = variants[id] || variants.A; return { id, targetAudience: v[0], useMoment: v[1], coreMotivation: v[2], coreTension: v[3], creativeAngle: v[4], contentMechanism: v[5], hookLine: v[6], openingVisual: { subject: v[7], setup: v[8], action: v[9], visibleChangeOrQuestion: v[10] }, rationale: "A concise selectable direction", ...patch }; };
+const payload = items => JSON.stringify({ directions: items });
+const response = content => ({ content, providerRequested: "doubao", providerUsed: "doubao", model: "mock", responseTimeMs: 2 });
 
-test("1 canonical Product Context is the only product truth input", () => {
-  const context = brain.buildCreativeContext(baseInput);
+test("Stage 1 context uses canonical Product Context and exactly three candidates", () => {
+  const context = runtime.buildCreativeDirectionContext({ ...input, candidateCount: 5 });
   assert.equal(context.productTruth.productName, profile.name);
   assert.equal(context.productTruth.brand, profile.brand);
-  assert.equal(context.productTruth.parameters, profile.parameters);
-  assert.equal(context.productTruth.bannedWords, profile.bannedWords);
+  assert.equal(context.candidateCount, 3);
   assert.equal("sellingPointKnowledge" in context, false);
 });
 
-test("2-5 strict parser validates schema, evidence enum and OpeningVisual", () => {
-  assert.equal(brain.parseCreativeOpportunities(payload([opportunity("A")])).opportunities.length, 1);
-  assert.equal(brain.parseCreativeOpportunities("not json").opportunities.length, 0);
-  assert.equal(brain.parseCreativeOpportunities(payload([opportunity("A", { evidenceStrategy: evidence("invented-proof") })])).opportunities.length, 0);
-  assert.equal(brain.parseCreativeOpportunities(payload([opportunity("A", { openingVisual: { subject: "phone", setup: "desk" } })])).opportunities.length, 0);
-  assert.equal(brain.parseCreativeOpportunities(payload([opportunity("A"), opportunity("A")])).opportunities.length, 1);
+test("lightweight parser requires compact fields and independent OpeningVisual", () => {
+  assert.equal(runtime.parseCreativeDirections(payload([direction("A")])).directions.length, 1);
+  assert.equal(runtime.parseCreativeDirections("not json").directions.length, 0);
+  assert.equal(runtime.parseCreativeDirections(payload([direction("A", { openingVisual: { subject: "phone", setup: "desk" } })])).directions.length, 0);
+  assert.notEqual(direction("A").hookLine, direction("A").openingVisual.action);
 });
 
-test("6-8 candidate count repairs once and returns explicit partial failure", async () => {
-  let calls = 0;
-  const provider = async () => ({ content: payload([opportunity("A")]), providerRequested: "doubao", providerUsed: "doubao", model: "mock", responseTimeMs: 2 });
-  const result = await brain.generateCreativeOpportunities(baseInput, async request => { calls++; return provider(request); });
-  assert.equal(calls, 2);
-  assert.equal(result.status, "partial");
-  assert.equal(result.metadata.repairAttempted, true);
-  assert.equal(result.metadata.errorType, "insufficient_candidates");
-  assert.equal(result.metadata.fallbackUsed, false);
+test("Stage 1 does not require evidence, CTA, risks, persona, format, or Product Truth output", () => {
+  const candidate = direction("A");
+  assert.equal(runtime.parseCreativeDirections(payload([candidate])).directions.length, 1);
+  for (const key of ["evidenceStrategy", "ctaDirection", "riskNotes", "creatorPersona", "contentFormat", "productTruth"]) assert.equal(key in candidate, false);
 });
 
-test("6b repair preserves first-pass valid candidates and adds only replacements", async () => {
-  const initial = [opportunity("A"), opportunity("B"), opportunity("C"), opportunity("D"), opportunity("E", { openingVisual: { subject: "phone" } })];
-  const responses = [payload(initial), payload([opportunity("F")])];
+test("runtime returns exactly three diverse lightweight directions", async () => {
   const requests = [];
-  const result = await brain.generateCreativeOpportunities(baseInput, async request => {
+  const result = await runtime.generateCreativeDirections(input, async request => { requests.push(request); return response(payload([direction("A"), direction("B"), direction("C")])); });
+  assert.equal(result.status, "success");
+  assert.deepEqual(result.directions.map(item => item.id), ["A", "B", "C"]);
+  assert.equal(requests.length, 1);
+  assert.equal(requests[0].maxTokens, 1200);
+  assert.equal(JSON.parse(requests[0].messages[1].content).candidateCount, 3);
+});
+
+test("structural duplicates are rejected while diverse candidates pass", () => {
+  const same = ["A", "B", "C"].map(id => direction(id, { targetAudience: "same audience", useMoment: "same moment", coreMotivation: "same motivation", creativeAngle: "same angle", contentMechanism: "same mechanism", hookLine: "same hook", openingVisual: { subject: "same phone", setup: "same desk", action: "same action" } }));
+  assert.equal(runtime.assessDirectionDiversity(same).passed, false);
+  assert.equal(runtime.assessDirectionDiversity([direction("A"), direction("B"), direction("C")]).passed, true);
+});
+
+test("truth, compliance, feasibility, numbers, and recent directions are validated", () => {
+  assert.ok(runtime.validateCreativeDirection(direction("A", { hookLine: "100% unbreakable forever" }), input).length);
+  assert.ok(runtime.validateCreativeDirection(direction("A", { hookLine: "Ready in 17 seconds" }), input).length);
+  assert.ok(runtime.validateCreativeDirection(direction("A", { contentMechanism: "Use an open flame" }), input).some(issue => issue.type === "feasibility"));
+  const historyInput = { ...input, recentCreativeHistory: [{ title: "old", hook: direction("A").hookLine, creativeAngle: "other", scenario: "", proofMechanism: "", cta: "" }] };
+  assert.ok(runtime.validateCreativeDirection(direction("A"), historyInput).some(issue => issue.type === "history"));
+});
+
+test("one compact repair preserves valid first-pass directions", async () => {
+  const requests = [];
+  const result = await runtime.generateCreativeDirections(input, async request => {
     requests.push(request);
-    return { content: responses[requests.length - 1], providerRequested: "doubao", providerUsed: "doubao", model: "mock", responseTimeMs: 2 };
+    return response(requests.length === 1 ? payload([direction("A"), direction("B")]) : payload([direction("C")]));
   });
   assert.equal(requests.length, 2);
   assert.equal(result.status, "success");
-  assert.deepEqual(result.opportunities.map(item => item.id), ["A", "B", "C", "D", "F"]);
-  const repairPrompt = requests[1].messages.map(item => item.content).join("\n");
-  assert.match(repairPrompt, /Return exactly 1 replacement opportunities/);
-  assert.match(repairPrompt, /already-valid opportunities/);
-  assert.match(repairPrompt, /"id":"A"/);
+  assert.deepEqual(result.directions.map(item => item.id), ["A", "B", "C"]);
+  assert.match(requests[1].messages[0].content, /Return 1 replacement directions only/);
 });
 
-test("6c repair provider failure preserves first-pass valid candidates", async () => {
-  const initial = [opportunity("A"), opportunity("B"), opportunity("C"), opportunity("D"), opportunity("E", { openingVisual: { subject: "phone" } })];
+test("repair failure preserves partial candidates without deterministic fallback", async () => {
   let calls = 0;
-  const result = await brain.generateCreativeOpportunities(baseInput, async () => {
+  const result = await runtime.generateCreativeDirections(input, async () => {
     calls++;
-    if (calls === 1) return { content: payload(initial), providerRequested: "doubao", providerUsed: "doubao", model: "mock", responseTimeMs: 2 };
-    throw Object.assign(new Error("repair unavailable"), { category: "provider_http_error" });
+    if (calls === 1) return response(payload([direction("A")]));
+    throw Object.assign(new Error("offline"), { category: "provider_http_error" });
   });
   assert.equal(calls, 2);
   assert.equal(result.status, "partial");
-  assert.deepEqual(result.opportunities.map(item => item.id), ["A", "B", "C", "D"]);
-  assert.equal(result.metadata.repairAttempted, true);
-  assert.equal(result.metadata.candidateCount, 4);
-  assert.equal(result.metadata.validCandidateCount, 4);
-  assert.equal(result.metadata.errorType, "provider_http_error");
+  assert.deepEqual(result.directions.map(item => item.id), ["A"]);
   assert.equal(result.metadata.fallbackUsed, false);
 });
 
-test("6d repair provider failure preserves one candidate and fails only with none", async () => {
-  const invalid = id => opportunity(id, { openingVisual: { subject: "phone" } });
-  for (const [initial, expectedStatus, expectedIds] of [
-    [[opportunity("A"), invalid("B"), invalid("C"), invalid("D"), invalid("E")], "partial", ["A"]],
-    [[invalid("A"), invalid("B"), invalid("C"), invalid("D"), invalid("E")], "failure", []],
-  ]) {
-    let calls = 0;
-    const result = await brain.generateCreativeOpportunities(baseInput, async () => {
-      calls++;
-      if (calls === 1) return { content: payload(initial), providerRequested: "doubao", providerUsed: "doubao", model: "mock", responseTimeMs: 2 };
-      throw Object.assign(new Error("repair unavailable"), { category: "provider_http_error" });
-    });
-    assert.equal(calls, 2);
-    assert.equal(result.status, expectedStatus);
-    assert.deepEqual(result.opportunities.map(item => item.id), expectedIds);
-    assert.equal(result.metadata.validCandidateCount, expectedIds.length);
-    assert.equal(result.metadata.errorType, "provider_http_error");
-  }
+test("initial transport failure stops immediately with no fake directions", async () => {
+  let calls = 0;
+  const result = await runtime.generateCreativeDirections(input, async () => { calls++; throw Object.assign(new Error("timeout"), { category: "timeout" }); });
+  assert.equal(calls, 1);
+  assert.equal(result.status, "failure");
+  assert.deepEqual(result.directions, []);
+  assert.equal(result.metadata.repairAttempted, false);
 });
 
-test("9 initial transport failures stop without repair or deterministic opportunities", async () => {
-  for (const category of ["timeout", "provider_http_error", "missing_field"]) {
-    let calls = 0;
-    const result = await brain.generateCreativeOpportunities(baseInput, async () => { calls++; throw Object.assign(new Error("offline"), { category }); });
-    assert.equal(calls, 1);
-    assert.equal(result.status, "failure");
-    assert.deepEqual(result.opportunities, []);
-    assert.equal(result.metadata.repairAttempted, false);
-    assert.equal(result.metadata.fallbackUsed, false);
-    assert.equal(result.metadata.errorType, category);
-  }
+test("provider metadata is retained", async () => {
+  const result = await runtime.generateCreativeDirections(input, async () => ({ ...response(payload([direction("A"), direction("B"), direction("C")])), providerRequested: "deepseek", providerUsed: "deepseek", model: "mock-model" }));
+  assert.deepEqual([result.metadata.providerRequested, result.metadata.providerUsed, result.metadata.model], ["deepseek", "deepseek", "mock-model"]);
 });
 
-test("9b malformed model output and validation shortage remain repair eligible", async () => {
-  for (const initial of ["not json", payload([opportunity("A")])]) {
-    let calls = 0;
-    const result = await brain.generateCreativeOpportunities(baseInput, async request => {
-      calls++;
-      return { content: calls === 1 ? initial : payload([opportunity("B"), opportunity("C"), opportunity("D"), opportunity("E"), opportunity("F")]), providerRequested: "doubao", providerUsed: "doubao", model: "mock", responseTimeMs: 2, request };
-    });
-    assert.equal(calls, 2);
-    assert.equal(result.metadata.repairAttempted, true);
-  }
+test("prompt is lightweight and omits full Opportunity fields", () => {
+  const prompt = runtime.creativeDirectionMessages(input)[0].content;
+  assert.ok(prompt.length < 1000);
+  for (const field of ["evidenceStrategy", "ctaDirection", "riskNotes", "creatorPersona", "contentFormat", "visualEvidence"]) assert.equal(prompt.includes(field), false);
+  assert.match(prompt, /Preferences guide but do not dictate/);
 });
 
-test("9c timeout budget remains below the statically analyzable route maxDuration", async () => {
-  const budget = brain.CREATIVE_BRAIN_RUNTIME_BUDGET;
-  const route = await readFile(new URL("../app/api/creative-brain/route.ts", import.meta.url), "utf8");
-  assert.equal(brain.creativeBrainWorstCaseApplicationBudgetMs, budget.initialProviderTimeoutMs + budget.repairProviderTimeoutMs + budget.responseBufferMs);
-  assert.equal(budget.routeMaxDurationSeconds, 120);
-  assert.match(route, /export const maxDuration = 120;/);
-  assert.ok(brain.creativeBrainWorstCaseApplicationBudgetMs < 120_000);
-});
-
-test("10 provider metadata is preserved", async () => {
-  const items = [opportunity("A"), opportunity("B"), opportunity("C"), opportunity("D"), opportunity("E")];
-  const result = await brain.generateCreativeOpportunities(baseInput, async () => ({ content: payload(items), providerRequested: "deepseek", providerUsed: "deepseek", model: "mock-model", responseTimeMs: 9 }));
-  assert.equal(result.status, "success");
-  assert.deepEqual({ requested: result.metadata.providerRequested, used: result.metadata.providerUsed, model: result.metadata.model }, { requested: "deepseek", used: "deepseek", model: "mock-model" });
-});
-
-test("11-13 forbidden, unsupported numeric and recent duplicates are rejected", () => {
-  assert.ok(brain.validateCreativeOpportunity(opportunity("A", { hookLine: "100% unbreakable forever" }), baseInput).length > 0);
-  assert.ok(brain.validateCreativeOpportunity(opportunity("A", { hookLine: "Certified at 99.9% efficiency" }), baseInput).length > 0);
-  assert.ok(brain.validateCreativeOpportunity(opportunity("A", { hookLine: "Ready in 17 seconds" }), baseInput).length > 0);
-  const historyInput = { ...baseInput, recentCreativeHistory: [{ title: "old", hook: opportunity("A").hookLine, creativeAngle: "different", scenario: "", proofMechanism: "", cta: "" }] };
-  assert.ok(brain.validateCreativeOpportunity(opportunity("A"), historyInput).some(issue => issue.type === "history"));
-});
-
-test("14-15 diversity rejects paraphrased structures and accepts distinct structures", () => {
-  const same = ["A", "B", "C"].map(id => opportunity(id, { creativeAngle: "Same angle", contentMechanisms: ["Same mechanism"], hookMechanism: "Same hook", openingVisual: { subject: "Same phone", setup: "Same desk", action: "Same action" }, evidenceStrategy: evidence("application", "Same proof"), useMoment: "Same moment" }));
-  assert.equal(brain.assessOpportunityDiversity(same).passed, false);
-  assert.equal(brain.assessOpportunityDiversity([opportunity("A"), opportunity("B"), opportunity("C")]).passed, true);
-});
-
-test("16-18 preferences are steering signals and CTA remains a direction", () => {
-  const prompt = brain.creativeBrainMessages(baseInput).map(item => item.content).join("\n");
-  assert.match(prompt, /steering signals, not hard templates/i);
-  assert.match(prompt, /CTA Direction is strategy, not final CTA copy/i);
-  assert.doesNotMatch(prompt, /strictly follow AIDA/i);
-});
-
-test("19 five categories use the same category-neutral runtime contract", () => {
+test("five categories use one neutral Stage 1 runtime", () => {
   for (const [index, name] of ["Screen Protector", "Probiotic Toothpaste", "Mascara", "Moisturizing Stick", "Electric Toothbrush"].entries()) {
     const context = productApi.resolveCanonicalProductContext({ productName: name, selectedProductId: index + 20, profiles: [{ ...profile, id: index + 20, name, category: `Category ${index}` }] });
-    const built = brain.buildCreativeContext({ ...baseInput, productContext: context });
-    assert.equal(built.productTruth.productName, name);
-    assert.equal(built.candidateCount, 5);
+    assert.equal(runtime.buildCreativeDirectionContext({ ...input, productContext: context }).candidateCount, 3);
   }
 });
 
-test("20-22 runtime has no persistence, legacy concept fallback or real provider calls", async () => {
-  const source = await readFile(new URL("../app/creative-brain.ts", import.meta.url), "utf8");
-  const route = await readFile(new URL("../app/api/creative-brain/route.ts", import.meta.url), "utf8");
-  const scriptsRoute = await readFile(new URL("../app/api/scripts/route.ts", import.meta.url), "utf8");
-  assert.doesNotMatch(source, /ProjectMemory|localStorage|creativeBriefRevisions|buildCreativeConcepts/);
-  assert.match(route, /generateCreativeOpportunities/);
-  assert.doesNotMatch(scriptsRoute, /creative-brain|generateCreativeOpportunities/);
+test("Stage 1 has no persistence, Brief construction, scripts, or category mappings", async () => {
+  const source = await readFile(new URL("../app/creative-directions.ts", import.meta.url), "utf8");
+  assert.doesNotMatch(source, /ProjectMemory|creativeBriefRevisions|createCreativeBrief|\/api\/scripts/);
+  assert.doesNotMatch(source, /if\s*\([^)]*(?:mascara|toothpaste|screen protector)/i);
 });
 
-test("route-caught provider timeout produces a safe JSON failure contract", async () => {
-  const route = await jiti.import("../app/api/creative-brain/route.ts");
-  const failure = route.creativeBrainRouteError(Object.assign(new Error("secret provider detail"), { category: "timeout" }));
-  assert.deepEqual(failure, { status: "failure", error: { type: "timeout", message: "创意方向生成超时，请重试。" } });
-  assert.doesNotMatch(JSON.stringify(failure), /secret provider detail/);
-  const runtimeFailure = route.creativeBrainFailurePayload({ status: "failure", opportunities: [], metadata: { providerRequested: "doubao", providerUsed: null, model: null, candidateCount: 0, validCandidateCount: 0, repairAttempted: false, fallbackUsed: false, errorType: "timeout", responseTimeMs: null }, validationSummary: { issues: [], diversityPassed: false } });
-  assert.deepEqual(runtimeFailure.error, { type: "timeout", message: "创意方向生成超时，请重试。" });
+test("frontend safely handles non-JSON failures and valid direction results", async () => {
+  await assert.rejects(() => runtime.parseCreativeDirectionApiResponse(new Response("Gateway timeout", { status: 504, headers: { "content-type": "text/plain" } })), /超时/);
+  const value = { status: "success", directions: [direction("A"), direction("B"), direction("C")], metadata: { errorType: null }, validationSummary: { issues: [], diversityPassed: true } };
+  assert.deepEqual(await runtime.parseCreativeDirectionApiResponse(new Response(JSON.stringify(value), { status: 201, headers: { "content-type": "application/json" } })), value);
 });

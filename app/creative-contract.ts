@@ -21,6 +21,19 @@ export type OpeningVisual = {
   visibleChangeOrQuestion?: string;
 };
 
+export type CreativeDirectionCandidate = {
+  id: string;
+  targetAudience: string;
+  useMoment: string;
+  coreMotivation: string;
+  coreTension?: string;
+  creativeAngle: string;
+  contentMechanism: string;
+  hookLine: string;
+  openingVisual: OpeningVisual;
+  rationale?: string;
+};
+
 export type EvidenceStrategy = {
   type: EvidenceStrategyType;
   objective: string;

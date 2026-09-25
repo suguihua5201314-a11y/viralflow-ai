@@ -4,6 +4,7 @@ import {
   createCreativeBrief,
   type CreativeBriefPreferences,
   type CreativeBriefV2,
+  type CreativeDirectionCandidate,
   type CreativeOpportunity,
 } from "./creative-contract";
 import type { CreativeBrainSourceContext } from "./creative-brain";
@@ -15,6 +16,20 @@ export type CanonicalCreativeOpportunity = {
   sourceCandidateId?: string;
   value: Omit<CreativeOpportunity, "id">;
 };
+
+export type CanonicalCreativeDirection = {
+  id: string;
+  sourceCandidateId?: string;
+  value: Omit<CreativeDirectionCandidate, "id">;
+};
+
+export function canonicalizeCreativeDirection(
+  candidate: CreativeDirectionCandidate,
+  canonicalId = createCanonicalCreativeOpportunityId(),
+): CanonicalCreativeDirection {
+  const { id: sourceCandidateId, ...value } = candidate;
+  return { id: canonicalId, sourceCandidateId, value: structuredClone(value) };
+}
 
 export type CreativeOpportunitySelectionInput = {
   projectId: string;
