@@ -142,7 +142,7 @@ export async function probeAuthenticatedArkInference(
   }
 }
 
-type ArkDiagnosticCase = "A" | "B" | "C";
+type ArkDiagnosticCase = "A" | "B" | "B-prime" | "C";
 
 const diagnosticCreativeInput: CreativeBrainInput = {
   projectId: "diagnostic-preview",
@@ -164,7 +164,7 @@ const diagnosticCreativeInput: CreativeBrainInput = {
 function diagnosticMessages(testCase: ArkDiagnosticCase) {
   if (testCase === "A") return [{ role: "user" as const, content: 'Return exactly one JSON object with key "ok".' }];
   const messages = creativeBrainMessages(diagnosticCreativeInput);
-  if (testCase === "B") {
+  if (testCase === "B" || testCase === "B-prime") {
     const context = JSON.parse(messages[1].content) as Record<string, unknown>;
     context.candidateCount = 1;
     return [messages[0], { ...messages[1], content: JSON.stringify(context) }];
@@ -183,7 +183,7 @@ export async function probeArkDifferentialCase(testCase: ArkDiagnosticCase, fetc
   try {
     response = await fetchImpl(PROVIDER_ENDPOINTS.ark, {
       method: "POST", headers: { "content-type": "application/json", authorization: `Bearer ${apiKey}` }, redirect: "manual", signal,
-      body: JSON.stringify({ model, messages: diagnosticMessages(testCase), max_tokens: testCase === "A" ? 8 : testCase === "B" ? 600 : 2400, temperature: testCase === "A" ? 0 : .88, stream: false, response_format: { type: "json_object" } }),
+      body: JSON.stringify({ model, messages: diagnosticMessages(testCase), max_tokens: testCase === "A" || testCase === "B-prime" ? 8 : testCase === "B" ? 600 : 2400, temperature: testCase === "A" || testCase === "B-prime" ? 0 : .88, stream: false, response_format: { type: "json_object" } }),
     });
   } catch (error) {
     const timeout = isTimeout(error);
@@ -220,6 +220,10 @@ export async function POST(request: Request) {
   if (body && typeof body === "object" && "action" in body && body.action === "arkDifferentialProbe") {
     if (Object.keys(body).some(key => key !== "action")) return Response.json({ error: "Unsupported diagnostic input" }, { status: 400 });
     return Response.json({ arkDifferentialProbe: await runArkDifferentialProbe() });
+  }
+  if (body && typeof body === "object" && "action" in body && body.action === "arkBPrimeProbe") {
+    if (Object.keys(body).some(key => key !== "action")) return Response.json({ error: "Unsupported diagnostic input" }, { status: 400 });
+    return Response.json({ arkBPrimeProbe: await probeArkDifferentialCase("B-prime") });
   }
   if (body && typeof body === "object" && Object.keys(body).length > 0) {
     return Response.json({ error: "Arbitrary URLs are not supported" }, { status: 400 });

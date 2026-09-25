@@ -201,3 +201,40 @@ test("differential route rejects caller overrides and exposes no request content
   const text = await response.text();
   for (const forbidden of ["test-key", "test-model", "private body", "Reply with OK.", "CrystalArmor", "authorization", "Bearer"]) assert.equal(text.includes(forbidden), false, forbidden);
 });
+
+test("B-prime uses production Creative Brain messages with Test A generation parameters exactly once", async () => {
+  process.env.VERCEL_ENV = "preview";
+  process.env.ARK_API_KEY = "test-key";
+  process.env.ARK_MODEL_ID = "test-model";
+  const calls = [];
+  globalThis.fetch = async (url, init) => {
+    calls.push({ url, init, body: JSON.parse(init.body) });
+    return new Response("{}", { status: 200, headers: { "content-type": "application/json" } });
+  };
+  const response = await route.POST(new Request("http://localhost/api/diagnostics/provider-connectivity", {
+    method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ action: "arkBPrimeProbe" }),
+  }));
+  assert.equal(response.status, 200);
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].url, "https://ark.cn-beijing.volces.com/api/v3/chat/completions");
+  assert.equal(calls[0].body.messages.length, 2);
+  assert.equal(JSON.parse(calls[0].body.messages[1].content).candidateCount, 1);
+  assert.equal(calls[0].body.max_tokens, 8);
+  assert.equal(calls[0].body.temperature, 0);
+  assert.equal(calls[0].body.stream, false);
+  assert.deepEqual(calls[0].body.response_format, { type: "json_object" });
+  assert.equal((await response.json()).arkBPrimeProbe.test, "B-prime");
+});
+
+test("B-prime rejects caller overrides and exposes no request content", async () => {
+  process.env.VERCEL_ENV = "preview";
+  process.env.ARK_API_KEY = "test-key";
+  process.env.ARK_MODEL_ID = "test-model";
+  let calls = 0;
+  globalThis.fetch = async () => { calls += 1; return new Response("private body", { status: 200 }); };
+  const rejected = await route.POST(new Request("http://localhost/api/diagnostics/provider-connectivity", {
+    method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ action: "arkBPrimeProbe", max_tokens: 600 }),
+  }));
+  assert.equal(rejected.status, 400);
+  assert.equal(calls, 0);
+});
