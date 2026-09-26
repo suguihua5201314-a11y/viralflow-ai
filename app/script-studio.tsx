@@ -150,6 +150,7 @@ type Props = {
   creativeDirectionSession: CreativeDirectionSession;
   currentCreativeBrief: CreativeBriefV2 | null;
   onGenerateCreativeDirections: (controls: GenerationControls) => void;
+  onSelectCreativeDirection: (opportunityId: string, controls: GenerationControls) => void;
 };
 
 type EditorBlock = CopilotBlock & { duration: string };
@@ -641,6 +642,7 @@ export default function ScriptStudio(props: Props) {
         currentBrief={props.currentCreativeBrief}
         disabled={!props.inputReady || !providerReady}
         onGenerate={() => props.onGenerateCreativeDirections(controls(1))}
+        onSelect={(opportunityId) => props.onSelectCreativeDirection(opportunityId, controls(1))}
       />
 
       <section className="os-script-version-rail">

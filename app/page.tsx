@@ -40,9 +40,11 @@ import {mergeReplicationAdoption,restoreProjectAnalyzer,restoreProjectReplicatio
 import {createScriptRevisionId,ensureScriptRevision,scriptRevisionIdentity} from "./script-foundation";
 import {resolveCanonicalProductContext} from "./product-context";
 import {activateDirectorContext,directorRequestIdentity,resolveDirectorWorkspace,sameDirectorRequestIdentity,saveDirectorWorkspace,selectDirectorShot,type DirectorRequestIdentity} from "./director-contexts";
-import {beginCreativeDirectionRequest,completeCreativeDirectionRequest,emptyCreativeDirectionSession,failCreativeDirectionRequest,type CreativeDirectionSessions} from "./creative-direction-state";
+import {beginCreativeBriefRequest,beginCreativeDirectionRequest,completeCreativeBriefRequest,completeCreativeDirectionRequest,emptyCreativeDirectionSession,failCreativeBriefRequest,failCreativeDirectionRequest,type CreativeDirectionSessions} from "./creative-direction-state";
 import {type CreativeBrainInput,type RecentCreativeHistory} from "./creative-brain";
 import {parseCreativeDirectionApiResponse} from "./creative-directions";
+import {parseCreativeBriefApiResponse,persistExpandedCreativeBrief,type CreativeBriefRequestIdentity} from "./creative-brief-expansion";
+import {productContextFingerprint} from "./creative-opportunity-selection";
 
 type Scene = { time: string; visual: string; line: string; edit: string };
 type Script = { revisionId?: string; sourceCreativeBriefId?: string; sourceCreativeBriefRevisionId?: string; id?: number; title: string; product: string; language: string; country: string; style: string; hook: string; alternateHooks: string[]; narration: string; scenes: Scene[]; createdAt?: string; aiGenerated?: boolean; creativeAngle?:string; hookType?:string; framework?:string; conflict?:string; productReveal?:string; proof?:string; sellingPoints?:string; cta?:string; shootingSuggestion?:string; scenario?:string; proofMechanism?:string; ctaStyle?:string };
@@ -175,6 +177,9 @@ export default function Home() {
   const activeDirectorIdentity=useRef<DirectorRequestIdentity|null>(null);
   const activeScriptGenerationIdentity=useRef("");
   const activeCreativeDirectionRequests=useRef<Record<string,string>>({});
+  const activeCreativeBriefRequests=useRef<Record<string,CreativeBriefRequestIdentity>>({});
+  const activeProjectId=useRef<string|null>(null);
+  const activeProductFingerprints=useRef<Record<string,string>>({});
   const [creativeDirectionSessions,setCreativeDirectionSessions]=useState<CreativeDirectionSessions>({});
   const [memorySaveState,setMemorySaveState]=useState<"saved"|"saving">("saved");
   const [projectMemory,setProjectMemory]=useState<ProjectMemory>(()=>({
@@ -440,6 +445,7 @@ export default function Home() {
     const project=projectMemory.projects.find(item=>item.id===projectId);
     if(!project)return;
     const requestId=crypto.randomUUID();
+    delete activeCreativeBriefRequests.current[projectId];
     activeCreativeDirectionRequests.current[projectId]=requestId;
     setCreativeDirectionSessions(current=>beginCreativeDirectionRequest(current,projectId,requestId));
     const recentScripts=(project.assets.scriptVersions as Script[]).slice(-6).reverse();
@@ -462,6 +468,38 @@ export default function Home() {
     }catch(value){
       if(activeCreativeDirectionRequests.current[projectId]!==requestId)return;
       setCreativeDirectionSessions(current=>failCreativeDirectionRequest(current,projectId,requestId,value instanceof Error?value.message:"创意方向生成失败，请重试。"));
+    }
+  }
+  async function selectCreativeDirection(opportunityId:string,controls:GenerationControls){
+    const projectId=projectMemory.workspace.currentProjectId;
+    if(!projectId)return;
+    const project=projectMemory.projects.find(item=>item.id===projectId);
+    const selected=creativeDirectionSessions[projectId]?.directions.find(item=>item.id===opportunityId);
+    if(!project||!selected)return;
+    const productContext=resolveCanonicalProductContext({productName:form.product,selectedProductId,projectProductProfileId:project.productProfileId,profiles:productProfiles});
+    const fingerprint=productContextFingerprint(productContext);
+    const requestId=crypto.randomUUID();
+    const identity:CreativeBriefRequestIdentity={requestId,projectId,canonicalDirectionId:selected.id,productContextFingerprint:fingerprint};
+    activeCreativeBriefRequests.current[projectId]=identity;
+    setCreativeDirectionSessions(current=>beginCreativeBriefRequest(current,projectId,selected.id,requestId));
+    const recentScripts=(project.assets.scriptVersions as Script[]).slice(-6).reverse();
+    const recentCreativeHistory=recentScripts.map(({title,hook,creativeAngle,scenario,proofMechanism,cta})=>({title,hook,creativeAngle,scenario,proofMechanism,cta})) as RecentCreativeHistory[];
+    try{
+      const response=await fetch("/api/creative-brief",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({projectId,selectedDirection:selected,productContext,productContextFingerprint:fingerprint,market:form.country,language:form.language,platform:controls.platform,preferences:{creationMode:controls.creationMode,hookStrategy:controls.hookStrategy,framework:form.framework,creativity:controls.creativity},sourceContext:referenceScript.trim()?{kind:"reference-script",sourceId:`project-reference:${projectId}`,referenceText:referenceScript}:undefined,recentCreativeHistory,provider:controls.provider})});
+      const data=await parseCreativeBriefApiResponse(response);
+      const activeRequest=activeCreativeBriefRequests.current[projectId];
+      if(!activeRequest||activeRequest.requestId!==requestId)return;
+      if(activeProjectId.current!==projectId||activeProductFingerprints.current[projectId]!==fingerprint){
+        setCreativeDirectionSessions(current=>failCreativeBriefRequest(current,projectId,selected.id,requestId,"产品或项目已变化，请重试生成简报"));
+        return;
+      }
+      if(!data.brief)return;
+      const brief=data.brief;
+      setProjectMemory(current=>persistExpandedCreativeBrief(current,memoryWriterId.current||getOrCreateProjectMemoryWriterId(),identity,activeCreativeBriefRequests.current[projectId]||null,brief));
+      setCreativeDirectionSessions(current=>completeCreativeBriefRequest(current,projectId,selected.id,requestId));
+    }catch(value){
+      if(activeCreativeBriefRequests.current[projectId]?.requestId!==requestId)return;
+      setCreativeDirectionSessions(current=>failCreativeBriefRequest(current,projectId,selected.id,requestId,value instanceof Error?value.message:"创意简报生成失败，请重试"));
     }
   }
   function update(key: keyof typeof form, value: string) { if(key==="product")updateProjectMemory({}, {product:value}); setForm(prev => {const next={...prev,[key]:value};saveWorkspaceSnapshot({form:next});return next;}); }
@@ -503,6 +541,8 @@ export default function Home() {
   const currentDirectorProject=projectMemory.projects.find(project=>project.id===projectMemory.workspace.currentProjectId);
   const currentCreativeBrief=currentDirectorProject?.assets.creativeBriefRevisions?.find(brief=>brief.revisionId===currentDirectorProject.assets.currentCreativeBriefRevisionId)||null;
   const currentCreativeDirectionSession=projectMemory.workspace.currentProjectId?creativeDirectionSessions[projectMemory.workspace.currentProjectId]||emptyCreativeDirectionSession():emptyCreativeDirectionSession();
+  activeProjectId.current=projectMemory.workspace.currentProjectId;
+  if(currentDirectorProject)activeProductFingerprints.current[currentDirectorProject.id]=productContextFingerprint(resolveCanonicalProductContext({productName:form.product,selectedProductId,projectProductProfileId:currentDirectorProject.productProfileId,profiles:productProfiles}));
   const directorProduct=currentProductContext(result?.product||form.product).productKnowledge;
   const currentAnalyzerCase=restoreProjectAnalyzer(currentDirectorProject);
   const currentReplicationWorkspace=restoreProjectReplication(currentDirectorProject);
@@ -601,6 +641,7 @@ export default function Home() {
         creativeDirectionSession={currentCreativeDirectionSession}
         currentCreativeBrief={currentCreativeBrief}
         onGenerateCreativeDirections={generateCreativeDirections}
+        onSelectCreativeDirection={selectCreativeDirection}
       /> : active === "checker" ? <section className="checker-panel"><div className="checker-grid"><section className="checker-input"><span className="modal-kicker">文案安全检查</span><h2>粘贴需要检测的文案</h2><p>支持中文、西班牙语和英语。结果仅作为发布前辅助检查，平台还会结合画面、字幕、商品和账号情况。</p><textarea value={checkText} onChange={e => { setCheckText(e.target.value); setHasChecked(false); }} rows={18} placeholder="把完整口播、字幕或商品文案粘贴到这里…" /><div><small>{checkText.length}字</small><button className="vf-button vf-button-primary" disabled={!checkText.trim()} onClick={() => setHasChecked(true)}>开始检测</button></div></section><section className="checker-result">{!hasChecked ? <div className="checker-empty"><span>✓</span><h3>等待检测</h3><p>系统会逐项标出风险词和修改建议。</p></div> : complianceHits.length === 0 ? <div className="checker-clear"><span>✓</span><h3>暂未命中已知风险词</h3><p>这不代表平台一定审核通过，请继续检查画面真实性、测试条件和促销信息。</p></div> : <><div className="checker-summary"><div><span>检测结果</span><strong>{complianceHits.length}处风险</strong></div><b>{complianceHits.filter(x => x.level === "高").length}项高风险</b></div><div className="risk-list">{complianceHits.map((hit,index) => <article key={`${hit.category}-${hit.term}-${index}`} className={hit.level === "高" ? "risk-high" : "risk-medium"}><div><span>{hit.level}风险</span><em>{hit.category}</em></div><h3>命中：{hit.term}</h3><p>{hit.suggestion}</p></article>)}</div></>}</section></div></section> : active === "library" ? <section className="library-panel">
         <div className="library-toolbar"><div className="library-tabs"><button className={libraryType === "hooks" ? "selected" : ""} onClick={() => setLibraryType("hooks")}>爆款开头库 <em>{hookLibrary.length}</em></button><button className={libraryType === "points" ? "selected" : ""} onClick={() => setLibraryType("points")}>产品卖点库 <em>{pointLibrary.length}</em></button><button className={libraryType === "cases" ? "selected" : ""} onClick={() => setLibraryType("cases")}>爆款案例库 <em>{viralCases.length}</em></button></div><input value={librarySearch} onChange={e => setLibrarySearch(e.target.value)} placeholder="搜索内容或产品…" /></div>
         <div className="library-grid"><section className="library-form">{libraryType === "hooks" ? <><span className="modal-kicker">新增开场钩子</span><h2>新增爆款开头</h2><label>名称<input value={hookDraft.title} onChange={e => setHookDraft(prev => ({ ...prev, title: e.target.value }))} placeholder="例如：斧头暴力测试" /></label><label>语言<select value={hookDraft.language} onChange={e => setHookDraft(prev => ({ ...prev, language: e.target.value }))}>{languages.map(x => <option key={x}>{x}</option>)}</select></label><label>开头文案<textarea rows={7} value={hookDraft.copy} onChange={e => setHookDraft(prev => ({ ...prev, copy: e.target.value }))} placeholder="粘贴前3–8秒爆款开头" /></label><button className="modal-primary vf-button vf-button-primary" disabled={!hookDraft.title.trim() || !hookDraft.copy.trim()} onClick={addHookItem}>保存到开头库</button></> : libraryType === "points" ? <><span className="modal-kicker">新增产品卖点</span><h2>新增产品卖点</h2><label>产品名称<input value={pointDraft.product} onChange={e => setPointDraft(prev => ({ ...prev, product: e.target.value }))} placeholder="例如：变形金刚钢化膜" /></label><label>完整卖点<textarea rows={10} value={pointDraft.points} onChange={e => setPointDraft(prev => ({ ...prev, points: e.target.value }))} placeholder="每条卖点用分号隔开" /></label><button className="modal-primary vf-button vf-button-primary" disabled={!pointDraft.product.trim() || !pointDraft.points.trim()} onClick={addPointItem}>保存到卖点库</button></> : <><span className="modal-kicker">爆款案例</span><h2>结构化爆款案例</h2><p>案例从爆款拆解器保存，包含Hook机制、Creative Angle、Proof、CTA和可复刻公式。</p><button className="modal-primary vf-button vf-button-primary" onClick={()=>setActive("breakdown")}>＋ 分析新案例</button></>}</section>

@@ -8,6 +8,9 @@ export type CreativeDirectionSession = {
   requestId?: string;
   selectingOpportunityId?: string;
   selectedOpportunityId?: string;
+  briefStatus?: "idle" | "loading" | "ready" | "error";
+  briefError?: string;
+  briefRequestId?: string;
 };
 
 export type CreativeDirectionSessions = Record<string, CreativeDirectionSession>;
@@ -57,4 +60,21 @@ export function markCreativeDirectionSelection(sessions: CreativeDirectionSessio
       selectedOpportunityId: selected ? opportunityId : current.selectedOpportunityId,
     },
   };
+}
+
+export function beginCreativeBriefRequest(sessions: CreativeDirectionSessions, projectId: string, opportunityId: string, requestId: string) {
+  const current = sessions[projectId] || emptyCreativeDirectionSession();
+  return { ...sessions, [projectId]: { ...current, selectingOpportunityId: opportunityId, selectedOpportunityId: opportunityId, briefStatus: "loading" as const, briefError: "", briefRequestId: requestId } };
+}
+
+export function completeCreativeBriefRequest(sessions: CreativeDirectionSessions, projectId: string, opportunityId: string, requestId: string) {
+  const current = sessions[projectId];
+  if (!current || current.briefRequestId !== requestId || current.selectingOpportunityId !== opportunityId) return sessions;
+  return { ...sessions, [projectId]: { ...current, selectingOpportunityId: undefined, selectedOpportunityId: opportunityId, briefStatus: "ready" as const, briefError: "", briefRequestId: undefined } };
+}
+
+export function failCreativeBriefRequest(sessions: CreativeDirectionSessions, projectId: string, opportunityId: string, requestId: string, error: string) {
+  const current = sessions[projectId];
+  if (!current || current.briefRequestId !== requestId || current.selectingOpportunityId !== opportunityId) return sessions;
+  return { ...sessions, [projectId]: { ...current, selectingOpportunityId: undefined, selectedOpportunityId: opportunityId, briefStatus: "error" as const, briefError: error, briefRequestId: undefined } };
 }

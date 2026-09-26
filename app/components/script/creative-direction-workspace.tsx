@@ -8,6 +8,7 @@ type Props = {
   currentBrief: CreativeBriefV2 | null;
   disabled: boolean;
   onGenerate: () => void;
+  onSelect: (opportunityId: string) => void;
 };
 
 const evidenceLabels: Record<string, string> = {
@@ -16,7 +17,7 @@ const evidenceLabels: Record<string, string> = {
   comparison: "对照", education: "知识解释", testimonial: "体验证言", "none-required": "无需额外证明",
 };
 
-export default function CreativeDirectionWorkspace({ session, currentBrief, disabled, onGenerate }: Props) {
+export default function CreativeDirectionWorkspace({ session, currentBrief, disabled, onGenerate, onSelect }: Props) {
   const hasDirections = session.directions.length > 0;
   return (
     <section className="creative-direction-workspace" aria-labelledby="creative-direction-title">
@@ -39,7 +40,9 @@ export default function CreativeDirectionWorkspace({ session, currentBrief, disa
         <div className="creative-direction-grid">
           {session.directions.map((canonical, index) => {
             const item = canonical.value;
-            const selected = session.selectedOpportunityId === canonical.id || currentBrief?.opportunityReference?.canonicalOpportunityId === canonical.id;
+            const selected = session.selectedOpportunityId
+              ? session.selectedOpportunityId === canonical.id
+              : currentBrief?.opportunityReference?.canonicalOpportunityId === canonical.id;
             const selecting = session.selectingOpportunityId === canonical.id;
             return (
               <article className={selected ? "is-selected" : ""} key={canonical.id}>
@@ -59,7 +62,10 @@ export default function CreativeDirectionWorkspace({ session, currentBrief, disa
                   {item.coreTension && <p><b>张力 / 顾虑</b>{item.coreTension}</p>}
                   {item.rationale && <p><b>方向理由</b>{item.rationale}</p>}
                 </details>
-                <button disabled>使用这个方向 · 下一阶段开放</button>
+                <button disabled={disabled || Boolean(session.selectingOpportunityId)} onClick={() => onSelect(canonical.id)}>
+                  {selecting ? "正在生成完整创意简报…" : session.briefStatus === "error" && session.selectedOpportunityId === canonical.id ? "重试生成简报" : "使用这个方向"}
+                </button>
+                {session.briefStatus === "error" && session.selectedOpportunityId === canonical.id && <p className="creative-direction-notice is-error" role="alert">{session.briefError || "创意简报生成失败，请重试"}</p>}
               </article>
             );
           })}
@@ -68,13 +74,15 @@ export default function CreativeDirectionWorkspace({ session, currentBrief, disa
         <div className="creative-direction-empty"><strong>创意方向</strong><span>先生成不同内容方向，再选择一个进入后续脚本创作。</span></div>
       ) : null}
 
-      {currentBrief && (
+      {currentBrief && (!session.selectedOpportunityId || currentBrief.opportunityReference?.canonicalOpportunityId === session.selectedOpportunityId) && (
         <aside className="current-creative-brief">
-          <div><span>当前创意方向</span><b>{currentBrief.direction.creativeAngle}</b></div>
+          <div><span>创意简报已准备</span><b>{currentBrief.direction.creativeAngle}</b></div>
           <dl>
             <div><dt>Hook</dt><dd>{currentBrief.opening.hookLine}</dd></div>
             <div><dt>开场画面</dt><dd>{currentBrief.opening.visual.subject} · {currentBrief.opening.visual.action}</dd></div>
             <div><dt>证明方式</dt><dd>{evidenceLabels[currentBrief.evidence.type] || currentBrief.evidence.type} · {currentBrief.evidence.objective}</dd></div>
+            <div><dt>CTA方向</dt><dd>{currentBrief.ctaDirection}</dd></div>
+            <div><dt>风险边界</dt><dd>{[...currentBrief.riskBoundaries.prohibitedClaims, ...currentBrief.riskBoundaries.requiredQualifiers, ...currentBrief.riskBoundaries.safetyConstraints].slice(0, 3).join("；") || "遵循产品事实与平台规范"}</dd></div>
           </dl>
         </aside>
       )}

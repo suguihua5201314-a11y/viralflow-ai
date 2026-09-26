@@ -77,8 +77,27 @@ test("UI wiring uses canonical Product Context, Creative Brain API and 2A select
   assert.doesNotMatch(generationPath, /selectCreativeOpportunity|createCreativeBrief|appendCreativeBriefRevision/);
   assert.match(studio, /CreativeDirectionWorkspace/);
   assert.match(component, /生成创意方向/);
-  assert.match(component, /当前创意方向/);
-  assert.match(component, /下一阶段开放/);
+  assert.match(component, /创意简报已准备/);
+  assert.match(component, /使用这个方向/);
+  assert.match(component, /正在生成完整创意简报/);
+  assert.match(component, /创意简报已准备/);
+  assert.match(page, /fetch\("\/api\/creative-brief"/);
+});
+
+test("Brief request state preserves canonical direction identity across retry and rejects stale completion", () => {
+  let sessions = state.beginCreativeDirectionRequest({}, "project-a", "directions");
+  sessions = state.completeCreativeDirectionRequest(sessions, "project-a", "directions", { status: "success", directions: [direction("A"), direction("B"), direction("C")] });
+  const canonicalId = sessions["project-a"].directions[0].id;
+  sessions = state.beginCreativeBriefRequest(sessions, "project-a", canonicalId, "brief-1");
+  const stale = state.completeCreativeBriefRequest(sessions, "project-a", canonicalId, "old-request");
+  assert.equal(stale, sessions);
+  sessions = state.failCreativeBriefRequest(sessions, "project-a", canonicalId, "brief-1", "failed");
+  assert.equal(sessions["project-a"].selectedOpportunityId, canonicalId);
+  sessions = state.beginCreativeBriefRequest(sessions, "project-a", canonicalId, "brief-2");
+  assert.equal(sessions["project-a"].selectedOpportunityId, canonicalId);
+  sessions = state.completeCreativeBriefRequest(sessions, "project-a", canonicalId, "brief-2");
+  assert.equal(sessions["project-a"].briefStatus, "ready");
+  assert.equal(sessions["project-a"].selectedOpportunityId, canonicalId);
 });
 
 test("frontend safely normalizes platform text, HTML and invalid JSON responses", async () => {

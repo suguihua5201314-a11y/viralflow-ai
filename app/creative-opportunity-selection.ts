@@ -64,7 +64,7 @@ function stableValue(value: unknown): unknown {
   return value;
 }
 
-function productContextFingerprint(context: CanonicalProductContext) {
+export function productContextFingerprint(context: CanonicalProductContext) {
   const source = JSON.stringify(stableValue({ productName: context.productName, profileId: context.profileId, productKnowledge: context.productKnowledge || null }));
   let hash = 2166136261;
   for (let index = 0; index < source.length; index++) hash = Math.imul(hash ^ source.charCodeAt(index), 16777619);
