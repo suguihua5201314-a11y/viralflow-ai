@@ -2,6 +2,7 @@
 
 import type { CreativeBriefV2 } from "../../creative-contract";
 import type { CreativeDirectionSession } from "../../creative-direction-state";
+import type { ScriptWriterAcceptanceState } from "../../script-writer-acceptance";
 
 type Props = {
   session: CreativeDirectionSession;
@@ -9,6 +10,9 @@ type Props = {
   disabled: boolean;
   onGenerate: () => void;
   onSelect: (opportunityId: string) => void;
+  writerAcceptanceEnabled: boolean;
+  writerAcceptance: ScriptWriterAcceptanceState;
+  onTestWriter: () => void;
 };
 
 const evidenceLabels: Record<string, string> = {
@@ -17,7 +21,7 @@ const evidenceLabels: Record<string, string> = {
   comparison: "对照", education: "知识解释", testimonial: "体验证言", "none-required": "无需额外证明",
 };
 
-export default function CreativeDirectionWorkspace({ session, currentBrief, disabled, onGenerate, onSelect }: Props) {
+export default function CreativeDirectionWorkspace({ session, currentBrief, disabled, onGenerate, onSelect, writerAcceptanceEnabled, writerAcceptance, onTestWriter }: Props) {
   const hasDirections = session.directions.length > 0;
   return (
     <section className="creative-direction-workspace" aria-labelledby="creative-direction-title">
@@ -84,6 +88,21 @@ export default function CreativeDirectionWorkspace({ session, currentBrief, disa
             <div><dt>CTA方向</dt><dd>{currentBrief.ctaDirection}</dd></div>
             <div><dt>风险边界</dt><dd>{[...currentBrief.riskBoundaries.prohibitedClaims, ...currentBrief.riskBoundaries.requiredQualifiers, ...currentBrief.riskBoundaries.safetyConstraints].slice(0, 3).join("；") || "遵循产品事实与平台规范"}</dd></div>
           </dl>
+          {writerAcceptanceEnabled && (
+            <section className="script-writer-acceptance" aria-label="Brief Writer Preview Acceptance">
+              <header><b>Preview Writer Acceptance</b><button disabled={writerAcceptance.status === "loading"} onClick={onTestWriter}>{writerAcceptance.status === "loading" ? "正在测试 Writer…" : "测试 Brief Writer"}</button></header>
+              {writerAcceptance.status === "error" && <div className="creative-direction-notice is-error" role="alert"><p>{writerAcceptance.error || "脚本生成失败，请重试。"}</p>{writerAcceptance.diagnostic && <small>Validation: {writerAcceptance.diagnostic}</small>}</div>}
+              {writerAcceptance.status === "success" && writerAcceptance.draft && <div className="script-writer-acceptance-result">
+                <strong>Writer Success</strong>
+                <h3>{writerAcceptance.draft.title}</h3>
+                <p><b>Hook</b>{writerAcceptance.draft.hook.line}</p>
+                <ol>{writerAcceptance.draft.scenes.map(scene => <li key={scene.id}><b>{scene.purpose}</b><span>{scene.visual}</span><span>{scene.dialogue}</span></li>)}</ol>
+                <p><b>Narration</b>{writerAcceptance.draft.fullNarration}</p>
+                <p><b>CTA</b>{writerAcceptance.draft.cta}</p>
+                <small>{writerAcceptance.metadata?.providerUsed || "unknown"} · {writerAcceptance.metadata?.model || "model unavailable"} · {writerAcceptance.metadata?.latencyMs ?? 0}ms · repair {writerAcceptance.metadata?.repairAttempted ? "yes" : "no"}</small>
+              </div>}
+            </section>
+          )}
         </aside>
       )}
     </section>

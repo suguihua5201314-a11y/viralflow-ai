@@ -26,6 +26,7 @@ import { synchronizeScriptScenes } from "./script-foundation";
 import CreativeDirectionWorkspace from "./components/script/creative-direction-workspace";
 import type { CreativeBriefV2 } from "./creative-contract";
 import type { CreativeDirectionSession } from "./creative-direction-state";
+import type { ScriptWriterAcceptanceState } from "./script-writer-acceptance";
 
 export type StudioScene = {
   time: string;
@@ -151,6 +152,9 @@ type Props = {
   currentCreativeBrief: CreativeBriefV2 | null;
   onGenerateCreativeDirections: (controls: GenerationControls) => void;
   onSelectCreativeDirection: (opportunityId: string, controls: GenerationControls) => void;
+  writerAcceptanceEnabled: boolean;
+  writerAcceptance: ScriptWriterAcceptanceState;
+  onTestBriefWriter: (controls: GenerationControls) => void;
 };
 
 type EditorBlock = CopilotBlock & { duration: string };
@@ -643,6 +647,9 @@ export default function ScriptStudio(props: Props) {
         disabled={!props.inputReady || !providerReady}
         onGenerate={() => props.onGenerateCreativeDirections(controls(1))}
         onSelect={(opportunityId) => props.onSelectCreativeDirection(opportunityId, controls(1))}
+        writerAcceptanceEnabled={props.writerAcceptanceEnabled}
+        writerAcceptance={props.writerAcceptance}
+        onTestWriter={() => props.onTestBriefWriter(controls(1))}
       />
 
       <section className="os-script-version-rail">

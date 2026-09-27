@@ -14,10 +14,15 @@ export function resolveScriptWriterProvider(
   requested: ProviderId,
   environment = process.env.VERCEL_ENV,
   previewOverride = process.env.SCRIPT_WRITER_PROVIDER,
+  previewCreativeProvider = process.env.CREATIVE_BRAIN_PROVIDER,
 ): ProviderId {
   if (environment !== "preview") return requested;
-  const value = previewOverride?.trim();
+  const value = previewOverride?.trim() || previewCreativeProvider?.trim();
   return value === "deepseek" || value === "doubao" || value === "openai" ? value : requested;
+}
+
+export async function GET() {
+  return Response.json({ acceptanceHarnessEnabled: process.env.VERCEL_ENV === "preview" });
 }
 
 function requestShape(value: unknown): value is ScriptWriterInput & { provider?: ProviderId } {
