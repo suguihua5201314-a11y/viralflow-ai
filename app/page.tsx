@@ -46,6 +46,7 @@ import {parseCreativeDirectionApiResponse} from "./creative-directions";
 import {parseCreativeBriefApiResponse,persistExpandedCreativeBrief,type CreativeBriefRequestIdentity} from "./creative-brief-expansion";
 import {productContextFingerprint} from "./creative-opportunity-selection";
 import {beginScriptWriterAcceptance,completeScriptWriterAcceptance,emptyScriptWriterAcceptanceState,failScriptWriterAcceptance,parseScriptWriterAcceptanceResponse,sameScriptWriterAcceptanceIdentity,type ScriptWriterAcceptanceIdentity,type ScriptWriterAcceptanceState} from "./script-writer-acceptance";
+import {beginScriptCriticAcceptance,completeScriptCriticAcceptance,emptyScriptCriticAcceptanceState,failScriptCriticAcceptance,parseScriptCriticAcceptanceResponse,sameScriptCriticAcceptanceIdentity,type ScriptCriticAcceptanceIdentity,type ScriptCriticAcceptanceState} from "./script-critic-acceptance";
 
 type Scene = { time: string; visual: string; line: string; edit: string };
 type Script = { revisionId?: string; sourceCreativeBriefId?: string; sourceCreativeBriefRevisionId?: string; id?: number; title: string; product: string; language: string; country: string; style: string; hook: string; alternateHooks: string[]; narration: string; scenes: Scene[]; createdAt?: string; aiGenerated?: boolean; creativeAngle?:string; hookType?:string; framework?:string; conflict?:string; productReveal?:string; proof?:string; sellingPoints?:string; cta?:string; shootingSuggestion?:string; scenario?:string; proofMechanism?:string; ctaStyle?:string };
@@ -180,12 +181,15 @@ export default function Home() {
   const activeCreativeDirectionRequests=useRef<Record<string,string>>({});
   const activeCreativeBriefRequests=useRef<Record<string,CreativeBriefRequestIdentity>>({});
   const activeWriterAcceptance=useRef<ScriptWriterAcceptanceIdentity|null>(null);
+  const activeCriticAcceptance=useRef<ScriptCriticAcceptanceIdentity|null>(null);
   const activeCreativeBriefRevision=useRef<string|null>(null);
   const activeProjectId=useRef<string|null>(null);
   const activeProductFingerprints=useRef<Record<string,string>>({});
   const [creativeDirectionSessions,setCreativeDirectionSessions]=useState<CreativeDirectionSessions>({});
   const [writerAcceptanceEnabled,setWriterAcceptanceEnabled]=useState(false);
   const [writerAcceptance,setWriterAcceptance]=useState<ScriptWriterAcceptanceState>(emptyScriptWriterAcceptanceState);
+  const [criticAcceptanceEnabled,setCriticAcceptanceEnabled]=useState(false);
+  const [criticAcceptance,setCriticAcceptance]=useState<ScriptCriticAcceptanceState>(emptyScriptCriticAcceptanceState);
   const [memorySaveState,setMemorySaveState]=useState<"saved"|"saving">("saved");
   const [projectMemory,setProjectMemory]=useState<ProjectMemory>(()=>({
     version:1,
@@ -204,6 +208,7 @@ export default function Home() {
   }
   useEffect(() => {
     fetch("/api/script-writer", { cache: "no-store" }).then(response=>response.ok?response.json():null).then(data=>setWriterAcceptanceEnabled(data?.acceptanceHarnessEnabled===true)).catch(()=>setWriterAcceptanceEnabled(false));
+    fetch("/api/script-critic", { cache: "no-store" }).then(response=>response.ok?response.json():null).then(data=>setCriticAcceptanceEnabled(data?.acceptanceHarnessEnabled===true)).catch(()=>setCriticAcceptanceEnabled(false));
     fetch("/api/scripts", { cache: "no-store" })
       .then(res => res.json())
       .then(data => { setHistory(JSON.parse(localStorage.getItem("viralcraft-history") || "[]")); setAiConnected(Boolean(data.aiConnected));if(data.providers)setProviderStatuses(data.providers); })
@@ -519,6 +524,8 @@ export default function Home() {
     const fingerprint=productContextFingerprint(productContext);
     const identity:ScriptWriterAcceptanceIdentity={requestId:crypto.randomUUID(),projectId,creativeBriefId:brief.id,creativeBriefRevisionId:brief.revisionId,productContextFingerprint:fingerprint};
     activeWriterAcceptance.current=identity;
+    activeCriticAcceptance.current=null;
+    setCriticAcceptance(emptyScriptCriticAcceptanceState());
     setWriterAcceptance(beginScriptWriterAcceptance(identity));
     try{
       const response=await fetch("/api/script-writer",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({projectId,requestId:identity.requestId,creativeBriefReference:{id:brief.id,revisionId:brief.revisionId},creativeBrief:brief,productContext,productContextFingerprint:fingerprint,platform:controls.platform,market:form.country,language:form.language,preferences:{durationSeconds:Number(form.duration)||30,creatorStyle:controls.creationMode,spokenDensity:"balanced",toneSteering:form.style,variantCount:1},recentScriptHistory:(project.assets.scriptVersions as StructuredScript[]).slice(-6),provider:controls.provider})});
@@ -529,6 +536,30 @@ export default function Home() {
       if(!sameScriptWriterAcceptanceIdentity(activeWriterAcceptance.current,identity)||activeProjectId.current!==projectId||activeCreativeBriefRevision.current!==brief.revisionId||activeProductFingerprints.current[projectId]!==fingerprint)return;
       const validationIssue=(value as Error & {validationIssue?:{stage:string;code:string;path?:string}}).validationIssue;
       setWriterAcceptance(current=>failScriptWriterAcceptance(current,identity,value instanceof Error?value.message:"脚本生成失败，请重试。",validationIssue));
+    }
+  }
+  async function testScriptCritic(controls:GenerationControls){
+    const projectId=projectMemory.workspace.currentProjectId;
+    const project=projectMemory.projects.find(item=>item.id===projectId);
+    const brief=project?.assets.creativeBriefRevisions?.find(item=>item.revisionId===project.assets.currentCreativeBriefRevisionId);
+    const writerIdentity=writerAcceptance.identity;
+    const writerDraft=writerAcceptance.draft;
+    if(!criticAcceptanceEnabled||writerAcceptance.status!=="success"||!writerIdentity||!writerDraft||!projectId||!project||!brief)return;
+    const productContext=resolveCanonicalProductContext({productName:form.product,selectedProductId,projectProductProfileId:project.productProfileId,profiles:productProfiles});
+    const fingerprint=productContextFingerprint(productContext);
+    if(writerIdentity.projectId!==projectId||writerIdentity.creativeBriefId!==brief.id||writerIdentity.creativeBriefRevisionId!==brief.revisionId||writerIdentity.productContextFingerprint!==fingerprint)return;
+    const identity:ScriptCriticAcceptanceIdentity={requestId:crypto.randomUUID(),projectId,creativeBriefId:brief.id,creativeBriefRevisionId:brief.revisionId,productContextFingerprint:fingerprint,writerRequestId:writerIdentity.requestId};
+    activeCriticAcceptance.current=identity;
+    setCriticAcceptance(beginScriptCriticAcceptance(identity));
+    try{
+      const response=await fetch("/api/script-critic",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({projectId,requestId:identity.requestId,creativeBriefReference:{briefId:brief.id,briefRevisionId:brief.revisionId},creativeBrief:brief,canonicalProductContext:productContext,productContextFingerprint:fingerprint,scriptDraft:writerDraft,platform:controls.platform,market:form.country,language:form.language,preferences:{creatorStyle:controls.creationMode,durationPreference:Number(form.duration)||30,spokenDensity:"balanced",tone:form.style},provider:controls.provider})});
+      const data=await parseScriptCriticAcceptanceResponse(response);
+      if(!sameScriptCriticAcceptanceIdentity(activeCriticAcceptance.current,identity)||activeProjectId.current!==projectId||activeCreativeBriefRevision.current!==brief.revisionId||activeProductFingerprints.current[projectId]!==fingerprint||activeWriterAcceptance.current?.requestId!==identity.writerRequestId)return;
+      setCriticAcceptance(current=>completeScriptCriticAcceptance(current,identity,{critique:data.critique,metadata:data.metadata}));
+    }catch(value){
+      if(!sameScriptCriticAcceptanceIdentity(activeCriticAcceptance.current,identity)||activeProjectId.current!==projectId||activeCreativeBriefRevision.current!==brief.revisionId||activeProductFingerprints.current[projectId]!==fingerprint||activeWriterAcceptance.current?.requestId!==identity.writerRequestId)return;
+      const validationIssue=(value as Error & {validationIssue?:{stage:"input_validation"|"critic_json_parse"|"critic_schema"|"critic_target";code:string;path?:string;validator:string}}).validationIssue;
+      setCriticAcceptance(current=>failScriptCriticAcceptance(current,identity,value instanceof Error?value.message:"脚本评审失败，请重试。",validationIssue));
     }
   }
   function update(key: keyof typeof form, value: string) { if(key==="product")updateProjectMemory({}, {product:value}); setForm(prev => {const next={...prev,[key]:value};saveWorkspaceSnapshot({form:next});return next;}); }
@@ -571,6 +602,7 @@ export default function Home() {
   const currentCreativeBrief=currentDirectorProject?.assets.creativeBriefRevisions?.find(brief=>brief.revisionId===currentDirectorProject.assets.currentCreativeBriefRevisionId)||null;
   const currentCreativeDirectionSession=projectMemory.workspace.currentProjectId?creativeDirectionSessions[projectMemory.workspace.currentProjectId]||emptyCreativeDirectionSession():emptyCreativeDirectionSession();
   const currentWriterAcceptance=writerAcceptance.identity?.projectId===projectMemory.workspace.currentProjectId&&writerAcceptance.identity.creativeBriefRevisionId===currentCreativeBrief?.revisionId?writerAcceptance:emptyScriptWriterAcceptanceState();
+  const currentCriticAcceptance=criticAcceptance.identity?.projectId===projectMemory.workspace.currentProjectId&&criticAcceptance.identity.creativeBriefRevisionId===currentCreativeBrief?.revisionId&&criticAcceptance.identity.writerRequestId===currentWriterAcceptance.identity?.requestId?criticAcceptance:emptyScriptCriticAcceptanceState();
   activeProjectId.current=projectMemory.workspace.currentProjectId;
   activeCreativeBriefRevision.current=currentCreativeBrief?.revisionId||null;
   if(currentDirectorProject)activeProductFingerprints.current[currentDirectorProject.id]=productContextFingerprint(resolveCanonicalProductContext({productName:form.product,selectedProductId,projectProductProfileId:currentDirectorProject.productProfileId,profiles:productProfiles}));
@@ -676,6 +708,9 @@ export default function Home() {
         writerAcceptanceEnabled={writerAcceptanceEnabled}
         writerAcceptance={currentWriterAcceptance}
         onTestBriefWriter={testBriefWriter}
+        criticAcceptanceEnabled={criticAcceptanceEnabled}
+        criticAcceptance={currentCriticAcceptance}
+        onTestScriptCritic={testScriptCritic}
       /> : active === "checker" ? <section className="checker-panel"><div className="checker-grid"><section className="checker-input"><span className="modal-kicker">文案安全检查</span><h2>粘贴需要检测的文案</h2><p>支持中文、西班牙语和英语。结果仅作为发布前辅助检查，平台还会结合画面、字幕、商品和账号情况。</p><textarea value={checkText} onChange={e => { setCheckText(e.target.value); setHasChecked(false); }} rows={18} placeholder="把完整口播、字幕或商品文案粘贴到这里…" /><div><small>{checkText.length}字</small><button className="vf-button vf-button-primary" disabled={!checkText.trim()} onClick={() => setHasChecked(true)}>开始检测</button></div></section><section className="checker-result">{!hasChecked ? <div className="checker-empty"><span>✓</span><h3>等待检测</h3><p>系统会逐项标出风险词和修改建议。</p></div> : complianceHits.length === 0 ? <div className="checker-clear"><span>✓</span><h3>暂未命中已知风险词</h3><p>这不代表平台一定审核通过，请继续检查画面真实性、测试条件和促销信息。</p></div> : <><div className="checker-summary"><div><span>检测结果</span><strong>{complianceHits.length}处风险</strong></div><b>{complianceHits.filter(x => x.level === "高").length}项高风险</b></div><div className="risk-list">{complianceHits.map((hit,index) => <article key={`${hit.category}-${hit.term}-${index}`} className={hit.level === "高" ? "risk-high" : "risk-medium"}><div><span>{hit.level}风险</span><em>{hit.category}</em></div><h3>命中：{hit.term}</h3><p>{hit.suggestion}</p></article>)}</div></>}</section></div></section> : active === "library" ? <section className="library-panel">
         <div className="library-toolbar"><div className="library-tabs"><button className={libraryType === "hooks" ? "selected" : ""} onClick={() => setLibraryType("hooks")}>爆款开头库 <em>{hookLibrary.length}</em></button><button className={libraryType === "points" ? "selected" : ""} onClick={() => setLibraryType("points")}>产品卖点库 <em>{pointLibrary.length}</em></button><button className={libraryType === "cases" ? "selected" : ""} onClick={() => setLibraryType("cases")}>爆款案例库 <em>{viralCases.length}</em></button></div><input value={librarySearch} onChange={e => setLibrarySearch(e.target.value)} placeholder="搜索内容或产品…" /></div>
         <div className="library-grid"><section className="library-form">{libraryType === "hooks" ? <><span className="modal-kicker">新增开场钩子</span><h2>新增爆款开头</h2><label>名称<input value={hookDraft.title} onChange={e => setHookDraft(prev => ({ ...prev, title: e.target.value }))} placeholder="例如：斧头暴力测试" /></label><label>语言<select value={hookDraft.language} onChange={e => setHookDraft(prev => ({ ...prev, language: e.target.value }))}>{languages.map(x => <option key={x}>{x}</option>)}</select></label><label>开头文案<textarea rows={7} value={hookDraft.copy} onChange={e => setHookDraft(prev => ({ ...prev, copy: e.target.value }))} placeholder="粘贴前3–8秒爆款开头" /></label><button className="modal-primary vf-button vf-button-primary" disabled={!hookDraft.title.trim() || !hookDraft.copy.trim()} onClick={addHookItem}>保存到开头库</button></> : libraryType === "points" ? <><span className="modal-kicker">新增产品卖点</span><h2>新增产品卖点</h2><label>产品名称<input value={pointDraft.product} onChange={e => setPointDraft(prev => ({ ...prev, product: e.target.value }))} placeholder="例如：变形金刚钢化膜" /></label><label>完整卖点<textarea rows={10} value={pointDraft.points} onChange={e => setPointDraft(prev => ({ ...prev, points: e.target.value }))} placeholder="每条卖点用分号隔开" /></label><button className="modal-primary vf-button vf-button-primary" disabled={!pointDraft.product.trim() || !pointDraft.points.trim()} onClick={addPointItem}>保存到卖点库</button></> : <><span className="modal-kicker">爆款案例</span><h2>结构化爆款案例</h2><p>案例从爆款拆解器保存，包含Hook机制、Creative Angle、Proof、CTA和可复刻公式。</p><button className="modal-primary vf-button vf-button-primary" onClick={()=>setActive("breakdown")}>＋ 分析新案例</button></>}</section>

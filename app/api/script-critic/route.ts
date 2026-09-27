@@ -10,6 +10,10 @@ import type { ProviderId } from "../../provider-types";
 export const runtime = "nodejs";
 export const maxDuration = 120;
 
+export async function GET() {
+  return Response.json({ acceptanceHarnessEnabled: process.env.VERCEL_ENV === "preview" });
+}
+
 export function resolveScriptCriticProvider(
   requested: ProviderId,
   environment = process.env.VERCEL_ENV,

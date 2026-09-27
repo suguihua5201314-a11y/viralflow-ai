@@ -3,6 +3,7 @@
 import type { CreativeBriefV2 } from "../../creative-contract";
 import type { CreativeDirectionSession } from "../../creative-direction-state";
 import type { ScriptWriterAcceptanceState } from "../../script-writer-acceptance";
+import type { ScriptCriticAcceptanceState } from "../../script-critic-acceptance";
 
 type Props = {
   session: CreativeDirectionSession;
@@ -13,6 +14,9 @@ type Props = {
   writerAcceptanceEnabled: boolean;
   writerAcceptance: ScriptWriterAcceptanceState;
   onTestWriter: () => void;
+  criticAcceptanceEnabled: boolean;
+  criticAcceptance: ScriptCriticAcceptanceState;
+  onTestCritic: () => void;
 };
 
 const evidenceLabels: Record<string, string> = {
@@ -21,7 +25,7 @@ const evidenceLabels: Record<string, string> = {
   comparison: "对照", education: "知识解释", testimonial: "体验证言", "none-required": "无需额外证明",
 };
 
-export default function CreativeDirectionWorkspace({ session, currentBrief, disabled, onGenerate, onSelect, writerAcceptanceEnabled, writerAcceptance, onTestWriter }: Props) {
+export default function CreativeDirectionWorkspace({ session, currentBrief, disabled, onGenerate, onSelect, writerAcceptanceEnabled, writerAcceptance, onTestWriter, criticAcceptanceEnabled, criticAcceptance, onTestCritic }: Props) {
   const hasDirections = session.directions.length > 0;
   return (
     <section className="creative-direction-workspace" aria-labelledby="creative-direction-title">
@@ -101,6 +105,25 @@ export default function CreativeDirectionWorkspace({ session, currentBrief, disa
                 <p><b>CTA</b>{writerAcceptance.draft.cta}</p>
                 <small>{writerAcceptance.metadata?.providerUsed || "unknown"} · {writerAcceptance.metadata?.model || "model unavailable"} · {writerAcceptance.metadata?.latencyMs ?? 0}ms · repair {writerAcceptance.metadata?.repairAttempted ? "yes" : "no"}</small>
               </div>}
+              {criticAcceptanceEnabled && writerAcceptance.status === "success" && writerAcceptance.draft && (
+                <section className="script-critic-acceptance" aria-label="Script Critic Preview Acceptance">
+                  <header><b>Preview Script Critic Acceptance</b><button disabled={criticAcceptance.status === "loading"} onClick={onTestCritic}>{criticAcceptance.status === "loading" ? "正在测试 Critic…" : "测试 Script Critic"}</button></header>
+                  {criticAcceptance.status === "error" && <div className="creative-direction-notice is-error" role="alert"><p>{criticAcceptance.error || "脚本评审失败，请重试。"}</p>{criticAcceptance.diagnostic && <small>Validation: {criticAcceptance.diagnostic}</small>}</div>}
+                  {criticAcceptance.status === "success" && criticAcceptance.critique && <div className="script-critic-acceptance-result">
+                    <strong>Critic Result</strong>
+                    <h3>{criticAcceptance.critique.verdict === "pass" ? "PASS" : "NEEDS REWRITE"}</h3>
+                    {criticAcceptance.critique.summary && <p>{criticAcceptance.critique.summary}</p>}
+                    {criticAcceptance.critique.issues.length > 0 ? <ol>{criticAcceptance.critique.issues.map((issue,index)=><li key={`${issue.code}-${issue.target.scope}-${issue.target.sceneId||"root"}-${index}`}>
+                      <b>{issue.severity.toUpperCase()} · {issue.code}</b>
+                      <span>Target: {issue.target.scope}{issue.target.sceneId?` · ${issue.target.sceneId}`:""}{issue.target.field?` · ${issue.target.field}`:""}</span>
+                      <span>{issue.message}</span>
+                      <span>Rewrite: {issue.rewriteInstruction}</span>
+                      {issue.briefField && <span>Brief: {issue.briefField}</span>}
+                    </li>)}</ol>:<p>No actionable issues returned.</p>}
+                    <small>{criticAcceptance.metadata?.providerUsed || "unknown"} · {criticAcceptance.metadata?.model || "model unavailable"} · {criticAcceptance.metadata?.latencyMs ?? 0}ms · repair {criticAcceptance.metadata?.repairAttempted ? "yes" : "no"}</small>
+                  </div>}
+                </section>
+              )}
             </section>
           )}
         </aside>
