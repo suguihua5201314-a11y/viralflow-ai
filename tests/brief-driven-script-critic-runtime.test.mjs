@@ -46,7 +46,7 @@ function draft(overrides = {}) {
     ],
     fullNarration: "What changes when the viewpoint moves? This is the everyday situation I wanted to check. The alignment applicator helps with placement. Here is the same use from the second viewpoint. Check which option matches your product.",
     cta: "Check which option matches your product.",
-    language: "Spanish",
+    language: "English",
     totalDurationHint: 20,
     ...overrides,
   };
@@ -65,7 +65,7 @@ function input(overrides = {}) {
     scriptDraft: draft(),
     platform: "TikTok",
     market: "Spain",
-    language: "Spanish",
+    language: "English",
     preferences: { creatorStyle: "UGC", durationPreference: 20, spokenDensity: "balanced", tone: "natural" },
     ...overrides,
   };
@@ -199,7 +199,7 @@ test("identity and deterministic draft failures stop before the Provider", async
     input({ projectId: "project-b" }),
     input({ creativeBriefReference: { briefId: "creative-brief-a", briefRevisionId: "wrong" } }),
     input({ productContextFingerprint: "wrong" }),
-    input({ scriptDraft: draft({ language: "English" }) }),
+    input({ scriptDraft: draft({ language: "Spanish" }) }),
   ]) {
     let calls = 0;
     const result = await runtime.generateScriptCritique(invalid, async () => { calls += 1; return response(pass()); });

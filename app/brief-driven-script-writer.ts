@@ -153,12 +153,13 @@ export const BRIEF_DRIVEN_WRITER_SYSTEM_PROMPT = [
   "Use CANONICAL PRODUCT TRUTH as the only factual authority. Never invent facts, effects, parameters, prices, offers, certifications, comparisons, or guarantees.",
   "Return exactly one ScriptDraftV2 JSON object. Do not return Markdown, identity fields, creativeAngle, product truth fields, camera/lens/lighting settings, or image/video prompts.",
   "The first scene must be purpose=hook and trace executesOpeningVisual=true. When evidence is required, include an evidence scene with executesEvidence=true. Include a CTA scene with executesCTA=true.",
+  "Write consumer-facing copy (hook line, dialogue, narration, and CTA) in the requested language. Internal visual and action instructions may use the workspace language. Set ScriptDraftV2.language to the requested language or a standard equivalent language name/code.",
 ].join(" ");
 
 export function buildBriefDrivenWriterMessages(input: ScriptWriterInput, repairIssues: ScriptWriterValidationIssue[] = []) {
   const repair = repairIssues.length ? {
     mode: "repair",
-    instruction: "Return one corrected ScriptDraftV2. Fix only the listed output-contract or claim-safety issues. Keep the same locked Brief; do not select a new strategy.",
+    instruction: "Return one corrected ScriptDraftV2. Fix only the listed output-contract, language, or claim-safety issues. For language_mismatch, preserve the Brief, scenes, meaning, evidence strategy, and CTA direction; correct the language metadata and re-express only consumer-facing hook, dialogue, narration, and CTA in the requested language. Internal visual/action instructions do not require translation. Keep the same locked Brief; do not select a new strategy.",
     issues: repairIssues.map(({ code, path, stage }) => ({ code, ...(path ? { path } : {}), stage })),
   } : undefined;
   return [

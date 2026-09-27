@@ -46,7 +46,7 @@ function input(overrides = {}) {
     productContextFingerprint: selection.productContextFingerprint(productContext),
     platform: "TikTok",
     market: "Spain",
-    language: "Spanish",
+    language: "English",
     preferences: { durationSeconds: 20, creatorStyle: "UGC", spokenDensity: "balanced", toneSteering: "natural", variantCount: 1 },
     ...overrides,
   };
@@ -65,7 +65,7 @@ function draft(overrides = {}) {
     ],
     fullNarration: "What changes when the viewpoint moves? This is the everyday situation I wanted to check. The alignment applicator helps with placement. Here is the same use from the second viewpoint. Check which option matches your product.",
     cta: "Check which option matches your product.",
-    language: "Spanish",
+    language: "English",
     totalDurationHint: 20,
     ...overrides,
   };
@@ -152,7 +152,7 @@ test("missing trace, invalid purpose and language mismatch share one constrained
   for (const broken of [
     (() => { const value = draft(); delete value.scenes[0].briefTrace; return value; })(),
     (() => { const value = draft(); value.scenes[1].purpose = "director"; return value; })(),
-    draft({ language: "English" }),
+    draft({ language: "Spanish" }),
   ]) {
     let calls = 0;
     const result = await runtime.generateBriefDrivenScript(input(), async () => { calls += 1; return response(calls === 1 ? broken : draft()); });
@@ -160,6 +160,27 @@ test("missing trace, invalid purpose and language mismatch share one constrained
     assert.equal(result.metadata.repairAttempted, true);
     assert.equal(calls, 2);
   }
+});
+
+test("wrong consumer language receives one constrained repair and remains explicit when repair is still wrong", async () => {
+  const wrongLanguage = draft({ language: "Spanish" });
+  const requests = [];
+  const repaired = await runtime.generateBriefDrivenScript(input(), async (request) => {
+    requests.push(request);
+    return response(requests.length === 1 ? wrongLanguage : draft());
+  });
+  assert.equal(repaired.status, "success");
+  assert.equal(requests.length, 2);
+  const repair = JSON.parse(requests[1].messages[1].content).repair;
+  assert.ok(repair.issues.some((item) => item.code === "language_mismatch" && item.path === "language"));
+  assert.match(repair.instruction, /consumer-facing hook, dialogue, narration, and CTA/);
+
+  let calls = 0;
+  const failed = await runtime.generateBriefDrivenScript(input(), async () => { calls += 1; return response(wrongLanguage); });
+  assert.equal(calls, 2);
+  assert.equal(failed.status, "failure");
+  assert.equal(failed.metadata.errorType, "repair_failed");
+  assert.ok(failed.issues.some((item) => item.code === "language_mismatch"));
 });
 
 test("claim-safety failures receive at most one constrained repair", async () => {

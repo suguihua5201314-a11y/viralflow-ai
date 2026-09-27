@@ -75,7 +75,7 @@ function input(overrides = {}) {
     productContextFingerprint: fingerprint,
     platform: "TikTok",
     market: "Spain",
-    language: "Spanish",
+    language: "English",
     preferences: { durationSeconds: 20, creatorStyle: "UGC", spokenDensity: "balanced", toneSteering: "natural", variantCount: 1 },
     ...overrides,
   };
@@ -94,7 +94,7 @@ function draft(overrides = {}) {
     ],
     fullNarration: "What changes when the phone turns? This is the everyday angle from the next seat. This screen protector is designed around a 28° viewing angle. Compare the visible screen as the viewing angle changes. Check which model matches your phone.",
     cta: "Check which model matches your phone.",
-    language: "Spanish",
+    language: "English",
     totalDurationHint: 20,
     ...overrides,
   };
@@ -162,9 +162,48 @@ test("structural fidelity requires hook first, opening trace, evidence trace, CT
   delete value.scenes[0].briefTrace;
   delete value.scenes[3].briefTrace;
   delete value.scenes[4].briefTrace;
-  value.language = "English";
+  value.language = "Spanish";
   const codes = issueCodes(api.validateScriptDraftDeterministically(input(), value));
   for (const code of ["first_scene_must_be_hook", "opening_visual_trace_missing", "evidence_trace_missing", "cta_trace_missing", "language_mismatch"]) assert.ok(codes.includes(code), code);
+});
+
+test("language fidelity normalizes aliases and checks consumer copy without scanning production instructions", () => {
+  const spanish = draft({
+    title: "La vista desde el asiento de al lado",
+    hook: { line: "¿Qué cambia cuando giras el teléfono?", openingVisualExecution: "内部开场执行说明" },
+    scenes: draft().scenes.map((scene, index) => ({
+      ...scene,
+      visual: `内部中文画面说明 ${index}`,
+      action: `内部中文动作说明 ${index}`,
+      dialogue: [
+        "¿Qué cambia cuando giras el teléfono?",
+        "Así se ve desde el asiento de al lado.",
+        "CrystalArmor mantiene el ángulo de visión indicado.",
+        "Compara la pantalla de frente y desde un lado.",
+        "Comprueba qué modelo corresponde a tu teléfono.",
+      ][index],
+    })),
+    fullNarration: "¿Qué cambia cuando giras el teléfono? Así se ve desde el asiento de al lado. Compara la pantalla de frente y desde un lado. Comprueba qué modelo corresponde a tu teléfono.",
+    cta: "Comprueba qué modelo corresponde a tu teléfono.",
+    language: "es-ES",
+  });
+  for (const alias of ["Spanish", "Español", "es", "es-ES", "西班牙语"]) {
+    assert.equal(api.validateScriptDraftDeterministically(input({ language: "Spanish" }), { ...spanish, language: alias }).some((item) => item.code === "language_mismatch"), false, alias);
+  }
+});
+
+test("language fidelity rejects English consumer copy for Spanish while allowing product names and borrowed words", () => {
+  const english = draft({ language: "Spanish" });
+  assert.ok(api.validateScriptDraftDeterministically(input({ language: "Spanish" }), english).some((item) => item.code === "language_mismatch"));
+  const spanishWithBrand = draft({
+    title: "CrystalArmor en el tren",
+    hook: { line: "¿Qué cambia con CrystalArmor cuando giras el teléfono?", openingVisualExecution: "Show the opening" },
+    scenes: draft().scenes.map((scene, index) => ({ ...scene, dialogue: ["¿Qué cambia al girarlo?", "Así se ve desde el asiento.", "CrystalArmor acompaña tu smartphone.", "Compara el ángulo en un clip continuo.", "Comprueba tu modelo online."][index] })),
+    fullNarration: "¿Qué cambia con CrystalArmor cuando giras el teléfono? Así se ve desde el asiento. Compara el ángulo en un clip continuo y comprueba tu modelo online.",
+    cta: "Comprueba tu modelo online.",
+    language: "Español",
+  });
+  assert.equal(api.validateScriptDraftDeterministically(input({ language: "Spanish" }), spanishWithBrand).some((item) => item.code === "language_mismatch"), false);
 });
 
 test("semantic fidelity is intentionally deferred instead of approximated with string heuristics", () => {

@@ -5,6 +5,7 @@ import { checkCompliance } from "./compliance-rules";
 import { buildKnowledgeContext, findFactViolations } from "./knowledge-context";
 import type { StructuredScript } from "./script-generation";
 import { bindScriptToCreativeBrief, ensureScriptRevision } from "./script-foundation";
+import { normalizeLanguageIdentity, validateScriptLanguage } from "./language-guard";
 
 export type ScriptWriterInput = {
   projectId: string;
@@ -293,7 +294,20 @@ export function validateScriptDraftDeterministically(input: ScriptWriterInput, d
   if (!draft.scenes[0]?.briefTrace?.executesOpeningVisual) issues.push(issue("opening_visual_trace_missing", "structural_fidelity", validator, "scenes.0.briefTrace.executesOpeningVisual"));
   if (input.creativeBrief.evidence.type !== "none-required" && !draft.scenes.some((scene) => scene.purpose === "evidence" && scene.briefTrace?.executesEvidence === true)) issues.push(issue("evidence_trace_missing", "structural_fidelity", validator, "scenes"));
   if (!draft.scenes.some((scene) => scene.purpose === "cta" && scene.briefTrace?.executesCTA === true)) issues.push(issue("cta_trace_missing", "structural_fidelity", validator, "scenes"));
-  if (normalized(draft.language) !== normalized(input.language)) issues.push(issue("language_mismatch", "structural_fidelity", validator, "language"));
+  if (normalizeLanguageIdentity(draft.language) !== normalizeLanguageIdentity(input.language)) issues.push(issue("language_mismatch", "structural_fidelity", validator, "language"));
+  const consumerLanguage = validateScriptLanguage({
+    title: draft.title,
+    hook: draft.hook.line,
+    narration: draft.fullNarration,
+    cta: draft.cta,
+    scenes: draft.scenes.map((scene) => ({ line: scene.dialogue })),
+  }, input.language);
+  if (!consumerLanguage.passed) {
+    for (const path of consumerLanguage.offendingFields) {
+      const draftPath = path.startsWith("scenes.") ? path.replace(/\.line$/, ".dialogue") : path === "hook" ? "hook.line" : path === "narration" ? "fullNarration" : path;
+      issues.push(issue("language_mismatch", "structural_fidelity", validator, draftPath));
+    }
+  }
 
   const knowledge = buildKnowledgeContext({
     product: input.productContext.productName,

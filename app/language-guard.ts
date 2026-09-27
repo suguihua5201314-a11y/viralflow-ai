@@ -7,13 +7,15 @@ export type ScriptLanguageInput={
 export type LanguageGuardResult={passed:boolean;targetLanguage:string;offendingFields:string[];reasons:string[]};
 
 const languageAliases:Record<string,string>={
+ "中文":"chinese","汉语":"chinese","漢語":"chinese",chinese:"chinese",mandarin:"chinese",zh:"chinese",
  "西班牙语":"spanish",spanish:"spanish",español:"spanish",espanol:"spanish",
- "英语":"english",english:"english",
- "意大利语":"italian",italian:"italian",italiano:"italian",
- "法语":"french",french:"french",français:"french",francais:"french",
- "德语":"german",german:"german",deutsch:"german",
- "葡萄牙语":"portuguese",portuguese:"portuguese",português:"portuguese",portugues:"portuguese",
+ "英语":"english",english:"english",en:"english",
+ "意大利语":"italian",italian:"italian",italiano:"italian",it:"italian",
+ "法语":"french",french:"french",français:"french",francais:"french",fr:"french",
+ "德语":"german",german:"german",deutsch:"german",de:"german",
+ "葡萄牙语":"portuguese",portuguese:"portuguese",português:"portuguese",portugues:"portuguese",pt:"portuguese",
 };
+const languageCodes:Record<string,string>={es:"spanish",en:"english",it:"italian",fr:"french",de:"german",pt:"portuguese",zh:"chinese"};
 const latinTargets=new Set(["spanish","english","italian","french","german","portuguese"]);
 const markers:Record<string,Set<string>>={
  spanish:new Set("el la los las un una que por para con sin este esta como pero si porque muy más ya te lo se del al".split(" ")),
@@ -24,7 +26,10 @@ const markers:Record<string,Set<string>>={
  portuguese:new Set("o a os as um uma que por para com sem este esta como mas se porque muito mais já você é são".split(" ")),
 };
 
-function normalizeTarget(value:string){return languageAliases[value.trim().toLowerCase()]||value.trim().toLowerCase()||"unknown";}
+export function normalizeLanguageIdentity(value:string){
+ const normalized=value.trim().normalize("NFKC").toLowerCase().replace(/_/g,"-");
+ return languageAliases[normalized]||languageCodes[normalized.split("-")[0]]||normalized||"unknown";
+}
 function userFacingFields(script:ScriptLanguageInput){
  const values:Array<[string,string|undefined]>=[
   ["title",script.title],["hook",script.hook],["narration",script.narration],["conflict",script.conflict],
@@ -41,7 +46,7 @@ function markerCount(text:string,language:string){
 }
 
 export function validateScriptLanguage(script:ScriptLanguageInput,requestedLanguage:string):LanguageGuardResult{
- const targetLanguage=normalizeTarget(requestedLanguage),fields=userFacingFields(script),offending=new Set<string>(),reasons:string[]=[];
+ const targetLanguage=normalizeLanguageIdentity(requestedLanguage),fields=userFacingFields(script),offending=new Set<string>(),reasons:string[]=[];
  if(!latinTargets.has(targetLanguage))return{passed:true,targetLanguage,offendingFields:[],reasons:[]};
  for(const [name,value] of fields)if((value.match(/\p{Script=Han}/gu)||[]).length>=2)offending.add(name);
  if(offending.size)reasons.push("latin_output_contains_han_script");
