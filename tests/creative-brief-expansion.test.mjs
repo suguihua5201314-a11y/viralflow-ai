@@ -94,8 +94,54 @@ test("product fingerprint mismatch and malformed expansion are rejected before p
 });
 
 test("unsupported measured claims are rejected while ordinary execution timing remains usable", () => {
-  assert.deepEqual(api.validateCreativeBriefExpansion({ ...expansion, evidenceStrategy: { ...expansion.evidenceStrategy, objective: "show a 99% improvement" } }, input), [{ code: "unsupported_numeric_claim", stage: "numeric", validator: "validateCreativeBriefExpansion" }]);
+  assert.deepEqual(api.validateCreativeBriefExpansion({ ...expansion, evidenceStrategy: { ...expansion.evidenceStrategy, objective: "show a 99% improvement" } }, input), [{ code: "unsupported_numeric_claim", path: "evidenceStrategy.objective", stage: "numeric", validator: "validateCreativeBriefExpansion" }]);
   assert.deepEqual(api.validateCreativeBriefExpansion({ ...expansion, evidenceStrategy: { ...expansion.evidenceStrategy, objective: "show the opening in the first 3 seconds" } }, input), []);
+});
+
+test("affirmative validation excludes safety metadata while preserving consumer-facing guards", () => {
+  const safetyMetadata = {
+    ...expansion,
+    evidenceStrategy: { ...expansion.evidenceStrategy, limitations: ["Do not say 100% unbreakable"] },
+    riskBoundaries: {
+      prohibitedClaims: ["100% unbreakable"],
+      requiredQualifiers: ["Do not promise a 99% result"],
+      safetyConstraints: ["Do not claim guaranteed results"],
+    },
+  };
+  assert.deepEqual(api.collectCreativeAssertionSurface(safetyMetadata).map(item => item.path), [
+    "evidenceStrategy.objective",
+    "evidenceStrategy.visualEvidence.0",
+    "ctaDirection",
+  ]);
+  assert.deepEqual(api.validateCreativeBriefExpansion(safetyMetadata, input), []);
+
+  const evidenceClaim = api.validateCreativeBriefExpansion({
+    ...safetyMetadata,
+    evidenceStrategy: { ...safetyMetadata.evidenceStrategy, objective: "Show 100% unbreakable protection" },
+  }, input);
+  assert.ok(evidenceClaim.some(item => item.code === "forbidden_claim" && item.path === "evidenceStrategy.objective"));
+  assert.ok(evidenceClaim.some(item => item.code === "high_risk_compliance" && item.path === "evidenceStrategy.objective"));
+
+  const ctaClaim = api.validateCreativeBriefExpansion({ ...safetyMetadata, ctaDirection: "Choose guaranteed 100% unbreakable protection" }, input);
+  assert.ok(ctaClaim.some(item => item.code === "high_risk_compliance" && item.path === "ctaDirection"));
+
+  const numericSafety = api.validateCreativeBriefExpansion({ ...safetyMetadata, riskBoundaries: { ...safetyMetadata.riskBoundaries, prohibitedClaims: ["Do not claim 99% effectiveness"] } }, input);
+  assert.equal(numericSafety.some(item => item.code === "unsupported_numeric_claim"), false);
+  const numericEvidence = api.validateCreativeBriefExpansion({ ...safetyMetadata, evidenceStrategy: { ...safetyMetadata.evidenceStrategy, objective: "Show 99% effectiveness" } }, input);
+  assert.ok(numericEvidence.some(item => item.code === "unsupported_numeric_claim" && item.path === "evidenceStrategy.objective"));
+});
+
+test("safety metadata remains schema-bounded and duplicate-normalized", () => {
+  const parsed = api.parseCreativeBriefExpansion(JSON.stringify({ expansion: {
+    ...expansion,
+    evidenceStrategy: { ...expansion.evidenceStrategy, limitations: ["avoid absolute claims", "avoid absolute claims"] },
+    riskBoundaries: { ...expansion.riskBoundaries, prohibitedClaims: ["unbreakable", "unbreakable"] },
+  } }));
+  assert.deepEqual(parsed.issues, []);
+  assert.deepEqual(parsed.value.evidenceStrategy.limitations, ["avoid absolute claims"]);
+  assert.deepEqual(parsed.value.riskBoundaries.prohibitedClaims, ["unbreakable"]);
+  const tooLong = api.parseCreativeBriefExpansion(JSON.stringify({ expansion: { ...expansion, riskBoundaries: { ...expansion.riskBoundaries, safetyConstraints: ["x".repeat(501)] } } }));
+  assert.deepEqual(tooLong.issues, [{ code: "text_too_long", path: "riskBoundaries.safetyConstraints", stage: "expansion_schema", validator: "parseCreativeBriefExpansion" }]);
 });
 
 test("parser reports safe exact schema paths without generated values", () => {

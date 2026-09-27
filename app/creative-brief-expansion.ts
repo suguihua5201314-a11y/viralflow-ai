@@ -83,6 +83,8 @@ const evidenceTypes = new Set<EvidenceStrategyType>([
 ]);
 const text = (value: unknown): value is string => typeof value === "string" && Boolean(value.trim());
 const strings = (value: unknown): value is string[] => Array.isArray(value) && value.every(text);
+const MAX_SAFETY_ITEMS = 12;
+const MAX_SAFETY_TEXT_LENGTH = 500;
 
 const issue = (
   code: string,
@@ -107,6 +109,12 @@ export function parseCreativeBriefExpansion(content: string): CreativeBriefExpan
     if (field === undefined) issues.push(issue("missing_field", "expansion_schema", "parseCreativeBriefExpansion", path));
     else if (!strings(field)) issues.push(issue("invalid_type", "expansion_schema", "parseCreativeBriefExpansion", path));
   };
+  const safetyStrings = (path: string, field: unknown) => {
+    requiredStrings(path, field);
+    if (!strings(field)) return;
+    if (field.length > MAX_SAFETY_ITEMS) issues.push(issue("too_many_items", "expansion_schema", "parseCreativeBriefExpansion", path));
+    if (field.some((item) => item.trim().length > MAX_SAFETY_TEXT_LENGTH)) issues.push(issue("text_too_long", "expansion_schema", "parseCreativeBriefExpansion", path));
+  };
   const optionalString = (path: string, field: unknown) => {
     if (field !== undefined && !text(field)) issues.push(issue("invalid_type", "expansion_schema", "parseCreativeBriefExpansion", path));
   };
@@ -120,23 +128,28 @@ export function parseCreativeBriefExpansion(content: string): CreativeBriefExpan
     else if (!evidenceTypes.has(evidence.type as EvidenceStrategyType)) issues.push(issue("invalid_enum", "expansion_schema", "parseCreativeBriefExpansion", "evidenceStrategy.type"));
     requiredText("evidenceStrategy.objective", evidence.objective);
     requiredStrings("evidenceStrategy.visualEvidence", evidence.visualEvidence);
-    requiredStrings("evidenceStrategy.limitations", evidence.limitations);
+    safetyStrings("evidenceStrategy.limitations", evidence.limitations);
   }
   requiredText("ctaDirection", candidate.ctaDirection);
   if (candidate.riskBoundaries === undefined) issues.push(issue("missing_field", "expansion_schema", "parseCreativeBriefExpansion", "riskBoundaries"));
   else if (!candidate.riskBoundaries || typeof candidate.riskBoundaries !== "object" || Array.isArray(candidate.riskBoundaries)) issues.push(issue("invalid_type", "expansion_schema", "parseCreativeBriefExpansion", "riskBoundaries"));
   else {
     const risk = candidate.riskBoundaries as Record<string, unknown>;
-    requiredStrings("riskBoundaries.prohibitedClaims", risk.prohibitedClaims);
-    requiredStrings("riskBoundaries.requiredQualifiers", risk.requiredQualifiers);
-    requiredStrings("riskBoundaries.safetyConstraints", risk.safetyConstraints);
+    safetyStrings("riskBoundaries.prohibitedClaims", risk.prohibitedClaims);
+    safetyStrings("riskBoundaries.requiredQualifiers", risk.requiredQualifiers);
+    safetyStrings("riskBoundaries.safetyConstraints", risk.safetyConstraints);
   }
   optionalString("creatorPersona", candidate.creatorPersona);
   optionalString("contentFormat", candidate.contentFormat);
   optionalString("spokenTone", candidate.spokenTone);
-  return issues.length > 0
-    ? { value: null, issues }
-    : { value: structuredClone(candidate as CreativeBriefExecutionExpansion), issues: [] };
+  if (issues.length > 0) return { value: null, issues };
+  const normalized = structuredClone(candidate as CreativeBriefExecutionExpansion);
+  const normalizeSafety = (items: string[]) => [...new Set(items.map((item) => item.trim()))];
+  normalized.evidenceStrategy.limitations = normalizeSafety(normalized.evidenceStrategy.limitations);
+  normalized.riskBoundaries.prohibitedClaims = normalizeSafety(normalized.riskBoundaries.prohibitedClaims);
+  normalized.riskBoundaries.requiredQualifiers = normalizeSafety(normalized.riskBoundaries.requiredQualifiers);
+  normalized.riskBoundaries.safetyConstraints = normalizeSafety(normalized.riskBoundaries.safetyConstraints);
+  return { value: normalized, issues: [] };
 }
 
 function stableValue(value: unknown): unknown {
@@ -159,16 +172,25 @@ function sourceReferences(source: CreativeBrainSourceContext | undefined, recent
 }
 
 export function validateCreativeBriefExpansion(expansion: CreativeBriefExecutionExpansion, input: CreativeBriefExpansionInput) {
-  const serialized = JSON.stringify(expansion);
   const issues: CreativeBriefValidationIssue[] = [];
   const banned = split(input.productContext.productKnowledge?.bannedWords);
-  for (const term of banned) if (serialized.toLowerCase().includes(term.toLowerCase())) issues.push(issue("forbidden_claim", "truth", "validateCreativeBriefExpansion"));
-  for (const hit of checkCompliance(serialized)) if (hit.level === "高") issues.push(issue("high_risk_compliance", "compliance", "validateCreativeBriefExpansion"));
   const factText = JSON.stringify(input.productContext).toLowerCase().replace(/\s/g, "");
-  for (const claim of serialized.match(/\d+(?:[.,]\d+)?\s*(?:%|°|mm\b|cm\b|mah\b|w\b)/gi) || []) {
-    if (!factText.includes(claim.toLowerCase().replace(/\s/g, ""))) issues.push(issue("unsupported_numeric_claim", "numeric", "validateCreativeBriefExpansion"));
+  for (const assertion of collectCreativeAssertionSurface(expansion)) {
+    for (const term of banned) if (assertion.text.toLowerCase().includes(term.toLowerCase())) issues.push(issue("forbidden_claim", "truth", "validateCreativeBriefExpansion", assertion.path));
+    for (const hit of checkCompliance(assertion.text)) if (hit.level === "高") issues.push(issue("high_risk_compliance", "compliance", "validateCreativeBriefExpansion", assertion.path));
+    for (const claim of assertion.text.match(/\d+(?:[.,]\d+)?\s*(?:%|°|mm\b|cm\b|mah\b|w\b)/gi) || []) {
+      if (!factText.includes(claim.toLowerCase().replace(/\s/g, ""))) issues.push(issue("unsupported_numeric_claim", "numeric", "validateCreativeBriefExpansion", assertion.path));
+    }
   }
   return issues.filter((item, index, all) => index === all.findIndex((candidate) => candidate.code === item.code && candidate.stage === item.stage && candidate.path === item.path));
+}
+
+export function collectCreativeAssertionSurface(expansion: CreativeBriefExecutionExpansion) {
+  return [
+    { path: "evidenceStrategy.objective", text: expansion.evidenceStrategy.objective },
+    ...expansion.evidenceStrategy.visualEvidence.map((text, index) => ({ path: `evidenceStrategy.visualEvidence.${index}`, text })),
+    { path: "ctaDirection", text: expansion.ctaDirection },
+  ];
 }
 
 export function buildCreativeBrief(input: CreativeBriefExpansionInput, expansion: CreativeBriefExecutionExpansion, now = new Date().toISOString()) {
