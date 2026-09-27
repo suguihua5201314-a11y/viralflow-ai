@@ -51,8 +51,24 @@ export type CreativeBriefExpansionResult = {
   status: "success" | "failure";
   brief: CreativeBriefV2 | null;
   metadata: CreativeBriefExpansionMetadata;
-  issues: string[];
+  issues: CreativeBriefValidationIssue[];
 };
+
+export type CreativeBriefValidationIssue = {
+  code: string;
+  path?: string;
+  stage: "json_parse" | "expansion_schema" | "truth" | "compliance" | "numeric";
+  validator: string;
+};
+
+export type CreativeBriefExpansionParseResult = {
+  value: CreativeBriefExecutionExpansion | null;
+  issues: CreativeBriefValidationIssue[];
+};
+
+export function validationIssuesForEnvironment(issues: CreativeBriefValidationIssue[], environment?: string) {
+  return environment === "preview" ? issues : [];
+}
 
 export type CreativeBriefRequestIdentity = {
   requestId: string;
@@ -66,24 +82,61 @@ const evidenceTypes = new Set<EvidenceStrategyType>([
   "reaction", "routine-context", "comparison", "education", "testimonial", "none-required",
 ]);
 const text = (value: unknown): value is string => typeof value === "string" && Boolean(value.trim());
-const optionalText = (value: unknown) => value === undefined || text(value);
 const strings = (value: unknown): value is string[] => Array.isArray(value) && value.every(text);
 
-export function parseCreativeBriefExpansion(content: string): CreativeBriefExecutionExpansion | null {
+const issue = (
+  code: string,
+  stage: CreativeBriefValidationIssue["stage"],
+  validator: string,
+  path?: string,
+): CreativeBriefValidationIssue => ({ code, ...(path ? { path } : {}), stage, validator });
+
+export function parseCreativeBriefExpansion(content: string): CreativeBriefExpansionParseResult {
   let value: unknown;
   try { value = JSON.parse(content.trim().replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/i, "")); }
-  catch { return null; }
-  const item = (value as { expansion?: unknown })?.expansion ?? value;
-  if (!item || typeof item !== "object") return null;
-  const candidate = item as Partial<CreativeBriefExecutionExpansion>;
-  const evidence = candidate.evidenceStrategy;
-  const risk = candidate.riskBoundaries;
-  if (!text(candidate.hookMechanism) || !evidence || !evidenceTypes.has(evidence.type)
-    || !text(evidence.objective) || !strings(evidence.visualEvidence) || !strings(evidence.limitations)
-    || !text(candidate.ctaDirection) || !risk || !strings(risk.prohibitedClaims)
-    || !strings(risk.requiredQualifiers) || !strings(risk.safetyConstraints)
-    || !optionalText(candidate.creatorPersona) || !optionalText(candidate.contentFormat) || !optionalText(candidate.spokenTone)) return null;
-  return structuredClone(candidate as CreativeBriefExecutionExpansion);
+  catch { return { value: null, issues: [issue("invalid_json", "json_parse", "parseCreativeBriefExpansion")] }; }
+  const item = value && typeof value === "object" && "expansion" in value ? (value as { expansion?: unknown }).expansion : value;
+  if (!item || typeof item !== "object" || Array.isArray(item)) return { value: null, issues: [issue("invalid_top_level", "expansion_schema", "parseCreativeBriefExpansion")] };
+  const candidate = item as Record<string, unknown>;
+  const issues: CreativeBriefValidationIssue[] = [];
+  const requiredText = (path: string, field: unknown) => {
+    if (field === undefined) issues.push(issue("missing_field", "expansion_schema", "parseCreativeBriefExpansion", path));
+    else if (!text(field)) issues.push(issue("invalid_type", "expansion_schema", "parseCreativeBriefExpansion", path));
+  };
+  const requiredStrings = (path: string, field: unknown) => {
+    if (field === undefined) issues.push(issue("missing_field", "expansion_schema", "parseCreativeBriefExpansion", path));
+    else if (!strings(field)) issues.push(issue("invalid_type", "expansion_schema", "parseCreativeBriefExpansion", path));
+  };
+  const optionalString = (path: string, field: unknown) => {
+    if (field !== undefined && !text(field)) issues.push(issue("invalid_type", "expansion_schema", "parseCreativeBriefExpansion", path));
+  };
+  requiredText("hookMechanism", candidate.hookMechanism);
+  if (candidate.evidenceStrategy === undefined) issues.push(issue("missing_field", "expansion_schema", "parseCreativeBriefExpansion", "evidenceStrategy"));
+  else if (!candidate.evidenceStrategy || typeof candidate.evidenceStrategy !== "object" || Array.isArray(candidate.evidenceStrategy)) issues.push(issue("invalid_type", "expansion_schema", "parseCreativeBriefExpansion", "evidenceStrategy"));
+  else {
+    const evidence = candidate.evidenceStrategy as Record<string, unknown>;
+    if (evidence.type === undefined) issues.push(issue("missing_field", "expansion_schema", "parseCreativeBriefExpansion", "evidenceStrategy.type"));
+    else if (typeof evidence.type !== "string") issues.push(issue("invalid_type", "expansion_schema", "parseCreativeBriefExpansion", "evidenceStrategy.type"));
+    else if (!evidenceTypes.has(evidence.type as EvidenceStrategyType)) issues.push(issue("invalid_enum", "expansion_schema", "parseCreativeBriefExpansion", "evidenceStrategy.type"));
+    requiredText("evidenceStrategy.objective", evidence.objective);
+    requiredStrings("evidenceStrategy.visualEvidence", evidence.visualEvidence);
+    requiredStrings("evidenceStrategy.limitations", evidence.limitations);
+  }
+  requiredText("ctaDirection", candidate.ctaDirection);
+  if (candidate.riskBoundaries === undefined) issues.push(issue("missing_field", "expansion_schema", "parseCreativeBriefExpansion", "riskBoundaries"));
+  else if (!candidate.riskBoundaries || typeof candidate.riskBoundaries !== "object" || Array.isArray(candidate.riskBoundaries)) issues.push(issue("invalid_type", "expansion_schema", "parseCreativeBriefExpansion", "riskBoundaries"));
+  else {
+    const risk = candidate.riskBoundaries as Record<string, unknown>;
+    requiredStrings("riskBoundaries.prohibitedClaims", risk.prohibitedClaims);
+    requiredStrings("riskBoundaries.requiredQualifiers", risk.requiredQualifiers);
+    requiredStrings("riskBoundaries.safetyConstraints", risk.safetyConstraints);
+  }
+  optionalString("creatorPersona", candidate.creatorPersona);
+  optionalString("contentFormat", candidate.contentFormat);
+  optionalString("spokenTone", candidate.spokenTone);
+  return issues.length > 0
+    ? { value: null, issues }
+    : { value: structuredClone(candidate as CreativeBriefExecutionExpansion), issues: [] };
 }
 
 function stableValue(value: unknown): unknown {
@@ -107,15 +160,15 @@ function sourceReferences(source: CreativeBrainSourceContext | undefined, recent
 
 export function validateCreativeBriefExpansion(expansion: CreativeBriefExecutionExpansion, input: CreativeBriefExpansionInput) {
   const serialized = JSON.stringify(expansion);
-  const issues: string[] = [];
+  const issues: CreativeBriefValidationIssue[] = [];
   const banned = split(input.productContext.productKnowledge?.bannedWords);
-  for (const term of banned) if (serialized.toLowerCase().includes(term.toLowerCase())) issues.push(`Forbidden claim: ${term}`);
-  for (const hit of checkCompliance(serialized)) if (hit.level === "高") issues.push(`Compliance: ${hit.term}`);
+  for (const term of banned) if (serialized.toLowerCase().includes(term.toLowerCase())) issues.push(issue("forbidden_claim", "truth", "validateCreativeBriefExpansion"));
+  for (const hit of checkCompliance(serialized)) if (hit.level === "高") issues.push(issue("high_risk_compliance", "compliance", "validateCreativeBriefExpansion"));
   const factText = JSON.stringify(input.productContext).toLowerCase().replace(/\s/g, "");
   for (const claim of serialized.match(/\d+(?:[.,]\d+)?\s*(?:%|°|mm\b|cm\b|mah\b|w\b)/gi) || []) {
-    if (!factText.includes(claim.toLowerCase().replace(/\s/g, ""))) issues.push(`Unsupported numeric claim: ${claim}`);
+    if (!factText.includes(claim.toLowerCase().replace(/\s/g, ""))) issues.push(issue("unsupported_numeric_claim", "numeric", "validateCreativeBriefExpansion"));
   }
-  return [...new Set(issues)];
+  return issues.filter((item, index, all) => index === all.findIndex((candidate) => candidate.code === item.code && candidate.stage === item.stage && candidate.path === item.path));
 }
 
 export function buildCreativeBrief(input: CreativeBriefExpansionInput, expansion: CreativeBriefExecutionExpansion, now = new Date().toISOString()) {
@@ -140,7 +193,7 @@ export function buildCreativeBrief(input: CreativeBriefExpansionInput, expansion
   });
 }
 
-function renderPrompt(input: CreativeBriefExpansionInput, repairIssues: string[] = []) {
+function renderPrompt(input: CreativeBriefExpansionInput, repairIssues: CreativeBriefValidationIssue[] = []) {
   const compliance = getGenerationComplianceKnowledge();
   return [
     { role: "system" as const, content: "Expand the selected creative direction into execution strategy. Do not replace or rewrite its audience, use moment, motivation, tension, angle, content mechanism, hook line, or opening visual. Return JSON only. Never invent product facts, prices, offers, certifications, measurements, or effects." },
@@ -148,22 +201,32 @@ function renderPrompt(input: CreativeBriefExpansionInput, repairIssues: string[]
   ];
 }
 
-export async function generateCreativeBrief(input: CreativeBriefExpansionInput, provider: CreativeBrainProvider): Promise<CreativeBriefExpansionResult> {
+export async function generateCreativeBrief(
+  input: CreativeBriefExpansionInput,
+  provider: CreativeBrainProvider,
+  observeValidation?: (event: { attempt: number; issues: CreativeBriefValidationIssue[] }) => void,
+): Promise<CreativeBriefExpansionResult> {
   const metadata: CreativeBriefExpansionMetadata = { repairAttempted: false, fallbackUsed: false, errorType: null };
-  let issues: string[] = [];
+  let issues: CreativeBriefValidationIssue[] = [];
   for (let attempt = 0; attempt < 2; attempt++) {
     try {
       const response = await provider({ messages: renderPrompt(input, issues), temperature: 0.45, topP: 0.9, maxTokens: 1400, timeoutMs: 45_000 });
-      const expansion = parseCreativeBriefExpansion(response.content);
-      issues = expansion ? validateCreativeBriefExpansion(expansion, input) : ["Expansion output is not valid JSON or does not satisfy the schema"];
-      if (expansion && issues.length === 0) return { status: "success", brief: buildCreativeBrief(input, expansion), metadata, issues: [] };
+      const parsed = parseCreativeBriefExpansion(response.content);
+      issues = parsed.value ? validateCreativeBriefExpansion(parsed.value, input) : parsed.issues;
+      if (issues.length > 0) observeValidation?.({ attempt: attempt + 1, issues });
+      if (parsed.value && issues.length === 0) return { status: "success", brief: buildCreativeBrief(input, parsed.value), metadata, issues: [] };
       if (attempt === 0) { metadata.repairAttempted = true; continue; }
       metadata.errorType = "validation_failed";
       return { status: "failure", brief: null, metadata, issues };
     } catch (error) {
-      if (attempt === 0 && !isCreativeBrainTransportFailure(error)) { metadata.repairAttempted = true; issues = ["Provider output could not be expanded safely"]; continue; }
+      if (attempt === 0 && !isCreativeBrainTransportFailure(error)) {
+        metadata.repairAttempted = true;
+        issues = [issue("invalid_output", "expansion_schema", "generateCreativeBrief")];
+        observeValidation?.({ attempt: attempt + 1, issues });
+        continue;
+      }
       metadata.errorType = "provider_failure";
-      return { status: "failure", brief: null, metadata, issues: ["Creative Brief provider request failed"] };
+      return { status: "failure", brief: null, metadata, issues: [] };
     }
   }
   return { status: "failure", brief: null, metadata: { ...metadata, errorType: "invalid_output" }, issues };
@@ -187,6 +250,10 @@ export async function parseCreativeBriefApiResponse(response: Response): Promise
   if (!isJson) { await response.text().catch(() => ""); throw new Error("创意简报生成失败，请重试"); }
   let value: CreativeBriefExpansionResult & { error?: { message?: string } };
   try { value = await response.json(); } catch { throw new Error("创意简报生成失败，请重试"); }
-  if (!response.ok || value.status === "failure" || !value.brief) throw new Error(value.error?.message || "创意简报生成失败，请重试");
+  if (!response.ok || value.status === "failure" || !value.brief) {
+    const error = new Error(value.error?.message || "创意简报生成失败，请重试") as Error & { validationIssue?: CreativeBriefValidationIssue };
+    if (Array.isArray(value.issues) && value.issues[0]) error.validationIssue = value.issues[0];
+    throw error;
+  }
   return value;
 }

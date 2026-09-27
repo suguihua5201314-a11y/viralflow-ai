@@ -91,13 +91,24 @@ test("Brief request state preserves canonical direction identity across retry an
   sessions = state.beginCreativeBriefRequest(sessions, "project-a", canonicalId, "brief-1");
   const stale = state.completeCreativeBriefRequest(sessions, "project-a", canonicalId, "old-request");
   assert.equal(stale, sessions);
-  sessions = state.failCreativeBriefRequest(sessions, "project-a", canonicalId, "brief-1", "failed");
+  sessions = state.failCreativeBriefRequest(sessions, "project-a", canonicalId, "brief-1", "failed", "expansion_schema · invalid_enum · evidenceStrategy.type");
   assert.equal(sessions["project-a"].selectedOpportunityId, canonicalId);
+  assert.equal(sessions["project-a"].briefDiagnostic, "expansion_schema · invalid_enum · evidenceStrategy.type");
   sessions = state.beginCreativeBriefRequest(sessions, "project-a", canonicalId, "brief-2");
   assert.equal(sessions["project-a"].selectedOpportunityId, canonicalId);
+  assert.equal(sessions["project-a"].briefDiagnostic, undefined);
   sessions = state.completeCreativeBriefRequest(sessions, "project-a", canonicalId, "brief-2");
   assert.equal(sessions["project-a"].briefStatus, "ready");
   assert.equal(sessions["project-a"].selectedOpportunityId, canonicalId);
+});
+
+test("Preview-safe validation detail is wired below the existing Stage 2 error", async () => {
+  const component = await readFile(new URL("../app/components/script/creative-direction-workspace.tsx", import.meta.url), "utf8");
+  const page = await readFile(new URL("../app/page.tsx", import.meta.url), "utf8");
+  assert.match(component, /Validation: \{session\.briefDiagnostic\}/);
+  assert.match(page, /validationIssue\.stage/);
+  assert.match(page, /validationIssue\.code/);
+  assert.match(page, /validationIssue\.path/);
 });
 
 test("frontend safely normalizes platform text, HTML and invalid JSON responses", async () => {

@@ -499,7 +499,9 @@ export default function Home() {
       setCreativeDirectionSessions(current=>completeCreativeBriefRequest(current,projectId,selected.id,requestId));
     }catch(value){
       if(activeCreativeBriefRequests.current[projectId]?.requestId!==requestId)return;
-      setCreativeDirectionSessions(current=>failCreativeBriefRequest(current,projectId,selected.id,requestId,value instanceof Error?value.message:"创意简报生成失败，请重试"));
+      const validationIssue=(value as Error & {validationIssue?:{stage:string;code:string;path?:string}})?.validationIssue;
+      const diagnostic=validationIssue?[validationIssue.stage,validationIssue.code,validationIssue.path].filter(Boolean).join(" · "):undefined;
+      setCreativeDirectionSessions(current=>failCreativeBriefRequest(current,projectId,selected.id,requestId,value instanceof Error?value.message:"创意简报生成失败，请重试",diagnostic));
     }
   }
   function update(key: keyof typeof form, value: string) { if(key==="product")updateProjectMemory({}, {product:value}); setForm(prev => {const next={...prev,[key]:value};saveWorkspaceSnapshot({form:next});return next;}); }

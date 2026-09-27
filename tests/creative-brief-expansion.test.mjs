@@ -89,16 +89,58 @@ test("stale request, foreign Project and Product Context changes cannot persist"
 
 test("product fingerprint mismatch and malformed expansion are rejected before persistence", () => {
   assert.throws(() => api.buildCreativeBrief({ ...input, productContextFingerprint: "wrong" }, expansion), /fingerprint mismatch/);
-  assert.equal(api.parseCreativeBriefExpansion("not json"), null);
-  assert.equal(api.parseCreativeBriefExpansion(JSON.stringify({ expansion: { ...expansion, evidenceStrategy: { ...expansion.evidenceStrategy, type: "made-up" } } })), null);
+  assert.deepEqual(api.parseCreativeBriefExpansion("not json"), { value: null, issues: [{ code: "invalid_json", stage: "json_parse", validator: "parseCreativeBriefExpansion" }] });
+  assert.deepEqual(api.parseCreativeBriefExpansion(JSON.stringify({ expansion: { ...expansion, evidenceStrategy: { ...expansion.evidenceStrategy, type: "made-up" } } })).issues, [{ code: "invalid_enum", path: "evidenceStrategy.type", stage: "expansion_schema", validator: "parseCreativeBriefExpansion" }]);
 });
 
 test("unsupported measured claims are rejected while ordinary execution timing remains usable", () => {
-  assert.deepEqual(api.validateCreativeBriefExpansion({ ...expansion, evidenceStrategy: { ...expansion.evidenceStrategy, objective: "show a 99% improvement" } }, input), ["Unsupported numeric claim: 99%"]);
+  assert.deepEqual(api.validateCreativeBriefExpansion({ ...expansion, evidenceStrategy: { ...expansion.evidenceStrategy, objective: "show a 99% improvement" } }, input), [{ code: "unsupported_numeric_claim", stage: "numeric", validator: "validateCreativeBriefExpansion" }]);
   assert.deepEqual(api.validateCreativeBriefExpansion({ ...expansion, evidenceStrategy: { ...expansion.evidenceStrategy, objective: "show the opening in the first 3 seconds" } }, input), []);
+});
+
+test("parser reports safe exact schema paths without generated values", () => {
+  const missing = api.parseCreativeBriefExpansion(JSON.stringify({ expansion: { ...expansion, ctaDirection: undefined } }));
+  assert.deepEqual(missing.issues, [{ code: "missing_field", path: "ctaDirection", stage: "expansion_schema", validator: "parseCreativeBriefExpansion" }]);
+  const invalidOptional = api.parseCreativeBriefExpansion(JSON.stringify({ expansion: { ...expansion, creatorPersona: null } }));
+  assert.deepEqual(invalidOptional.issues, [{ code: "invalid_type", path: "creatorPersona", stage: "expansion_schema", validator: "parseCreativeBriefExpansion" }]);
+  assert.doesNotMatch(JSON.stringify([...missing.issues, ...invalidOptional.issues]), /commuter|null/);
+});
+
+test("truth and compliance failures expose safe codes without matched content", () => {
+  const forbidden = api.validateCreativeBriefExpansion({ ...expansion, ctaDirection: "100% unbreakable" }, input);
+  assert.ok(forbidden.some(item => item.code === "forbidden_claim" && item.stage === "truth"));
+  assert.doesNotMatch(JSON.stringify(forbidden), /100% unbreakable/i);
+});
+
+test("repair receives safe structured issue codes and paths", async () => {
+  const requests = [];
+  const result = await api.generateCreativeBrief(input, async request => {
+    requests.push(request);
+    return requests.length === 1
+      ? response({ ...expansion, evidenceStrategy: { ...expansion.evidenceStrategy, type: "generated-invalid-value" } })
+      : response(expansion);
+  });
+  assert.equal(result.status, "success");
+  const repair = JSON.parse(requests[1].messages[1].content);
+  assert.deepEqual(repair.repairIssues, [{ code: "invalid_enum", path: "evidenceStrategy.type", stage: "expansion_schema", validator: "parseCreativeBriefExpansion" }]);
+  assert.doesNotMatch(JSON.stringify(repair.repairIssues), /generated-invalid-value/);
+});
+
+test("validation issues are exposed only to Preview clients", () => {
+  const issues = [{ code: "invalid_enum", path: "evidenceStrategy.type", stage: "expansion_schema", validator: "parseCreativeBriefExpansion" }];
+  assert.deepEqual(api.validationIssuesForEnvironment(issues, "preview"), issues);
+  assert.deepEqual(api.validationIssuesForEnvironment(issues, "production"), []);
+  assert.deepEqual(api.validationIssuesForEnvironment(issues, undefined), []);
 });
 
 test("Brief API response parsing gives Stage 2 specific safe failures", async () => {
   await assert.rejects(() => api.parseCreativeBriefApiResponse(new Response("gateway", { status: 502, headers: { "content-type": "text/plain" } })), /创意简报生成失败/);
   await assert.rejects(() => api.parseCreativeBriefApiResponse(new Response(JSON.stringify({ status: "failure", error: { message: "创意简报生成失败，请重试" } }), { status: 422, headers: { "content-type": "application/json" } })), /创意简报生成失败/);
+  await assert.rejects(
+    () => api.parseCreativeBriefApiResponse(new Response(
+      JSON.stringify({ status: "failure", brief: null, issues: [{ code: "invalid_enum", path: "evidenceStrategy.type", stage: "expansion_schema", validator: "parseCreativeBriefExpansion" }], error: { message: "创意简报生成失败，请重试" } }),
+      { status: 422, headers: { "content-type": "application/json" } },
+    )),
+    error => error.validationIssue?.code === "invalid_enum" && error.validationIssue?.path === "evidenceStrategy.type",
+  );
 });

@@ -1,6 +1,6 @@
 import { callProvider, DEFAULT_PROVIDER, getProviderStatuses, type ProviderResponse } from "../../provider-router";
 import type { ProviderId } from "../../provider-types";
-import { generateCreativeBrief, type CreativeBriefExpansionInput } from "../../creative-brief-expansion";
+import { generateCreativeBrief, validationIssuesForEnvironment, type CreativeBriefExpansionInput } from "../../creative-brief-expansion";
 import type { CreativeBrainProviderRequest, CreativeBrainProviderResponse } from "../../creative-brain";
 
 export const runtime = "nodejs";
@@ -13,6 +13,7 @@ function resolveProvider(requested: ProviderId) {
 }
 
 export async function POST(request: Request) {
+  const correlationId = crypto.randomUUID();
   try {
     const body = await request.json() as CreativeBriefExpansionInput & { provider?: ProviderId };
     if (!body.projectId?.trim() || !body.selectedDirection?.id || !body.productContext?.productName?.trim() || !body.productContextFingerprint?.trim()) return Response.json({ status: "failure", error: { type: "invalid_input", message: "Creative Brief input is incomplete" } }, { status: 400 });
@@ -24,8 +25,13 @@ export async function POST(request: Request) {
       const response: ProviderResponse = await callProvider({ provider: providerUsed, ...input, purpose: "creative-brief", candidateCount: 1 });
       return { ...response, providerRequested: requested, providerUsed, model: status.model };
     };
-    const result = await generateCreativeBrief(body, adapter);
-    if (result.status === "failure") return Response.json({ ...result, error: { type: result.metadata.errorType, message: "创意简报生成失败，请重试" } }, { status: result.metadata.errorType === "provider_failure" ? 502 : 422 });
+    const result = await generateCreativeBrief(body, adapter, ({ attempt, issues }) => {
+      console.warn(JSON.stringify({ event: "creative_brief_validation_failed", correlationId, attempt, issueCount: issues.length, issues }));
+    });
+    if (result.status === "failure") {
+      const safeResult = { ...result, issues: validationIssuesForEnvironment(result.issues, process.env.VERCEL_ENV) };
+      return Response.json({ ...safeResult, error: { type: result.metadata.errorType, message: "创意简报生成失败，请重试" } }, { status: result.metadata.errorType === "provider_failure" ? 502 : 422 });
+    }
     return Response.json(result, { status: 201 });
   } catch {
     return Response.json({ status: "failure", brief: null, error: { type: "runtime_failure", message: "创意简报生成失败，请重试" } }, { status: 500 });
