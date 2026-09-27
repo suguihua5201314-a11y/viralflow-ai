@@ -102,15 +102,38 @@ export type CriticIssueCode =
   | "feasibility"
   | "schema";
 
+export type BriefAwareCriticIssueCode =
+  | "brief_angle_drift"
+  | "hook_intent_drift"
+  | "opening_visual_mismatch"
+  | "evidence_strategy_drift"
+  | "cta_direction_drift"
+  | "ugc_advertising_tone"
+  | "ugc_unnatural_dialogue"
+  | "ugc_overwritten"
+  | "ugc_repetitive"
+  | "unsupported_causal_claim"
+  | "evidence_dialogue_mismatch"
+  | "unobservable_claim"
+  | "visual_action_mismatch"
+  | "weak_hook_execution"
+  | "hook_visual_disconnect"
+  | "scene_redundancy"
+  | "scene_filler"
+  | "scene_not_filmmable"
+  | "scene_pacing_issue"
+  | "cta_too_hard"
+  | "cta_unsupported_claim";
+
 export type CriticIssueTarget = {
-  scope: "hook" | "scene" | "cta" | "narration";
+  scope: "title" | "hook" | "scene" | "cta" | "narration";
   sceneId?: string;
   field?: string;
 };
 
 export type CriticIssue = {
-  code: CriticIssueCode;
-  severity: "low" | "medium" | "high";
+  code: CriticIssueCode | BriefAwareCriticIssueCode;
+  severity: "low" | "medium" | "high" | "minor" | "major" | "critical";
   target: CriticIssueTarget;
   message: string;
   rewriteInstruction: string;
