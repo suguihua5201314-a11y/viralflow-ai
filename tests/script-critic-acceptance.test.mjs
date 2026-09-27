@@ -8,7 +8,7 @@ const acceptance = await jiti.import("../app/script-critic-acceptance.ts");
 const route = await jiti.import("../app/api/script-critic/route.ts");
 
 const identity = (overrides = {}) => ({ requestId: "critic-request-a", projectId: "project-a", creativeBriefId: "brief-a", creativeBriefRevisionId: "brief-revision-a", productContextFingerprint: "fingerprint-a", writerRequestId: "writer-request-a", ...overrides });
-const issue = { code: "opening_visual_mismatch", severity: "major", target: { scope: "hook", field: "openingVisualExecution" }, message: "The visible opening does not execute the locked opening concept.", rewriteInstruction: "Correct only the opening execution.", deterministic: false, briefField: "openingVisual" };
+const issue = { code: "opening_visual_mismatch", severity: "major", target: { scope: "hook", field: "openingVisualExecution" }, message: "The visible opening does not execute the locked opening concept.", rewriteInstruction: "Correct only the opening execution.", deterministic: false, briefField: "opening.visual" };
 const critique = { verdict: "needs_rewrite", issues: [issue], summary: "One localized fidelity issue." };
 const metadata = { providerUsed: "deepseek", model: "safe-model", latencyMs: 1234, repairAttempted: false };
 

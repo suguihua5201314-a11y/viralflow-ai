@@ -131,6 +131,25 @@ export type CriticIssueTarget = {
   field?: string;
 };
 
+export const CRITIC_BRIEF_FIELD_VALUES = [
+  "opportunity.targetAudience",
+  "opportunity.useMoment",
+  "opportunity.purchaseMotivation",
+  "opportunity.tensionOrObjection",
+  "opportunity.creativeOpportunity",
+  "direction.contentMechanisms",
+  "direction.creativeAngle",
+  "opening.hookMechanism",
+  "opening.hookLine",
+  "opening.visual",
+  "truth",
+  "evidence",
+  "ctaDirection",
+  "riskBoundaries",
+] as const;
+
+export type CriticBriefField = typeof CRITIC_BRIEF_FIELD_VALUES[number];
+
 export type CriticIssue = {
   code: CriticIssueCode | BriefAwareCriticIssueCode;
   severity: "low" | "medium" | "high" | "minor" | "major" | "critical";
@@ -138,7 +157,7 @@ export type CriticIssue = {
   message: string;
   rewriteInstruction: string;
   deterministic: boolean;
-  briefField?: string;
+  briefField?: CriticBriefField;
 };
 
 export type TargetedRewrite = {

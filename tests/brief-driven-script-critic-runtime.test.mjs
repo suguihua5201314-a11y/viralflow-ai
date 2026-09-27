@@ -98,14 +98,14 @@ test("Critic can diagnose advertising and unnatural UGC dialogue without rewriti
 
 test("matching hook text does not hide opening visual drift", async () => {
   const result = await runtime.generateScriptCritique(input(), async () => response(critique(
-    issue("opening_visual_mismatch", { scope: "hook", field: "openingVisualExecution" }, { briefField: "openingVisual" }),
+    issue("opening_visual_mismatch", { scope: "hook", field: "openingVisualExecution" }, { briefField: "opening.visual" }),
   )));
   assert.equal(result.critique.issues[0].code, "opening_visual_mismatch");
 });
 
 test("semantic evidence and causal failures use stable codes and existing scene targets", async () => {
   for (const code of ["unsupported_causal_claim", "evidence_dialogue_mismatch", "unobservable_claim"]) {
-    const result = await runtime.generateScriptCritique(input(), async () => response(critique(issue(code, { scope: "scene", sceneId: "evidence", field: "dialogue" }, { briefField: "evidenceStrategy" }))));
+    const result = await runtime.generateScriptCritique(input(), async () => response(critique(issue(code, { scope: "scene", sceneId: "evidence", field: "dialogue" }, { briefField: "evidence" }))));
     assert.equal(result.status, "success");
     assert.equal(result.critique.issues[0].code, code);
   }
@@ -114,6 +114,42 @@ test("semantic evidence and causal failures use stable codes and existing scene 
 test("CTA direction drift remains a semantic Critic issue", async () => {
   const result = await runtime.generateScriptCritique(input(), async () => response(critique(issue("cta_direction_drift", { scope: "cta", field: "cta" }, { briefField: "ctaDirection" }))));
   assert.equal(result.critique.issues[0].code, "cta_direction_drift");
+});
+
+test("canonical Brief fields and omitted fields pass while aliases and arbitrary strings fail", () => {
+  const canonical = runtime.parseScriptCriticResult(JSON.stringify(critique(issue("brief_angle_drift", { scope: "narration", field: "fullNarration" }, { briefField: "direction.creativeAngle" }))), draft());
+  assert.equal(canonical.issues.length, 0);
+  const omitted = runtime.parseScriptCriticResult(JSON.stringify(critique(issue("ugc_repetitive", { scope: "narration", field: "fullNarration" }))), draft());
+  assert.equal(omitted.issues.length, 0);
+  for (const briefField of ["creativeAngle", "creative_angle", "angle", "anything"]) {
+    const parsed = runtime.parseScriptCriticResult(JSON.stringify(critique(issue("brief_angle_drift", { scope: "narration", field: "fullNarration" }, { briefField }))), draft());
+    assert.equal(parsed.value, null);
+    assert.ok(parsed.issues.some((item) => item.code === "invalid_brief_field" && item.path === "issues.0.briefField"));
+  }
+});
+
+test("real invalid briefField failure repairs with the shared canonical enum without mutating inputs", async () => {
+  const sourceInput = input();
+  const before = structuredClone(sourceInput);
+  const requests = [];
+  const invalid = critique(issue("brief_angle_drift", { scope: "narration", field: "fullNarration" }, { briefField: "creative_angle" }));
+  const repaired = critique(issue("brief_angle_drift", { scope: "narration", field: "fullNarration" }, { briefField: "direction.creativeAngle" }));
+  const result = await runtime.generateScriptCritique(sourceInput, async (request) => {
+    requests.push(request);
+    return response(requests.length === 1 ? invalid : repaired);
+  });
+  assert.equal(result.status, "success");
+  assert.equal(result.critique.issues[0].briefField, "direction.creativeAngle");
+  assert.equal(result.metadata.repairAttempted, true);
+  assert.equal(requests.length, 2);
+  const initialContract = JSON.parse(requests[0].messages[1].content).outputContract.issues[0].briefField;
+  const repair = JSON.parse(requests[1].messages[1].content).repair;
+  assert.deepEqual(initialContract.allowedValues, runtime.CRITIC_BRIEF_FIELD_VALUES);
+  assert.deepEqual(repair.allowedBriefFields, runtime.CRITIC_BRIEF_FIELD_VALUES);
+  assert.deepEqual(repair.issues[0], { code: "invalid_brief_field", path: "issues.0.briefField", stage: "critic_schema" });
+  assert.match(repair.instruction, /Correct only invalid schema fields/i);
+  assert.match(repair.instruction, /Do not change critique meaning, add issues, rewrite the script/i);
+  assert.deepEqual(sourceInput, before);
 });
 
 test("invalid scene target and invalid field are rejected and repaired at most once", async () => {

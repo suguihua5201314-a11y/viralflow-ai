@@ -1,6 +1,7 @@
 import {
   deriveBriefLockedDecisions,
   parseScriptDraftV2,
+  CRITIC_BRIEF_FIELD_VALUES,
   validateScriptDraftDeterministically,
   type BriefAwareCriticIssueCode,
   type CriticIssue,
@@ -12,6 +13,8 @@ import { validateBriefDrivenWriterInput } from "./brief-driven-script-writer";
 import type { CreativeBriefV2 } from "./creative-contract";
 import type { CanonicalProductContext } from "./product-context";
 import type { ProviderErrorType, ProviderId } from "./provider-types";
+
+export { CRITIC_BRIEF_FIELD_VALUES } from "./brief-driven-script";
 
 export type ScriptCriticInput = {
   projectId: string;
@@ -118,10 +121,7 @@ const fieldsByScope: Record<CriticIssueTarget["scope"], Set<string>> = {
   narration: new Set(["fullNarration"]),
   cta: new Set(["cta"]),
 };
-const briefFields = new Set([
-  "targetAudience", "useMoment", "purchaseMotivation", "tensionOrObjection", "creativeOpportunity", "contentMechanisms",
-  "creativeAngle", "hookMechanism", "hookLine", "openingVisual", "evidenceStrategy", "ctaDirection", "riskBoundaries",
-]);
+const briefFields = new Set<string>(CRITIC_BRIEF_FIELD_VALUES);
 const topFields = new Set(["verdict", "issues", "summary"]);
 const issueFields = new Set(["code", "severity", "target", "message", "rewriteInstruction", "deterministic", "briefField"]);
 const targetFields = new Set(["scope", "sceneId", "field"]);
@@ -225,6 +225,7 @@ export const SCRIPT_CRITIC_SYSTEM_PROMPT = [
   "The LOCKED CREATIVE BRIEF is authoritative for audience, moment, motivation, angle, mechanism, hook intent, opening visual, evidence strategy, CTA direction, and risk boundaries.",
   "Evaluate semantic Brief fidelity, hook and opening-visual execution, evidence observability, visual/action/dialogue coherence, UGC spoken naturalness, repetition, pacing, filmability, CTA coherence, and semantic truth/compliance risk.",
   "Do not report deterministic schema, trace, identity, language-field, numeric, or literal banned-claim checks already enforced by code. Do not score, rank, rewrite, or return replacement copy.",
+  "For briefField, use one exact value from the supplied allowedBriefFields list, or omit briefField when the issue is not tied to one locked Brief decision. Never invent aliases or alternate naming.",
   "Return exactly one JSON object containing verdict, at most 8 actionable issues, and an optional summary. Use only the supplied stable issue codes, severities, targets, and existing scene IDs.",
 ].join(" ");
 
@@ -234,15 +235,16 @@ const outputContract = {
     code: [...criticCodes], severity: "critical | major | minor",
     target: { scope: "title | hook | scene | narration | cta", sceneId: "required only for scene", field: "valid field for target scope" },
     message: "concise diagnosis", rewriteInstruction: "localized correction instruction, not replacement copy", deterministic: false,
-    briefField: "optional locked Brief field",
+    briefField: { optional: true, allowedValues: CRITIC_BRIEF_FIELD_VALUES, instruction: "use one exact value or omit" },
   }],
   summary: "optional concise summary",
 };
 
 export function buildScriptCriticMessages(input: ScriptCriticInput, repairIssues: ScriptCriticValidationIssue[] = []) {
   const repair = repairIssues.length ? {
-    instruction: "Return only a corrected critique JSON object. Repair the output schema and target references; do not change the script, Brief, Product Truth, or critique strategy.",
+    instruction: "Return only the corrected critique JSON object. Correct only invalid schema fields and target references. For invalid_brief_field, use one exact allowedBriefFields value or omit briefField. Do not change critique meaning, add issues, rewrite the script, or change the Brief or Product Truth.",
     issues: repairIssues.map(({ code, path, stage }) => ({ code, ...(path ? { path } : {}), stage })),
+    allowedBriefFields: CRITIC_BRIEF_FIELD_VALUES,
   } : undefined;
   return [
     { role: "system" as const, content: SCRIPT_CRITIC_SYSTEM_PROMPT },
