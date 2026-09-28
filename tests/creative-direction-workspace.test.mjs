@@ -109,6 +109,8 @@ test("Preview-safe validation detail is wired below the existing Stage 2 error",
   assert.match(page, /validationIssue\.stage/);
   assert.match(page, /validationIssue\.code/);
   assert.match(page, /validationIssue\.path/);
+  assert.match(page, /validationIssue\?\.ruleFamily/);
+  assert.match(component, /Rule family: \{session\.briefRuleFamily\}/);
 });
 
 test("frontend safely normalizes platform text, HTML and invalid JSON responses", async () => {

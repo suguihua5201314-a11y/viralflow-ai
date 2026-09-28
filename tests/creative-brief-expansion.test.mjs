@@ -5,6 +5,7 @@ import { createJiti } from "jiti";
 const jiti = createJiti(import.meta.url, { interopDefault: true });
 const api = await jiti.import("../app/creative-brief-expansion.ts");
 const selection = await jiti.import("../app/creative-opportunity-selection.ts");
+const compliance = await jiti.import("../app/compliance-rules.ts");
 
 const productContext = { productName: "CrystalArmor", profileId: 7, productKnowledge: { id: 7, name: "CrystalArmor", sellingPoints: "privacy viewing; alignment applicator", parameters: "28 degree viewing angle", bannedWords: "100% unbreakable", notes: "Avoid destructive tests" } };
 const selectedDirection = selection.canonicalizeCreativeDirection({
@@ -156,6 +157,44 @@ test("truth and compliance failures expose safe codes without matched content", 
   const forbidden = api.validateCreativeBriefExpansion({ ...expansion, ctaDirection: "100% unbreakable" }, input);
   assert.ok(forbidden.some(item => item.code === "forbidden_claim" && item.stage === "truth"));
   assert.doesNotMatch(JSON.stringify(forbidden), /100% unbreakable/i);
+});
+
+test("every high-risk compliance rule exposes a stable non-content rule family", () => {
+  const cases = [
+    ["100%", "absolute_claim"],
+    ["doctor recommended", "false_endorsement"],
+    ["unbreakable", "exaggerated_protection"],
+    ["medical proof", "medical_claim"],
+  ];
+  assert.deepEqual(compliance.HIGH_RISK_COMPLIANCE_RULE_FAMILIES, cases.map(([, family]) => family));
+  for (const [text, family] of cases) {
+    const hit = compliance.checkCompliance(text).find((item) => item.level === "高");
+    assert.equal(hit.ruleFamily, family);
+    assert.equal(hit.ruleFamily.includes(text.toLowerCase()), false);
+  }
+  assert.equal(compliance.checkCompliance("limited offer")[0].ruleFamily, undefined);
+});
+
+test("high-risk Stage 2 issues include only safe rule family metadata", () => {
+  const issues = api.validateCreativeBriefExpansion({ ...expansion, ctaDirection: "Choose unbreakable protection" }, input);
+  const complianceIssue = issues.find((item) => item.code === "high_risk_compliance");
+  assert.deepEqual(complianceIssue, { code: "high_risk_compliance", path: "ctaDirection", stage: "compliance", validator: "validateCreativeBriefExpansion", ruleFamily: "exaggerated_protection" });
+  assert.doesNotMatch(JSON.stringify(complianceIssue), /unbreakable|Choose/i);
+  const numericIssue = api.validateCreativeBriefExpansion({ ...expansion, ctaDirection: "Choose 99% protection" }, input).find((item) => item.code === "unsupported_numeric_claim");
+  assert.equal(numericIssue.ruleFamily, undefined);
+});
+
+test("repair request remains byte-for-shape compatible and omits rule family", async () => {
+  const requests = [];
+  const result = await api.generateCreativeBrief(input, async request => {
+    requests.push(request);
+    return response(requests.length === 1 ? { ...expansion, ctaDirection: "Choose unbreakable protection" } : expansion);
+  });
+  assert.equal(result.status, "success");
+  assert.equal(requests.length, 2);
+  const repairIssues = JSON.parse(requests[1].messages[1].content).repairIssues;
+  assert.deepEqual(repairIssues, [{ code: "high_risk_compliance", path: "ctaDirection", stage: "compliance", validator: "validateCreativeBriefExpansion" }]);
+  assert.equal("ruleFamily" in repairIssues[0], false);
 });
 
 test("repair receives safe structured issue codes and paths", async () => {

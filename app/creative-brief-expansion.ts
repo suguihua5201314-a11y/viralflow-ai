@@ -11,7 +11,7 @@ import { isCreativeBrainTransportFailure } from "./creative-brain";
 import type { CanonicalCreativeDirection } from "./creative-opportunity-selection";
 import { productContextFingerprint } from "./creative-opportunity-selection";
 import type { CanonicalProductContext } from "./product-context";
-import { checkCompliance, getGenerationComplianceKnowledge } from "./compliance-rules";
+import { checkCompliance, getGenerationComplianceKnowledge, type HighRiskComplianceRuleFamily } from "./compliance-rules";
 import { mutateProjectMemory, touchProject, type ProjectMemory } from "./project-memory";
 
 export type CreativeBriefExpansionInput = {
@@ -59,6 +59,7 @@ export type CreativeBriefValidationIssue = {
   path?: string;
   stage: "json_parse" | "expansion_schema" | "truth" | "compliance" | "numeric";
   validator: string;
+  ruleFamily?: HighRiskComplianceRuleFamily;
 };
 
 export type CreativeBriefExpansionParseResult = {
@@ -177,7 +178,7 @@ export function validateCreativeBriefExpansion(expansion: CreativeBriefExecution
   const factText = JSON.stringify(input.productContext).toLowerCase().replace(/\s/g, "");
   for (const assertion of collectCreativeAssertionSurface(expansion)) {
     for (const term of banned) if (assertion.text.toLowerCase().includes(term.toLowerCase())) issues.push(issue("forbidden_claim", "truth", "validateCreativeBriefExpansion", assertion.path));
-    for (const hit of checkCompliance(assertion.text)) if (hit.level === "高") issues.push(issue("high_risk_compliance", "compliance", "validateCreativeBriefExpansion", assertion.path));
+    for (const hit of checkCompliance(assertion.text)) if (hit.level === "高") issues.push({ ...issue("high_risk_compliance", "compliance", "validateCreativeBriefExpansion", assertion.path), ...(hit.ruleFamily ? { ruleFamily: hit.ruleFamily } : {}) });
     for (const claim of assertion.text.match(/\d+(?:[.,]\d+)?\s*(?:%|°|mm\b|cm\b|mah\b|w\b)/gi) || []) {
       if (!factText.includes(claim.toLowerCase().replace(/\s/g, ""))) issues.push(issue("unsupported_numeric_claim", "numeric", "validateCreativeBriefExpansion", assertion.path));
     }
@@ -217,9 +218,10 @@ export function buildCreativeBrief(input: CreativeBriefExpansionInput, expansion
 
 function renderPrompt(input: CreativeBriefExpansionInput, repairIssues: CreativeBriefValidationIssue[] = []) {
   const compliance = getGenerationComplianceKnowledge();
+  const providerRepairIssues = repairIssues.map(({ code, path, stage, validator }) => ({ code, ...(path ? { path } : {}), stage, validator }));
   return [
     { role: "system" as const, content: "Expand the selected creative direction into execution strategy. Do not replace or rewrite its audience, use moment, motivation, tension, angle, content mechanism, hook line, or opening visual. Return JSON only. Never invent product facts, prices, offers, certifications, measurements, or effects." },
-    { role: "user" as const, content: JSON.stringify({ task: "Return one expansion object", selectedDirection: input.selectedDirection, productTruth: input.productContext, market: input.market, language: input.language, platform: input.platform, preferences: input.preferences, sourceContext: input.sourceContext, recentCreativeHistory: input.recentCreativeHistory, allowedEvidenceTypes: [...evidenceTypes], requiredShape: { hookMechanism: "string", evidenceStrategy: { type: "allowed enum", objective: "string", visualEvidence: ["string"], limitations: ["string"] }, ctaDirection: "strategy, not final copy", riskBoundaries: { prohibitedClaims: ["string"], requiredQualifiers: ["string"], safetyConstraints: ["string"] }, creatorPersona: "optional string", contentFormat: "optional string", spokenTone: "optional string" }, compliance: { highRiskExpressions: compliance.highRiskExpressions, productForbiddenClaims: split(input.productContext.productKnowledge?.bannedWords) }, repairIssues }) },
+    { role: "user" as const, content: JSON.stringify({ task: "Return one expansion object", selectedDirection: input.selectedDirection, productTruth: input.productContext, market: input.market, language: input.language, platform: input.platform, preferences: input.preferences, sourceContext: input.sourceContext, recentCreativeHistory: input.recentCreativeHistory, allowedEvidenceTypes: [...evidenceTypes], requiredShape: { hookMechanism: "string", evidenceStrategy: { type: "allowed enum", objective: "string", visualEvidence: ["string"], limitations: ["string"] }, ctaDirection: "strategy, not final copy", riskBoundaries: { prohibitedClaims: ["string"], requiredQualifiers: ["string"], safetyConstraints: ["string"] }, creatorPersona: "optional string", contentFormat: "optional string", spokenTone: "optional string" }, compliance: { highRiskExpressions: compliance.highRiskExpressions, productForbiddenClaims: split(input.productContext.productKnowledge?.bannedWords) }, repairIssues: providerRepairIssues }) },
   ];
 }
 

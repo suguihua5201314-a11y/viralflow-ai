@@ -73,7 +73,7 @@ export default function CreativeDirectionWorkspace({ session, currentBrief, disa
                 <button disabled={disabled || Boolean(session.selectingOpportunityId)} onClick={() => onSelect(canonical.id)}>
                   {selecting ? "正在生成完整创意简报…" : session.briefStatus === "error" && session.selectedOpportunityId === canonical.id ? "重试生成简报" : "使用这个方向"}
                 </button>
-                {session.briefStatus === "error" && session.selectedOpportunityId === canonical.id && <div className="creative-direction-notice is-error" role="alert"><p>{session.briefError || "创意简报生成失败，请重试"}</p>{session.briefDiagnostic && <small>Validation: {session.briefDiagnostic}</small>}</div>}
+                {session.briefStatus === "error" && session.selectedOpportunityId === canonical.id && <div className="creative-direction-notice is-error" role="alert"><p>{session.briefError || "创意简报生成失败，请重试"}</p>{session.briefDiagnostic && <small>Validation: {session.briefDiagnostic}</small>}{session.briefRuleFamily && <small>Rule family: {session.briefRuleFamily}</small>}</div>}
               </article>
             );
           })}

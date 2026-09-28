@@ -11,6 +11,7 @@ export type CreativeDirectionSession = {
   briefStatus?: "idle" | "loading" | "ready" | "error";
   briefError?: string;
   briefDiagnostic?: string;
+  briefRuleFamily?: string;
   briefRequestId?: string;
 };
 
@@ -65,17 +66,17 @@ export function markCreativeDirectionSelection(sessions: CreativeDirectionSessio
 
 export function beginCreativeBriefRequest(sessions: CreativeDirectionSessions, projectId: string, opportunityId: string, requestId: string) {
   const current = sessions[projectId] || emptyCreativeDirectionSession();
-  return { ...sessions, [projectId]: { ...current, selectingOpportunityId: opportunityId, selectedOpportunityId: opportunityId, briefStatus: "loading" as const, briefError: "", briefDiagnostic: undefined, briefRequestId: requestId } };
+  return { ...sessions, [projectId]: { ...current, selectingOpportunityId: opportunityId, selectedOpportunityId: opportunityId, briefStatus: "loading" as const, briefError: "", briefDiagnostic: undefined, briefRuleFamily: undefined, briefRequestId: requestId } };
 }
 
 export function completeCreativeBriefRequest(sessions: CreativeDirectionSessions, projectId: string, opportunityId: string, requestId: string) {
   const current = sessions[projectId];
   if (!current || current.briefRequestId !== requestId || current.selectingOpportunityId !== opportunityId) return sessions;
-  return { ...sessions, [projectId]: { ...current, selectingOpportunityId: undefined, selectedOpportunityId: opportunityId, briefStatus: "ready" as const, briefError: "", briefDiagnostic: undefined, briefRequestId: undefined } };
+  return { ...sessions, [projectId]: { ...current, selectingOpportunityId: undefined, selectedOpportunityId: opportunityId, briefStatus: "ready" as const, briefError: "", briefDiagnostic: undefined, briefRuleFamily: undefined, briefRequestId: undefined } };
 }
 
-export function failCreativeBriefRequest(sessions: CreativeDirectionSessions, projectId: string, opportunityId: string, requestId: string, error: string, diagnostic?: string) {
+export function failCreativeBriefRequest(sessions: CreativeDirectionSessions, projectId: string, opportunityId: string, requestId: string, error: string, diagnostic?: string, ruleFamily?: string) {
   const current = sessions[projectId];
   if (!current || current.briefRequestId !== requestId || current.selectingOpportunityId !== opportunityId) return sessions;
-  return { ...sessions, [projectId]: { ...current, selectingOpportunityId: undefined, selectedOpportunityId: opportunityId, briefStatus: "error" as const, briefError: error, briefDiagnostic: diagnostic, briefRequestId: undefined } };
+  return { ...sessions, [projectId]: { ...current, selectingOpportunityId: undefined, selectedOpportunityId: opportunityId, briefStatus: "error" as const, briefError: error, briefDiagnostic: diagnostic, briefRuleFamily: ruleFamily, briefRequestId: undefined } };
 }
