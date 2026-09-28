@@ -126,11 +126,21 @@ export type BriefAwareCriticIssueCode =
   | "cta_too_hard"
   | "cta_unsupported_claim";
 
+export const CRITIC_TARGET_SCHEMA = {
+  title: ["title"],
+  hook: ["line", "openingVisualExecution"],
+  scene: ["visual", "action", "dialogue", "evidenceRole"],
+  narration: ["fullNarration"],
+  cta: ["cta"],
+} as const;
+
+export type CriticTargetScope = keyof typeof CRITIC_TARGET_SCHEMA;
+export type CriticTargetField<S extends CriticTargetScope> = (typeof CRITIC_TARGET_SCHEMA)[S][number];
 export type CriticIssueTarget = {
-  scope: "title" | "hook" | "scene" | "cta" | "narration";
-  sceneId?: string;
-  field?: string;
-};
+  [S in CriticTargetScope]: S extends "scene"
+    ? { scope: S; sceneId: string; field: CriticTargetField<S> }
+    : { scope: S; field: CriticTargetField<S>; sceneId?: never }
+}[CriticTargetScope];
 
 export const CRITIC_BRIEF_FIELD_VALUES = [
   "opportunity.targetAudience",

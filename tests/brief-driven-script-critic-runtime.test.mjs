@@ -147,23 +147,91 @@ test("real invalid briefField failure repairs with the shared canonical enum wit
   assert.deepEqual(initialContract.allowedValues, runtime.CRITIC_BRIEF_FIELD_VALUES);
   assert.deepEqual(repair.allowedBriefFields, runtime.CRITIC_BRIEF_FIELD_VALUES);
   assert.deepEqual(repair.issues[0], { code: "invalid_brief_field", path: "issues.0.briefField", stage: "critic_schema" });
-  assert.match(repair.instruction, /Correct only invalid schema fields/i);
-  assert.match(repair.instruction, /Do not change critique meaning, add issues, rewrite the script/i);
+  assert.match(repair.instruction, /Correct only invalid structured addresses/i);
+  assert.match(repair.instruction, /Do not add or delete issues, change critique meaning, rewrite the script/i);
   assert.deepEqual(sourceInput, before);
 });
 
 test("invalid scene target and invalid field are rejected and repaired at most once", async () => {
   const requests = [];
   const bad = critique(issue("scene_filler", { scope: "scene", sceneId: "missing", field: "dialogue" }));
+  const repaired = critique(issue("scene_filler", { scope: "scene", sceneId: "context", field: "dialogue" }));
   const result = await runtime.generateScriptCritique(input(), async (request) => {
     requests.push(request);
-    return response(requests.length === 1 ? bad : pass());
+    return response(requests.length === 1 ? bad : repaired);
   });
   assert.equal(result.status, "success");
   assert.equal(result.metadata.repairAttempted, true);
   assert.equal(requests.length, 2);
   const repair = JSON.parse(requests[1].messages[1].content).repair;
   assert.ok(repair.issues.some((item) => item.code === "unknown_scene" && item.path === "issues.0.target.sceneId"));
+  assert.deepEqual(repair.targetAddressContract, runtime.CRITIC_TARGET_SCHEMA);
+  assert.deepEqual(repair.validSceneIds, draft().scenes.map((scene) => scene.id));
+});
+
+test("canonical target schema accepts and resolves every legal address to one real Draft node", () => {
+  const value = draft();
+  for (const [scope, fields] of Object.entries(runtime.CRITIC_TARGET_SCHEMA)) {
+    for (const field of fields) {
+      const target = scope === "scene" ? { scope, sceneId: "evidence", field } : { scope, field };
+      const parsed = runtime.parseScriptCriticResult(JSON.stringify(critique(issue("scene_filler", target))), value);
+      assert.equal(parsed.issues.length, 0, `${scope}.${field}`);
+      const resolved = runtime.resolveCriticTarget(value, target);
+      assert.ok(resolved, `${scope}.${field}`);
+      assert.equal(typeof resolved.value, "string");
+      assert.ok(resolved.path.length > 0);
+    }
+  }
+});
+
+test("target scope, field and sceneId rules reject aliases and cross-scope addresses", () => {
+  const invalidTargets = [
+    { target: { scope: "hook", field: "hookLine" }, code: "invalid_target_field" },
+    { target: { scope: "hook", field: "dialogue" }, code: "invalid_target_field" },
+    { target: { scope: "scene", sceneId: "evidence", field: "line" }, code: "invalid_target_field" },
+    { target: { scope: "cta", field: "line" }, code: "invalid_target_field" },
+    { target: { scope: "narration", field: "narration" }, code: "invalid_target_field" },
+    { target: { scope: "scene", sceneId: "scene-99", field: "dialogue" }, code: "unknown_scene" },
+    { target: { scope: "cta", sceneId: "cta", field: "cta" }, code: "unexpected_scene_id" },
+  ];
+  for (const { target, code } of invalidTargets) {
+    const parsed = runtime.parseScriptCriticResult(JSON.stringify(critique(issue("scene_filler", target))), draft());
+    assert.equal(parsed.value, null);
+    assert.ok(parsed.issues.some((item) => item.code === code), JSON.stringify(target));
+    assert.equal(runtime.resolveCriticTarget(draft(), target), null);
+  }
+});
+
+test("invalid target alias repairs to canonical address without changing critique semantics", async () => {
+  const requests = [];
+  const invalid = critique(issue("opening_visual_mismatch", { scope: "hook", field: "openingVisual" }, { briefField: "opening.visual" }));
+  const repaired = critique(issue("opening_visual_mismatch", { scope: "hook", field: "openingVisualExecution" }, { briefField: "opening.visual" }));
+  const result = await runtime.generateScriptCritique(input(), async (request) => {
+    requests.push(request);
+    return response(requests.length === 1 ? invalid : repaired);
+  });
+  assert.equal(result.status, "success");
+  assert.equal(result.critique.issues[0].target.field, "openingVisualExecution");
+  const payload = JSON.parse(requests[1].messages[1].content);
+  assert.deepEqual(payload.targetAddressContract, runtime.CRITIC_TARGET_SCHEMA);
+  assert.deepEqual(payload.repair.targetAddressContract, runtime.CRITIC_TARGET_SCHEMA);
+  assert.deepEqual(payload.repair.allowedBriefFields, runtime.CRITIC_BRIEF_FIELD_VALUES);
+});
+
+test("address repair cannot add, delete, or semantically alter Critic issues", async () => {
+  for (const changed of [
+    pass(),
+    critique(issue("opening_visual_mismatch", { scope: "hook", field: "openingVisualExecution" }, { briefField: "opening.visual", severity: "minor" })),
+    critique(issue("weak_hook_execution", { scope: "hook", field: "openingVisualExecution" }, { briefField: "opening.visual" })),
+  ]) {
+    let calls = 0;
+    const invalid = critique(issue("opening_visual_mismatch", { scope: "hook", field: "openingVisual" }, { briefField: "opening.visual" }));
+    const result = await runtime.generateScriptCritique(input(), async () => response(++calls === 1 ? invalid : changed));
+    assert.equal(calls, 2);
+    assert.equal(result.status, "failure");
+    assert.equal(result.metadata.errorType, "repair_failed");
+    assert.ok(result.validationIssues.some((item) => item.code === "repair_changed_critique"));
+  }
 });
 
 test("score and other ranking fields are rejected by the strict result parser", () => {

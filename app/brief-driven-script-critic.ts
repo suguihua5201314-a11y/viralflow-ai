@@ -2,6 +2,7 @@ import {
   deriveBriefLockedDecisions,
   parseScriptDraftV2,
   CRITIC_BRIEF_FIELD_VALUES,
+  CRITIC_TARGET_SCHEMA,
   validateScriptDraftDeterministically,
   type BriefAwareCriticIssueCode,
   type CriticIssue,
@@ -14,7 +15,7 @@ import type { CreativeBriefV2 } from "./creative-contract";
 import type { CanonicalProductContext } from "./product-context";
 import type { ProviderErrorType, ProviderId } from "./provider-types";
 
-export { CRITIC_BRIEF_FIELD_VALUES } from "./brief-driven-script";
+export { CRITIC_BRIEF_FIELD_VALUES, CRITIC_TARGET_SCHEMA } from "./brief-driven-script";
 
 export type ScriptCriticInput = {
   projectId: string;
@@ -113,14 +114,8 @@ const criticCodes = new Set<BriefAwareCriticIssueCode>([
   "cta_too_hard", "cta_unsupported_claim",
 ]);
 const severities = new Set(["critical", "major", "minor"]);
-const scopes = new Set(["title", "hook", "scene", "narration", "cta"]);
-const fieldsByScope: Record<CriticIssueTarget["scope"], Set<string>> = {
-  title: new Set(["title"]),
-  hook: new Set(["line", "openingVisualExecution"]),
-  scene: new Set(["purpose", "visual", "action", "dialogue", "durationHint", "evidenceRole"]),
-  narration: new Set(["fullNarration"]),
-  cta: new Set(["cta"]),
-};
+const scopes = new Set(Object.keys(CRITIC_TARGET_SCHEMA));
+const fieldsByScope = Object.fromEntries(Object.entries(CRITIC_TARGET_SCHEMA).map(([scope, fields]) => [scope, new Set(fields)])) as Record<CriticIssueTarget["scope"], Set<string>>;
 const briefFields = new Set<string>(CRITIC_BRIEF_FIELD_VALUES);
 const topFields = new Set(["verdict", "issues", "summary"]);
 const issueFields = new Set(["code", "severity", "target", "message", "rewriteInstruction", "deterministic", "briefField"]);
@@ -205,6 +200,21 @@ export function parseScriptCriticResult(content: string, draft: ScriptDraftV2): 
   return issues.length ? { value: null, issues } : { value: structuredClone(parsed as ScriptCriticResult), issues: [] };
 }
 
+export type ResolvedCriticTarget = { path: string; value: string };
+
+export function resolveCriticTarget(draft: ScriptDraftV2, target: CriticIssueTarget): ResolvedCriticTarget | null {
+  if (!fieldsByScope[target.scope]?.has(target.field)) return null;
+  if (target.scope !== "scene" && "sceneId" in target && target.sceneId !== undefined) return null;
+  if (target.scope === "title") return { path: "title", value: draft.title };
+  if (target.scope === "hook") return { path: `hook.${target.field}`, value: draft.hook[target.field] };
+  if (target.scope === "narration") return { path: "fullNarration", value: draft.fullNarration };
+  if (target.scope === "cta") return { path: "cta", value: draft.cta };
+  const index = draft.scenes.findIndex((scene) => scene.id === target.sceneId);
+  if (index < 0) return null;
+  const value = draft.scenes[index][target.field];
+  return typeof value === "string" ? { path: `scenes.${index}.${target.field}`, value } : null;
+}
+
 function compactProductTruth(input: ScriptCriticInput) {
   const knowledge = input.canonicalProductContext.productKnowledge;
   const split = (value?: string) => String(value || "").split(/[；;\n]+/).map((item) => item.trim()).filter(Boolean);
@@ -225,6 +235,7 @@ export const SCRIPT_CRITIC_SYSTEM_PROMPT = [
   "The LOCKED CREATIVE BRIEF is authoritative for audience, moment, motivation, angle, mechanism, hook intent, opening visual, evidence strategy, CTA direction, and risk boundaries.",
   "Evaluate semantic Brief fidelity, hook and opening-visual execution, evidence observability, visual/action/dialogue coherence, UGC spoken naturalness, repetition, pacing, filmability, CTA coherence, and semantic truth/compliance risk.",
   "Do not report deterministic schema, trace, identity, language-field, numeric, or literal banned-claim checks already enforced by code. Do not score, rank, rewrite, or return replacement copy.",
+  "For target, use the exact supplied targetAddressContract. Do not invent aliases, semantic synonyms, field names, or scene IDs. A scene target requires one exact supplied scene ID; every non-scene target must omit sceneId.",
   "For briefField, use one exact value from the supplied allowedBriefFields list, or omit briefField when the issue is not tied to one locked Brief decision. Never invent aliases or alternate naming.",
   "Return exactly one JSON object containing verdict, at most 8 actionable issues, and an optional summary. Use only the supplied stable issue codes, severities, targets, and existing scene IDs.",
 ].join(" ");
@@ -233,7 +244,7 @@ const outputContract = {
   verdict: "pass | needs_rewrite",
   issues: [{
     code: [...criticCodes], severity: "critical | major | minor",
-    target: { scope: "title | hook | scene | narration | cta", sceneId: "required only for scene", field: "valid field for target scope" },
+    target: { scope: "exact key from targetAddressContract", sceneId: "required only for scene and must equal one validSceneId", field: "exact value from targetAddressContract[scope]" },
     message: "concise diagnosis", rewriteInstruction: "localized correction instruction, not replacement copy", deterministic: false,
     briefField: { optional: true, allowedValues: CRITIC_BRIEF_FIELD_VALUES, instruction: "use one exact value or omit" },
   }],
@@ -241,9 +252,12 @@ const outputContract = {
 };
 
 export function buildScriptCriticMessages(input: ScriptCriticInput, repairIssues: ScriptCriticValidationIssue[] = []) {
+  const validSceneIds = input.scriptDraft.scenes.map((scene) => scene.id);
   const repair = repairIssues.length ? {
-    instruction: "Return only the corrected critique JSON object. Correct only invalid schema fields and target references. For invalid_brief_field, use one exact allowedBriefFields value or omit briefField. Do not change critique meaning, add issues, rewrite the script, or change the Brief or Product Truth.",
+    instruction: "Return only the corrected critique JSON object. Correct only invalid structured addresses or briefField values. Preserve issue count, order, code, severity, message, rewriteInstruction, deterministic flag, verdict, and summary. Do not add or delete issues, change critique meaning, rewrite the script, or change the Brief or Product Truth. Use only exact targetAddressContract fields and current validSceneIds. For invalid_brief_field, use one exact allowedBriefFields value or omit briefField.",
     issues: repairIssues.map(({ code, path, stage }) => ({ code, ...(path ? { path } : {}), stage })),
+    targetAddressContract: CRITIC_TARGET_SCHEMA,
+    validSceneIds,
     allowedBriefFields: CRITIC_BRIEF_FIELD_VALUES,
   } : undefined;
   return [
@@ -254,10 +268,26 @@ export function buildScriptCriticMessages(input: ScriptCriticInput, repairIssues
       canonicalProductTruth: compactProductTruth(input),
       context: { platform: input.platform, market: input.market, language: input.language, preferences: input.preferences || {} },
       scriptDraft: input.scriptDraft,
+      targetAddressContract: CRITIC_TARGET_SCHEMA,
+      validSceneIds,
+      allowedBriefFields: CRITIC_BRIEF_FIELD_VALUES,
       outputContract,
       ...(repair ? { repair } : {}),
     }) },
   ];
+}
+
+function repairSemanticSignature(content: string) {
+  try {
+    const parsed = JSON.parse(content.trim().replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/i, ""));
+    if (!isRecord(parsed) || !Array.isArray(parsed.issues)) return null;
+    const signatureIssues = parsed.issues.map((item) => {
+      if (!isRecord(item)) return null;
+      return { code: item.code, severity: item.severity, message: item.message, rewriteInstruction: item.rewriteInstruction, deterministic: item.deterministic };
+    });
+    if (signatureIssues.some((item) => item === null)) return null;
+    return JSON.stringify({ verdict: parsed.verdict, summary: parsed.summary, issues: signatureIssues });
+  } catch { return null; }
 }
 
 function providerError(error: unknown): ScriptCriticMetadata["errorType"] {
@@ -295,6 +325,7 @@ export async function generateScriptCritique(
   }
 
   let parseIssues: ScriptCriticValidationIssue[] = [];
+  let repairSignature: string | null = null;
   for (let attempt = 0; attempt < SCRIPT_CRITIC_BUDGET.maximumProviderAttempts; attempt++) {
     let response: ScriptCriticProviderResponse;
     try {
@@ -316,10 +347,16 @@ export async function generateScriptCritique(
     resultMetadata.latencyMs = (resultMetadata.latencyMs || 0) + response.responseTimeMs;
     const parsed = parseScriptCriticResult(response.content, input.scriptDraft);
     if (parsed.value) {
+      if (attempt > 0 && repairSignature && repairSemanticSignature(response.content) !== repairSignature) {
+        parseIssues = [validationIssue("repair_changed_critique", "critic_schema", "issues")];
+        options.observe?.({ correlationId, attempt: attempt + 1, stage: "critic_schema", provider: response.providerUsed, model: response.model, latencyMs: response.responseTimeMs, repairAttempted: resultMetadata.repairAttempted, issueCount: 1, issues: parseIssues });
+        continue;
+      }
       options.observe?.({ correlationId, attempt: attempt + 1, stage: "completed", provider: response.providerUsed, model: response.model, latencyMs: resultMetadata.latencyMs, repairAttempted: resultMetadata.repairAttempted, issueCount: parsed.value.issues.length, errorType: null });
       return { status: "success", critique: parsed.value, metadata: resultMetadata, validationIssues: [] };
     }
     parseIssues = parsed.issues;
+    if (attempt === 0) repairSignature = repairSemanticSignature(response.content);
     const stage = parseIssues[0]?.stage || "critic_schema";
     options.observe?.({ correlationId, attempt: attempt + 1, stage, provider: response.providerUsed, model: response.model, latencyMs: response.responseTimeMs, repairAttempted: resultMetadata.repairAttempted, issueCount: parseIssues.length, issues: parseIssues });
     if (attempt === 0) { resultMetadata.repairAttempted = true; continue; }
