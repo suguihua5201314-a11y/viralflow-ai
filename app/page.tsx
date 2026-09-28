@@ -32,6 +32,7 @@ import {projectScriptVersionCount,restoreProjectScriptState} from "./script-work
 import ProjectBrainWorkspace from "./components/project-brain/project-brain-workspace";
 import ProjectWorkspace from "./project-workspace";
 import {cacheProjectMemory,cloneProjectWorkspace,getOrCreateProjectMemoryWriterId,mutateProjectMemory,normalizeProjectMemory,readProjectMemory,removeProjectWorkspace,resolveProjectMemoryState,resolveProjectWorkspace,shouldPersistProjectMemory,touchProject,updateProjectWorkspace,type PersistentProject,type ProjectMemory,type ProjectMemoryHydrationState,type ProjectMemoryResolution,type ProjectWorkspaceSnapshot,type ProjectWorkspaceState} from "./project-memory";
+import {DEFAULT_WORKSPACE_LANGUAGE,resolveCreationLanguageContext} from "./creation-language-context";
 import ImageStudio from "./image-studio";
 import type { ImageReturnContext } from "./image-assets";
 import ProjectAssetWorkspace from "./project-asset-workspace";
@@ -68,8 +69,9 @@ const styles = ["强冲突测评", "真实KOC种草", "悬念揭秘", "导演朋
 const initialScriptForm = { product: "变形金刚钢化膜", sellingPoints: "10秒自动除尘安装；无气泡、不歪；28°防窥；表层电镀疏水疏油层；抗刮耐磨、抗冲击；贴合紧密、不易翘边", audience: "经常自己贴坏钢化膜、在意隐私的手机用户", country: "西班牙", language: "西班牙语", style: "强冲突测评", framework: "智能随机", duration: "45", offer: "库存有限；买一份到手两张膜；现在下单加赠镜头保护膜" };
 type ScriptForm = typeof initialScriptForm;
 function initialProjectForm(project:PersistentProject|undefined,workspace?:ProjectWorkspaceState):ScriptForm{
-  const blank:ScriptForm={product:project?.product||"",sellingPoints:"",audience:"",country:project?.market||"",language:project?.language||"",style:styles[0],framework:"智能随机",duration:"30",offer:""};
-  return {...blank,...workspace?.form,product:project?.product||workspace?.form?.product||"",country:project?.market||workspace?.form?.country||"",language:project?.language||workspace?.form?.language||""};
+  const languageContext=resolveCreationLanguageContext(project||{});
+  const blank:ScriptForm={product:project?.product||"",sellingPoints:"",audience:"",country:languageContext.market,language:languageContext.targetLanguage,style:styles[0],framework:"智能随机",duration:"30",offer:""};
+  return {...blank,...workspace?.form,product:project?.product||workspace?.form?.product||"",country:languageContext.market||workspace?.form?.country||"",language:languageContext.targetLanguage||workspace?.form?.language||""};
 }
 const starterHooks: HookItem[] = seedHooks;
 const starterPoints: SellingPointItem[] = [{ id: 1, product: "变形金刚钢化膜", points: "10秒自动除尘安装；自动对位；无灰尘、无气泡、不贴歪；左右28°防窥；电镀疏水疏油层；不易残留指纹；抗刮耐磨、抗冲击；贴合紧密、不易翘边" }];
@@ -193,7 +195,7 @@ export default function Home() {
   const [memorySaveState,setMemorySaveState]=useState<"saved"|"saving">("saved");
   const [projectMemory,setProjectMemory]=useState<ProjectMemory>(()=>({
     version:1,
-    projects:demoProjects.map((item,index)=>({id:item.key,name:item.projectName,product:item.product,market:item.market||"",platform:item.platform||"TikTok",language:item.language||"",stage:item.stage,createdAt:new Date(Date.parse(item.updatedAt||"")-index*86400000).toISOString(),updatedAt:item.updatedAt||new Date().toISOString(),status:item.status,progress:item.progress,owner:item.owner,assets:{scriptVersions:index===0?demoScriptVariations:[]}})),
+    projects:demoProjects.map((item,index)=>({id:item.key,name:item.projectName,product:item.product,market:item.market||"",platform:item.platform||"TikTok",workspaceLanguage:DEFAULT_WORKSPACE_LANGUAGE,targetLanguage:item.language||DEFAULT_WORKSPACE_LANGUAGE,language:item.language||"",stage:item.stage,createdAt:new Date(Date.parse(item.updatedAt||"")-index*86400000).toISOString(),updatedAt:item.updatedAt||new Date().toISOString(),status:item.status,progress:item.progress,owner:item.owner,assets:{scriptVersions:index===0?demoScriptVariations:[]}})),
     workspace:{activeView:"dashboard",currentProjectId:demoProjects[0]?.key||null,workspaceByProject:demoProjects[0]?{[demoProjects[0].key]:{form:initialScriptForm,selectedScriptRevisionId:demoScriptVariations.at(-1)?scriptRevisionIdentity(demoScriptVariations.at(-1) as Script):undefined}}:{}},
     updatedAt:demoProjects[0]?.updatedAt||new Date(0).toISOString(),
   }));
@@ -344,7 +346,7 @@ export default function Home() {
   }
   function createProject(input:{name:string;product:string;market:string;platform:string;language:string}){
     const now=new Date().toISOString();const id=`project-${Date.now()}`;
-    const project:PersistentProject={id,name:input.name.trim(),product:input.product.trim(),market:input.market.trim(),platform:input.platform,language:input.language,stage:"洞察",createdAt:now,updatedAt:now,status:"创作中",progress:0,owner:"苏苏",assets:{scriptVersions:[]}};
+    const project:PersistentProject={id,name:input.name.trim(),product:input.product.trim(),market:input.market.trim(),platform:input.platform,workspaceLanguage:DEFAULT_WORKSPACE_LANGUAGE,targetLanguage:input.language,language:input.language,stage:"洞察",createdAt:now,updatedAt:now,status:"创作中",progress:0,owner:"苏苏",assets:{scriptVersions:[]}};
     mutateMemory(current=>updateProjectWorkspace({...current,projects:[project,...current.projects],workspace:{...current.workspace,currentProjectId:id,activeView:"projects"}},id,{form:initialProjectForm(project),referenceScript:"",directorContext:{duration:30,offer:"",sourceType:"script-studio"}}));setSelectedProjectKey(id);
   }
   function renameProject(id:string,name:string){mutateMemory(current=>({...current,projects:current.projects.map(project=>project.id===id?touchProject(project,{name:name.trim()}):project)}));}
@@ -643,7 +645,7 @@ export default function Home() {
   ];
   const realDashboardMetrics=buildDashboardMetrics({products:productProfiles,cases:viralCases,scripts:history,currentScript:result,recentCount:recentWork.length,providers:providerStatuses});
   const dashboardMetrics=DATA_MODE==="demo"?demoDashboardData:realDashboardMetrics;
-  const persistentProjects:DemoProject[]=projectMemory.projects.map((project,index)=>{const counts={analysis:project.assets.analyzerResult?1:0,replication:project.assets.replicationResult?1:0,scripts:projectScriptVersionCount(project),director:project.assets.directorResult?1:0,voice:project.assets.voiceResult?1:0,reviews:0};const type:DemoProject["type"]=project.stage==="导演"?"导演":project.stage==="语音"?"语音":project.stage==="洞察"||project.stage==="复刻"?"洞察":"脚本";return{key:project.id,projectName:project.name,title:(project.assets.scriptVersions.at(-1) as Script|undefined)?.title||project.name,product:project.product,market:project.market,language:project.language,platform:project.platform,duration:Number(resolveProjectWorkspace(projectMemory,project.id).form?.duration)||30,createdAt:project.createdAt,updatedAt:project.updatedAt,current:project.id===projectMemory.workspace.currentProjectId,type,status:(project.status as DemoProject["status"])||"创作中",stage:project.stage as DemoProject["stage"],nextAction:project.stage==="导演"?"完善 AI 导演方案":project.stage==="语音"?"继续 AI 语音":"继续创作",progress:project.progress??Math.min(95,20+Object.values(counts).reduce((sum,value)=>sum+value,0)*8),owner:project.owner||"苏苏",assets:counts};}).sort((a,b)=>Date.parse(b.updatedAt||"")-Date.parse(a.updatedAt||""));
+  const persistentProjects:DemoProject[]=projectMemory.projects.map((project,index)=>{const counts={analysis:project.assets.analyzerResult?1:0,replication:project.assets.replicationResult?1:0,scripts:projectScriptVersionCount(project),director:project.assets.directorResult?1:0,voice:project.assets.voiceResult?1:0,reviews:0};const type:DemoProject["type"]=project.stage==="导演"?"导演":project.stage==="语音"?"语音":project.stage==="洞察"||project.stage==="复刻"?"洞察":"脚本";const languageContext=resolveCreationLanguageContext(project);return{key:project.id,projectName:project.name,title:(project.assets.scriptVersions.at(-1) as Script|undefined)?.title||project.name,product:project.product,market:project.market,language:languageContext.targetLanguage,platform:project.platform,duration:Number(resolveProjectWorkspace(projectMemory,project.id).form?.duration)||30,createdAt:project.createdAt,updatedAt:project.updatedAt,current:project.id===projectMemory.workspace.currentProjectId,type,status:(project.status as DemoProject["status"])||"创作中",stage:project.stage as DemoProject["stage"],nextAction:project.stage==="导演"?"完善 AI 导演方案":project.stage==="语音"?"继续 AI 语音":"继续创作",progress:project.progress??Math.min(95,20+Object.values(counts).reduce((sum,value)=>sum+value,0)*8),owner:project.owner||"苏苏",assets:counts};}).sort((a,b)=>Date.parse(b.updatedAt||"")-Date.parse(a.updatedAt||""));
   const demoRecent=DATA_MODE==="demo"?demoProjects:recentWork;
   const dashboardRecent=persistentProjects.length?persistentProjects:(DATA_MODE==="demo"?demoRecent:[]);
   const openProject=(key:string)=>{setSelectedProjectKey(key);setActive("projects");saveWorkspaceSnapshot({activeView:"projects",currentProjectId:key});};

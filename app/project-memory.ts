@@ -1,6 +1,7 @@
 import type { ActiveView } from "./navigation";
 import type { FramePromptOverride } from "./frame-prompt-overrides";
 import type { CreativeBriefV2 } from "./creative-contract";
+import type { WorkspaceLanguage } from "./creation-language-context";
 
 export const PROJECT_MEMORY_KEY = "viralflow-project-memory-v1";
 export const PROJECT_MEMORY_WRITER_KEY = "viralflow-project-memory-writer-v1";
@@ -27,7 +28,9 @@ export type PersistentProject = {
   productProfileId?: number;
   market: string;
   platform: string;
-  language: string;
+  workspaceLanguage?: WorkspaceLanguage;
+  targetLanguage?: string;
+  language?: string;
   stage: string;
   createdAt: string;
   updatedAt: string;
