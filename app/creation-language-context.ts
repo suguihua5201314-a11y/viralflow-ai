@@ -27,3 +27,18 @@ export function resolveCreationLanguageContext(source: CreationLanguageContextSo
     platform: clean(source.platform),
   };
 }
+
+export type InternalCreativeLanguageIssue = {
+  code: "internal_language_mismatch";
+  path: string;
+};
+
+export function validateInternalCreativeLanguage(
+  fields: Array<{ path: string; text?: string }>,
+  workspaceLanguage: WorkspaceLanguage,
+): InternalCreativeLanguageIssue[] {
+  if (workspaceLanguage !== DEFAULT_WORKSPACE_LANGUAGE) return [];
+  return fields
+    .filter(({ text }) => Boolean(text?.trim()) && !/\p{Script=Han}/u.test(text!))
+    .map(({ path }) => ({ code: "internal_language_mismatch" as const, path }));
+}

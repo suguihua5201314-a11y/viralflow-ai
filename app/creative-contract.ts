@@ -1,3 +1,5 @@
+import type { CreationLanguageContext, CreationLanguageContextSource } from "./creation-language-context";
+
 export const CREATIVE_BRIEF_SCHEMA_VERSION = 2 as const;
 
 export type EvidenceStrategyType =
@@ -94,6 +96,7 @@ export type CreativeBriefV2 = {
   id: string;
   revisionId: string;
   projectId: string;
+  languageContext?: CreationLanguageContext;
   opportunityReference?: CreativeOpportunityReference;
   productReference: {
     productProfileId?: string | number;
@@ -139,6 +142,20 @@ export type CreativeBriefLineage = {
   sourceCreativeBriefId?: string;
   sourceCreativeBriefRevisionId?: string;
 };
+
+export function resolveCreativeBriefLanguageContext(
+  brief: Pick<CreativeBriefV2, "languageContext">,
+  fallback: CreationLanguageContextSource,
+): CreationLanguageContext {
+  if (brief.languageContext) return brief.languageContext;
+  const clean = (value: unknown) => typeof value === "string" ? value.trim() : "";
+  return {
+    workspaceLanguage: fallback.workspaceLanguage ?? "zh-CN",
+    targetLanguage: clean(fallback.targetLanguage) || clean(fallback.language) || "zh-CN",
+    market: clean(fallback.market),
+    platform: clean(fallback.platform),
+  };
+}
 
 const briefPrefix = "creative-brief-";
 const revisionPrefix = "creative-brief-revision-";

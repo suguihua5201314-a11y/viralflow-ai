@@ -3,6 +3,7 @@ import {
   CREATIVE_BRAIN_RUNTIME_BUDGET,
   creativeBrainErrorType,
   isCreativeBrainTransportFailure,
+  resolveCreativeBrainLanguageContext,
   type CreativeBrainInput,
   type CreativeBrainMetadata,
   type CreativeBrainProvider,
@@ -10,6 +11,7 @@ import {
 } from "./creative-brain";
 import { checkCompliance, getGenerationComplianceKnowledge } from "./compliance-rules";
 import { buildKnowledgeContext, findFactViolations } from "./knowledge-context";
+import { validateInternalCreativeLanguage } from "./creation-language-context";
 
 export const CREATIVE_DIRECTION_COUNT = 3;
 export const CREATIVE_DIRECTION_MAX_TOKENS = 1200;
@@ -87,14 +89,29 @@ export function assessDirectionDiversity(items: CreativeDirectionCandidate[]) {
 }
 
 export function buildCreativeDirectionContext(input: CreativeBrainInput) {
+  const languageContext = resolveCreativeBrainLanguageContext(input);
   return {
     productTruth: { productName: input.productContext.productName, profileId: input.productContext.profileId, ...(input.productContext.productKnowledge || {}) },
-    market: { country: input.market, language: input.language, platform: input.platform },
+    workspaceLanguage: languageContext.workspaceLanguage,
+    audienceContext: { market: languageContext.market, targetLanguage: languageContext.targetLanguage, platform: languageContext.platform },
+    languageInstruction: "All human-readable Creative Direction fields are internal working content and must be written in Simplified Chinese. targetLanguage is a future localization target only.",
     preferences: input.preferences || {},
     sourceContext: input.sourceContext || null,
     recentCreativeHistory: (input.recentCreativeHistory || []).slice(0, 6),
     candidateCount: CREATIVE_DIRECTION_COUNT,
   };
+}
+
+function directionLanguageFields(item: CreativeDirectionCandidate) {
+  return [
+    { path: "targetAudience", text: item.targetAudience }, { path: "useMoment", text: item.useMoment },
+    { path: "coreMotivation", text: item.coreMotivation }, { path: "coreTension", text: item.coreTension },
+    { path: "creativeAngle", text: item.creativeAngle }, { path: "contentMechanism", text: item.contentMechanism },
+    { path: "hookLine", text: item.hookLine }, { path: "openingVisual.subject", text: item.openingVisual.subject },
+    { path: "openingVisual.setup", text: item.openingVisual.setup }, { path: "openingVisual.action", text: item.openingVisual.action },
+    { path: "openingVisual.visibleChangeOrQuestion", text: item.openingVisual.visibleChangeOrQuestion },
+    { path: "rationale", text: item.rationale },
+  ];
 }
 
 function directionText(item: CreativeDirectionCandidate) {
@@ -108,12 +125,18 @@ function directionText(item: CreativeDirectionCandidate) {
 export function validateCreativeDirection(item: CreativeDirectionCandidate, input: CreativeBrainInput): OpportunityValidationIssue[] {
   const text = directionText(item);
   const knowledge = input.productContext.productKnowledge;
+  const languageContext = resolveCreativeBrainLanguageContext(input);
   const context = buildKnowledgeContext({
     product: input.productContext.productName, sellingPoints: knowledge?.sellingPoints || "", audience: knowledge?.audience || "",
-    country: input.market, language: input.language, platform: input.platform, offer: knowledge?.offer || "",
+    country: languageContext.market, language: languageContext.targetLanguage, platform: languageContext.platform, offer: knowledge?.offer || "",
     productKnowledge: knowledge, recent: input.recentCreativeHistory || [], complianceKnowledge: getGenerationComplianceKnowledge(),
   });
   const issues: OpportunityValidationIssue[] = [];
+  if (input.languageContext || input.workspaceLanguage || input.targetLanguage) {
+    for (const mismatch of validateInternalCreativeLanguage(directionLanguageFields(item), languageContext.workspaceLanguage)) {
+      issues.push({ candidateId: item.id, type: "language", message: `${mismatch.code}:${mismatch.path}` });
+    }
+  }
   for (const violation of findFactViolations(text, context)) issues.push({ candidateId: item.id, type: "truth", message: violation });
   for (const hit of checkCompliance(text).filter((entry) => entry.level === "高")) issues.push({ candidateId: item.id, type: "compliance", message: `${hit.category}:${hit.term}` });
   const truth = Object.values(knowledge || {}).join(" ");
@@ -133,14 +156,16 @@ export function validateCreativeDirection(item: CreativeDirectionCandidate, inpu
   return issues;
 }
 
-type RepairContext = { preserved: CreativeDirectionCandidate[]; missingCount: number; issues: OpportunityValidationIssue[] };
+type RepairContext = { preserved: CreativeDirectionCandidate[]; languageCandidates: CreativeDirectionCandidate[]; missingCount: number; issues: OpportunityValidationIssue[] };
 
 export function creativeDirectionMessages(input: CreativeBrainInput, repair?: RepairContext) {
   const repairInstruction = repair
-    ? ` This is the only repair. Return ${repair.missingCount} replacement directions only. Do not repeat these valid directions: ${JSON.stringify(repair.preserved)}. Fix: ${JSON.stringify(repair.issues)}.`
+    ? repair.languageCandidates.length
+      ? ` One repair only. Return ${repair.missingCount} corrected directions only. Re-express these wrong-language directions in Simplified Chinese without changing their IDs or strategy: ${JSON.stringify(repair.languageCandidates)}. Keep meaning, audience, moment, motivation, tension, angle, mechanism, hook, and opening visual. Do not repeat: ${JSON.stringify(repair.preserved)}. Fix: ${JSON.stringify(repair.issues)}.`
+      : ` This is the only repair. Return ${repair.missingCount} replacement directions only. Do not repeat: ${JSON.stringify(repair.preserved)}. Fix: ${JSON.stringify(repair.issues)}.`
     : "";
   return [
-    { role: "system" as const, content: `You propose short-video creative directions, not scripts or full briefs. Return exactly ${repair?.missingCount || CREATIVE_DIRECTION_COUNT} structurally different, shootable directions. Decide who cares, when, why, the tension, angle, content mechanism, hook line, and first 1-3 second visual. Hook and visual must be distinct. Product truth is input context; never restate it as output or invent facts, numbers, prices, offers, certifications, medical effects, reviews, or third-party access. Preferences guide but do not dictate. Avoid recent hooks, angles, moments, and mechanisms. Return JSON only: {"directions":[{"id":"A","targetAudience":"","useMoment":"","coreMotivation":"","coreTension":"","creativeAngle":"","contentMechanism":"","hookLine":"","openingVisual":{"subject":"","setup":"","action":"","visibleChangeOrQuestion":""},"rationale":""}]}.${repairInstruction}` },
+    { role: "system" as const, content: `Create short-video directions, not scripts or briefs. Write every human-readable field in Simplified Chinese. market and targetLanguage are audience and future-localization constraints, not the Direction output language. Return exactly ${repair?.missingCount || CREATIVE_DIRECTION_COUNT} structurally different, shootable directions covering audience, moment, motivation, tension, angle, mechanism, hook, and the first 1-3 second visual. Keep hook and visual distinct. Never invent product facts, numbers, prices, offers, certifications, medical effects, reviews, or third-party access. Preferences guide but do not dictate. Avoid recent ideas. JSON only: {"directions":[{"id":"A","targetAudience":"","useMoment":"","coreMotivation":"","coreTension":"","creativeAngle":"","contentMechanism":"","hookLine":"","openingVisual":{"subject":"","setup":"","action":"","visibleChangeOrQuestion":""},"rationale":""}]}.${repairInstruction}` },
     { role: "user" as const, content: JSON.stringify(buildCreativeDirectionContext(input)) },
   ];
 }
@@ -153,9 +178,10 @@ export async function generateCreativeDirections(input: CreativeBrainInput, prov
   const metadata = emptyMetadata();
   const allIssues: OpportunityValidationIssue[] = [];
   let preserved: CreativeDirectionCandidate[] = [];
+  let languageCandidates: CreativeDirectionCandidate[] = [];
   for (let attempt = 0; attempt < 2; attempt++) {
     try {
-      const repair = attempt ? { preserved, missingCount: Math.max(1, CREATIVE_DIRECTION_COUNT - preserved.length), issues: [...allIssues] } : undefined;
+      const repair = attempt ? { preserved, languageCandidates, missingCount: Math.max(1, CREATIVE_DIRECTION_COUNT - preserved.length), issues: [...allIssues] } : undefined;
       const response = await provider({
         messages: creativeDirectionMessages(input, repair), temperature: attempt ? .65 : .82, topP: .9,
         maxTokens: CREATIVE_DIRECTION_MAX_TOKENS,
@@ -166,9 +192,20 @@ export async function generateCreativeDirections(input: CreativeBrainInput, prov
       const parsed = parseCreativeDirections(response.content);
       allIssues.push(...parsed.issues);
       if (!attempt && parsed.directions.length !== CREATIVE_DIRECTION_COUNT) allIssues.push({ type: "schema", message: "Creative Brain must return exactly 3 directions" });
-      const valid = parsed.directions.filter((item) => {
-        const issues = validateCreativeDirection(item, input); allIssues.push(...issues); return issues.length === 0;
+      let valid = parsed.directions.filter((item) => {
+        const issues = validateCreativeDirection(item, input);
+        allIssues.push(...issues);
+        if (!attempt && issues.length > 0 && issues.every((entry) => entry.type === "language")) languageCandidates.push(item);
+        return issues.length === 0;
       });
+      if (attempt && languageCandidates.length) {
+        const returnedIds = new Set(valid.map((item) => item.id));
+        for (const candidate of languageCandidates) if (!returnedIds.has(candidate.id)) allIssues.push({ candidateId: candidate.id, type: "language", message: "Language repair must preserve Direction ID and strategy identity" });
+        if (languageCandidates.length === repair!.missingCount) {
+          const expectedIds = new Set(languageCandidates.map((item) => item.id));
+          valid = valid.filter((item) => expectedIds.has(item.id));
+        }
+      }
       const combined = [...preserved];
       const ids = new Set(combined.map((item) => item.id));
       for (const item of valid) {

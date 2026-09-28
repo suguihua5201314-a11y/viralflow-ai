@@ -463,9 +463,11 @@ export default function Home() {
     setCreativeDirectionSessions(current=>beginCreativeDirectionRequest(current,projectId,requestId));
     const recentScripts=(project.assets.scriptVersions as Script[]).slice(-6).reverse();
     const recent=recentScripts.map(({title,hook,creativeAngle,scenario,proofMechanism,cta})=>({title,hook,creativeAngle,scenario,proofMechanism,cta})) as RecentCreativeHistory[];
+    const languageContext=resolveCreationLanguageContext({...project,targetLanguage:form.language,market:form.country,platform:controls.platform});
     const brainInput:CreativeBrainInput={
       projectId,
       productContext:resolveCanonicalProductContext({productName:form.product,selectedProductId,projectProductProfileId:project.productProfileId,profiles:productProfiles}),
+      languageContext,
       market:form.country,
       language:form.language,
       platform:controls.platform,
@@ -497,8 +499,9 @@ export default function Home() {
     setCreativeDirectionSessions(current=>beginCreativeBriefRequest(current,projectId,selected.id,requestId));
     const recentScripts=(project.assets.scriptVersions as Script[]).slice(-6).reverse();
     const recentCreativeHistory=recentScripts.map(({title,hook,creativeAngle,scenario,proofMechanism,cta})=>({title,hook,creativeAngle,scenario,proofMechanism,cta})) as RecentCreativeHistory[];
+    const languageContext=resolveCreationLanguageContext({...project,targetLanguage:form.language,market:form.country,platform:controls.platform});
     try{
-      const response=await fetch("/api/creative-brief",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({projectId,selectedDirection:selected,productContext,productContextFingerprint:fingerprint,market:form.country,language:form.language,platform:controls.platform,preferences:{creationMode:controls.creationMode,hookStrategy:controls.hookStrategy,framework:form.framework,creativity:controls.creativity},sourceContext:referenceScript.trim()?{kind:"reference-script",sourceId:`project-reference:${projectId}`,referenceText:referenceScript}:undefined,recentCreativeHistory,provider:controls.provider})});
+      const response=await fetch("/api/creative-brief",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({projectId,selectedDirection:selected,productContext,productContextFingerprint:fingerprint,languageContext,market:form.country,language:form.language,platform:controls.platform,preferences:{creationMode:controls.creationMode,hookStrategy:controls.hookStrategy,framework:form.framework,creativity:controls.creativity},sourceContext:referenceScript.trim()?{kind:"reference-script",sourceId:`project-reference:${projectId}`,referenceText:referenceScript}:undefined,recentCreativeHistory,provider:controls.provider})});
       const data=await parseCreativeBriefApiResponse(response);
       const activeRequest=activeCreativeBriefRequests.current[projectId];
       if(!activeRequest||activeRequest.requestId!==requestId)return;

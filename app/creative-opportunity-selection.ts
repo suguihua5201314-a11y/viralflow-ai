@@ -10,6 +10,7 @@ import {
 import type { CreativeBrainSourceContext } from "./creative-brain";
 import type { CanonicalProductContext } from "./product-context";
 import { mutateProjectMemory, touchProject, type ProjectMemory } from "./project-memory";
+import { resolveCreationLanguageContext, type CreationLanguageContext } from "./creation-language-context";
 
 export type CanonicalCreativeOpportunity = {
   id: string;
@@ -35,8 +36,11 @@ export type CreativeOpportunitySelectionInput = {
   projectId: string;
   opportunity: CanonicalCreativeOpportunity;
   productContext: CanonicalProductContext;
+  languageContext?: CreationLanguageContext;
   market: string;
-  language: string;
+  language?: string;
+  workspaceLanguage?: "zh-CN";
+  targetLanguage?: string;
   platform: string;
   preferences?: CreativeBriefPreferences;
   sourceContext?: CreativeBrainSourceContext;
@@ -93,6 +97,7 @@ export function createBriefFromSelectedOpportunity(input: CreativeOpportunitySel
   const safetyConstraints = [...new Set([...item.riskNotes, ...splitKnowledge(knowledge?.notes)])];
   return createCreativeBrief({
     projectId: input.projectId,
+    languageContext: input.languageContext || resolveCreationLanguageContext(input),
     opportunityReference: {
       canonicalOpportunityId: input.opportunity.id,
       sourceCandidateId: input.opportunity.sourceCandidateId,

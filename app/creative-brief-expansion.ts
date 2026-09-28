@@ -13,14 +13,18 @@ import { productContextFingerprint } from "./creative-opportunity-selection";
 import type { CanonicalProductContext } from "./product-context";
 import { checkCompliance, getGenerationComplianceKnowledge, type HighRiskComplianceRuleFamily } from "./compliance-rules";
 import { mutateProjectMemory, touchProject, type ProjectMemory } from "./project-memory";
+import { resolveCreationLanguageContext, validateInternalCreativeLanguage, type CreationLanguageContext } from "./creation-language-context";
 
 export type CreativeBriefExpansionInput = {
   projectId: string;
   selectedDirection: CanonicalCreativeDirection;
   productContext: CanonicalProductContext;
   productContextFingerprint: string;
+  languageContext?: CreationLanguageContext;
   market: string;
-  language: string;
+  language?: string;
+  workspaceLanguage?: "zh-CN";
+  targetLanguage?: string;
   platform: string;
   preferences?: CreativeBriefPreferences;
   sourceContext?: CreativeBrainSourceContext;
@@ -57,7 +61,7 @@ export type CreativeBriefExpansionResult = {
 export type CreativeBriefValidationIssue = {
   code: string;
   path?: string;
-  stage: "json_parse" | "expansion_schema" | "truth" | "compliance" | "numeric";
+  stage: "json_parse" | "expansion_schema" | "internal_language" | "truth" | "compliance" | "numeric";
   validator: string;
   ruleFamily?: HighRiskComplianceRuleFamily;
 };
@@ -86,6 +90,10 @@ const text = (value: unknown): value is string => typeof value === "string" && B
 const strings = (value: unknown): value is string[] => Array.isArray(value) && value.every(text);
 const MAX_SAFETY_ITEMS = 12;
 const MAX_SAFETY_TEXT_LENGTH = 500;
+
+export function resolveCreativeBriefInputLanguageContext(input: CreativeBriefExpansionInput) {
+  return input.languageContext || resolveCreationLanguageContext(input);
+}
 
 const issue = (
   code: string,
@@ -174,6 +182,24 @@ function sourceReferences(source: CreativeBrainSourceContext | undefined, recent
 
 export function validateCreativeBriefExpansion(expansion: CreativeBriefExecutionExpansion, input: CreativeBriefExpansionInput) {
   const issues: CreativeBriefValidationIssue[] = [];
+  const languageContext = resolveCreativeBriefInputLanguageContext(input);
+  if (input.languageContext || input.workspaceLanguage || input.targetLanguage) {
+    const internalFields = [
+      { path: "hookMechanism", text: expansion.hookMechanism },
+      { path: "evidenceStrategy.objective", text: expansion.evidenceStrategy.objective },
+      ...expansion.evidenceStrategy.visualEvidence.map((text, index) => ({ path: `evidenceStrategy.visualEvidence.${index}`, text })),
+      ...expansion.evidenceStrategy.limitations.map((text, index) => ({ path: `evidenceStrategy.limitations.${index}`, text })),
+      { path: "ctaDirection", text: expansion.ctaDirection },
+      ...expansion.riskBoundaries.prohibitedClaims.map((text, index) => ({ path: `riskBoundaries.prohibitedClaims.${index}`, text })),
+      ...expansion.riskBoundaries.requiredQualifiers.map((text, index) => ({ path: `riskBoundaries.requiredQualifiers.${index}`, text })),
+      ...expansion.riskBoundaries.safetyConstraints.map((text, index) => ({ path: `riskBoundaries.safetyConstraints.${index}`, text })),
+      { path: "creatorPersona", text: expansion.creatorPersona }, { path: "contentFormat", text: expansion.contentFormat },
+      { path: "spokenTone", text: expansion.spokenTone },
+    ];
+    for (const mismatch of validateInternalCreativeLanguage(internalFields, languageContext.workspaceLanguage)) {
+      issues.push(issue(mismatch.code, "internal_language", "validateCreativeBriefExpansion", mismatch.path));
+    }
+  }
   const banned = split(input.productContext.productKnowledge?.bannedWords);
   const factText = JSON.stringify(input.productContext).toLowerCase().replace(/\s/g, "");
   for (const assertion of collectCreativeAssertionSurface(expansion)) {
@@ -201,6 +227,7 @@ export function buildCreativeBrief(input: CreativeBriefExpansionInput, expansion
   const prohibitedClaims = [...new Set([...split(input.productContext.productKnowledge?.bannedWords), ...expansion.riskBoundaries.prohibitedClaims])];
   return createCreativeBrief({
     projectId: input.projectId,
+    languageContext: resolveCreativeBriefInputLanguageContext(input),
     opportunityReference: { canonicalOpportunityId: input.selectedDirection.id, sourceCandidateId: input.selectedDirection.sourceCandidateId },
     productReference: { productProfileId: input.productContext.profileId ?? undefined, productName: input.productContext.productName, contextFingerprint: input.productContextFingerprint },
     sources: sourceReferences(input.sourceContext, input.recentCreativeHistory),
@@ -216,12 +243,13 @@ export function buildCreativeBrief(input: CreativeBriefExpansionInput, expansion
   });
 }
 
-function renderPrompt(input: CreativeBriefExpansionInput, repairIssues: CreativeBriefValidationIssue[] = []) {
+function renderPrompt(input: CreativeBriefExpansionInput, repairIssues: CreativeBriefValidationIssue[] = [], repairExpansion?: CreativeBriefExecutionExpansion | null) {
   const compliance = getGenerationComplianceKnowledge();
+  const languageContext = resolveCreativeBriefInputLanguageContext(input);
   const providerRepairIssues = repairIssues.map(({ code, path, stage, validator }) => ({ code, ...(path ? { path } : {}), stage, validator }));
   return [
-    { role: "system" as const, content: "Expand the selected creative direction into execution strategy. Do not replace or rewrite its audience, use moment, motivation, tension, angle, content mechanism, hook line, or opening visual. Return JSON only. Never invent product facts, prices, offers, certifications, measurements, or effects." },
-    { role: "user" as const, content: JSON.stringify({ task: "Return one expansion object", selectedDirection: input.selectedDirection, productTruth: input.productContext, market: input.market, language: input.language, platform: input.platform, preferences: input.preferences, sourceContext: input.sourceContext, recentCreativeHistory: input.recentCreativeHistory, allowedEvidenceTypes: [...evidenceTypes], requiredShape: { hookMechanism: "string", evidenceStrategy: { type: "allowed enum", objective: "string", visualEvidence: ["string"], limitations: ["string"] }, ctaDirection: "strategy, not final copy", riskBoundaries: { prohibitedClaims: ["string"], requiredQualifiers: ["string"], safetyConstraints: ["string"] }, creatorPersona: "optional string", contentFormat: "optional string", spokenTone: "optional string" }, compliance: { highRiskExpressions: compliance.highRiskExpressions, productForbiddenClaims: split(input.productContext.productKnowledge?.bannedWords) }, repairIssues: providerRepairIssues }) },
+    { role: "system" as const, content: "Create an internal creative strategy document for a Chinese-speaking production team. Return all human-readable strategy content in Simplified Chinese. The target market and targetLanguage are downstream audience and localization constraints; do not localize the Brief into targetLanguage. Expand the selected direction without replacing or rewriting its audience, use moment, motivation, tension, angle, content mechanism, hook line, or opening visual. Return JSON only. Never invent product facts, prices, offers, certifications, measurements, or effects. On language repair, only re-express the previous expansion in Simplified Chinese and preserve every strategy decision." },
+    { role: "user" as const, content: JSON.stringify({ task: "Return one expansion object", selectedDirection: input.selectedDirection, productTruth: input.productContext, languageContext, preferences: input.preferences, sourceContext: input.sourceContext, recentCreativeHistory: input.recentCreativeHistory, allowedEvidenceTypes: [...evidenceTypes], requiredShape: { hookMechanism: "string", evidenceStrategy: { type: "allowed enum", objective: "string", visualEvidence: ["string"], limitations: ["string"] }, ctaDirection: "strategy, not final copy", riskBoundaries: { prohibitedClaims: ["string"], requiredQualifiers: ["string"], safetyConstraints: ["string"] }, creatorPersona: "optional string", contentFormat: "optional string", spokenTone: "optional string" }, compliance: { highRiskExpressions: compliance.highRiskExpressions, productForbiddenClaims: split(input.productContext.productKnowledge?.bannedWords) }, repairIssues: providerRepairIssues, ...(repairExpansion ? { repairExpansion, repairInstruction: "Re-express only in Simplified Chinese; preserve meaning and structure." } : {}) }) },
   ];
 }
 
@@ -232,14 +260,15 @@ export async function generateCreativeBrief(
 ): Promise<CreativeBriefExpansionResult> {
   const metadata: CreativeBriefExpansionMetadata = { repairAttempted: false, fallbackUsed: false, errorType: null };
   let issues: CreativeBriefValidationIssue[] = [];
+  let repairExpansion: CreativeBriefExecutionExpansion | null = null;
   for (let attempt = 0; attempt < 2; attempt++) {
     try {
-      const response = await provider({ messages: renderPrompt(input, issues), temperature: 0.45, topP: 0.9, maxTokens: 1400, timeoutMs: 45_000 });
+      const response = await provider({ messages: renderPrompt(input, issues, repairExpansion), temperature: 0.45, topP: 0.9, maxTokens: 1400, timeoutMs: 45_000 });
       const parsed = parseCreativeBriefExpansion(response.content);
       issues = parsed.value ? validateCreativeBriefExpansion(parsed.value, input) : parsed.issues;
       if (issues.length > 0) observeValidation?.({ attempt: attempt + 1, issues });
       if (parsed.value && issues.length === 0) return { status: "success", brief: buildCreativeBrief(input, parsed.value), metadata, issues: [] };
-      if (attempt === 0) { metadata.repairAttempted = true; continue; }
+      if (attempt === 0) { metadata.repairAttempted = true; repairExpansion = parsed.value; continue; }
       metadata.errorType = "validation_failed";
       return { status: "failure", brief: null, metadata, issues };
     } catch (error) {

@@ -1,6 +1,6 @@
 import { callProvider, DEFAULT_PROVIDER, getProviderStatuses, type ProviderResponse } from "../../provider-router";
 import type { ProviderId } from "../../provider-types";
-import { creativeBrainErrorType, type CreativeBrainInput, type CreativeBrainProviderRequest, type CreativeBrainProviderResponse } from "../../creative-brain";
+import { creativeBrainErrorType, resolveCreativeBrainLanguageContext, type CreativeBrainInput, type CreativeBrainProviderRequest, type CreativeBrainProviderResponse } from "../../creative-brain";
 import { generateCreativeDirections, type CreativeDirectionResult } from "../../creative-directions";
 
 export const runtime = "nodejs";
@@ -41,7 +41,8 @@ export function creativeBrainFailurePayload(result: CreativeDirectionResult) {
 export async function POST(request: Request) {
   try {
     const body = await request.json() as CreativeBrainInput & { provider?: ProviderId };
-    if (!body.projectId?.trim() || !body.productContext?.productName?.trim() || !body.market?.trim() || !body.language?.trim() || !body.platform?.trim()) {
+    const languageContext = resolveCreativeBrainLanguageContext(body);
+    if (!body.projectId?.trim() || !body.productContext?.productName?.trim() || !languageContext.market || !languageContext.targetLanguage || !languageContext.platform) {
       return Response.json({ error: "Creative Brain input is incomplete" }, { status: 400 });
     }
     const requested = body.provider || DEFAULT_PROVIDER;

@@ -3,6 +3,7 @@ import type { CanonicalProductContext } from "./product-context";
 import { checkCompliance, getGenerationComplianceKnowledge } from "./compliance-rules";
 import { buildKnowledgeContext, findFactViolations, type MemoryScript } from "./knowledge-context";
 import type { ProviderErrorType, ProviderId } from "./provider-types";
+import { resolveCreationLanguageContext, validateInternalCreativeLanguage, type CreationLanguageContext } from "./creation-language-context";
 
 export type CreativeBrainPreferences = {
   creationMode?: string;
@@ -25,14 +26,21 @@ export type RecentCreativeHistory = Pick<MemoryScript, "title" | "hook" | "creat
 export type CreativeBrainInput = {
   projectId: string;
   productContext: CanonicalProductContext;
+  languageContext?: CreationLanguageContext;
   market: string;
-  language: string;
+  language?: string;
+  workspaceLanguage?: "zh-CN";
+  targetLanguage?: string;
   platform: string;
   preferences?: CreativeBrainPreferences;
   sourceContext?: CreativeBrainSourceContext;
   recentCreativeHistory?: RecentCreativeHistory[];
   candidateCount?: number;
 };
+
+export function resolveCreativeBrainLanguageContext(input: CreativeBrainInput) {
+  return input.languageContext || resolveCreationLanguageContext(input);
+}
 
 export type CreativeBrainProviderRequest = {
   messages: Array<{ role: "system" | "user"; content: string }>;
@@ -54,7 +62,7 @@ export type CreativeBrainProvider = (request: CreativeBrainProviderRequest) => P
 
 export type OpportunityValidationIssue = {
   candidateId?: string;
-  type: "schema" | "truth" | "compliance" | "history" | "diversity" | "feasibility";
+  type: "schema" | "truth" | "compliance" | "history" | "diversity" | "feasibility" | "language";
   message: string;
 };
 
@@ -211,12 +219,13 @@ export function validateCreativeOpportunity(item: CreativeOpportunity, input: Cr
   // deliberately excluded from the claim-validation surface.
   const text = opportunityClaimText(item);
   const knowledge = productKnowledge(input);
+  const languageContext = resolveCreativeBrainLanguageContext(input);
   const context = buildKnowledgeContext({
     product: input.productContext.productName,
     sellingPoints: knowledge?.sellingPoints || "",
     audience: knowledge?.audience || "",
     country: input.market,
-    language: input.language,
+    language: languageContext.targetLanguage,
     platform: input.platform,
     offer: knowledge?.offer || "",
     productKnowledge: knowledge,
@@ -224,6 +233,20 @@ export function validateCreativeOpportunity(item: CreativeOpportunity, input: Cr
     complianceKnowledge: getGenerationComplianceKnowledge(),
   });
   const issues: OpportunityValidationIssue[] = [];
+  if (input.languageContext || input.workspaceLanguage || input.targetLanguage) {
+    const fields = [
+      { path: "targetAudience", text: item.targetAudience }, { path: "useMoment", text: item.useMoment },
+      { path: "purchaseMotivation", text: item.purchaseMotivation }, { path: "tensionOrObjection", text: item.tensionOrObjection },
+      { path: "opportunity", text: item.opportunity }, ...item.contentMechanisms.map((text, index) => ({ path: `contentMechanisms.${index}`, text })),
+      { path: "creativeAngle", text: item.creativeAngle }, { path: "hookMechanism", text: item.hookMechanism },
+      { path: "hookLine", text: item.hookLine }, ...Object.entries(item.openingVisual).map(([key, text]) => ({ path: `openingVisual.${key}`, text })),
+      { path: "evidenceStrategy.objective", text: item.evidenceStrategy.objective },
+      ...item.evidenceStrategy.visualEvidence.map((text, index) => ({ path: `evidenceStrategy.visualEvidence.${index}`, text })),
+      { path: "creatorPersona", text: item.creatorPersona }, { path: "contentFormat", text: item.contentFormat },
+      { path: "ctaDirection", text: item.ctaDirection }, ...item.riskNotes.map((text, index) => ({ path: `riskNotes.${index}`, text })),
+    ];
+    for (const mismatch of validateInternalCreativeLanguage(fields, languageContext.workspaceLanguage)) issues.push({ candidateId: item.id, type: "language", message: `${mismatch.code}:${mismatch.path}` });
+  }
   for (const violation of findFactViolations(text, context)) issues.push({ candidateId: item.id, type: "truth", message: violation });
   for (const hit of checkCompliance(text).filter((entry) => entry.level === "高")) issues.push({ candidateId: item.id, type: "compliance", message: `${hit.category}:${hit.term}` });
   const unsupportedMedical = /(?:治愈|治疗|根治|修复疾病|杀菌|抗菌|cure|treat|heals?|kills? bacteria|medical(?:ly)? proven)/iu;
@@ -273,10 +296,12 @@ export function assessOpportunityDiversity(items: CreativeOpportunity[]) {
 
 export function buildCreativeContext(input: CreativeBrainInput) {
   const count = Math.min(5, Math.max(3, input.candidateCount || 5));
+  const languageContext = resolveCreativeBrainLanguageContext(input);
   return {
     projectId: input.projectId,
     productTruth: { productName: input.productContext.productName, profileId: input.productContext.profileId, ...(productKnowledge(input) || {}) },
-    market: { country: input.market, language: input.language, platform: input.platform },
+    market: { country: languageContext.market, targetLanguage: languageContext.targetLanguage, platform: languageContext.platform },
+    workspaceLanguage: languageContext.workspaceLanguage,
     preferences: input.preferences || {},
     sourceContext: input.sourceContext || null,
     recentCreativeHistory: (input.recentCreativeHistory || []).slice(0, 6),
@@ -295,7 +320,7 @@ export function creativeBrainMessages(input: CreativeBrainInput, repair?: Creati
   const preferenceRule = "Preferences are steering signals, not hard templates. Consider them seriously, but propose a stronger direction when product truth and audience insight support it.";
   const repairInstruction = repair ? `\nThis is the only repair attempt. Return exactly ${repair.missingCount} replacement opportunities, not the complete set. Preserve these already-valid opportunities without repeating their directions: ${JSON.stringify(repair.preserved)}. Address these validation and diversity issues: ${JSON.stringify(repair.issues)}. Avoid the preserved creative angles, mechanisms, hook mechanisms, opening visuals, evidence strategies, and use moments. Use new unique IDs.` : "";
   return [
-    { role: "system" as const, content: `You are ViralFlow Creative Brain. You are not writing the final script or a scene list. You decide creative strategy. For each opportunity determine WHO, WHEN, WHY THEY CARE, the tension, the watchable content mechanism, what viewers SEE first, what they HEAR or READ first, believable evidence or experience, and the direction toward action. Hook line and Opening Visual are separate. Opening Visual must name a concrete subject, setup, action, and optional visible change/question that a small production team can shoot. Do not invent product parameters, effects, prices, offers, certifications, medical benefits, test results, reviews, or third-party access. Do not default every candidate to Problem → Product → Demo → CTA. Category is context only; never map a category to a fixed hook, framework, or evidence type. Generate structurally distinct directions, not paraphrases. Use one to three relevant truths per direction instead of listing every selling point. CTA Direction is strategy, not final CTA copy. riskNotes may be empty and must only contain real risks. ${preferenceRule} Return strict JSON only: {"opportunities":[{"id":"A","targetAudience":"","useMoment":"","purchaseMotivation":"","tensionOrObjection":"","opportunity":"","contentMechanisms":[""],"creativeAngle":"","hookMechanism":"","hookLine":"","openingVisual":{"subject":"","setup":"","action":"","visibleChangeOrQuestion":""},"evidenceStrategy":{"type":"observable-demonstration|application|before-after|sensory|fit-movement|preparation|reaction|routine-context|comparison|education|testimonial|none-required","objective":"","visualEvidence":[""],"limitations":[""]},"creatorPersona":"","contentFormat":"","ctaDirection":"","riskNotes":[]}]}${repairInstruction}` },
+    { role: "system" as const, content: `You are ViralFlow Creative Brain for a Chinese-speaking production team. Return every human-readable creative strategy field in Simplified Chinese. targetLanguage and market describe the downstream audience and future localization target; do not localize the strategy into targetLanguage. You are not writing the final script or a scene list. You decide creative strategy. For each opportunity determine WHO, WHEN, WHY THEY CARE, the tension, the watchable content mechanism, what viewers SEE first, what they HEAR or READ first, believable evidence or experience, and the direction toward action. Hook line and Opening Visual are separate. Opening Visual must name a concrete subject, setup, action, and optional visible change/question that a small production team can shoot. Do not invent product parameters, effects, prices, offers, certifications, medical benefits, test results, reviews, or third-party access. Do not default every candidate to Problem → Product → Demo → CTA. Category is context only; never map a category to a fixed hook, framework, or evidence type. Generate structurally distinct directions, not paraphrases. Use one to three relevant truths per direction instead of listing every selling point. CTA Direction is strategy, not final CTA copy. riskNotes may be empty and must only contain real risks. ${preferenceRule} Return strict JSON only: {"opportunities":[{"id":"A","targetAudience":"","useMoment":"","purchaseMotivation":"","tensionOrObjection":"","opportunity":"","contentMechanisms":[""],"creativeAngle":"","hookMechanism":"","hookLine":"","openingVisual":{"subject":"","setup":"","action":"","visibleChangeOrQuestion":""},"evidenceStrategy":{"type":"observable-demonstration|application|before-after|sensory|fit-movement|preparation|reaction|routine-context|comparison|education|testimonial|none-required","objective":"","visualEvidence":[""],"limitations":[""]},"creatorPersona":"","contentFormat":"","ctaDirection":"","riskNotes":[]}]}${repairInstruction}` },
     { role: "user" as const, content: JSON.stringify(context) },
   ];
 }
