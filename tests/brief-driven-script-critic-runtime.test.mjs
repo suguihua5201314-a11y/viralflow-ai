@@ -35,18 +35,20 @@ function brief(productContext = context(), overrides = {}) {
 
 function draft(overrides = {}) {
   return {
-    title: "An everyday viewpoint",
-    hook: { line: "What changes when the viewpoint moves?", openingVisualExecution: "The same product is shown as the viewpoint shifts." },
+    title: "邻座视角观察",
+    hook: { line: "手机转向侧面时，画面会有什么变化？", openingVisualExecution: "同一部手机从正面缓慢转到侧面。" },
     scenes: [
-      { id: "hook", purpose: "hook", visual: "The product fills the first frame.", action: "Shift the viewpoint while keeping the setting unchanged.", dialogue: "What changes when the viewpoint moves?", durationHint: 3, briefTrace: { executesOpeningVisual: true } },
-      { id: "context", purpose: "context", visual: "The product stays in an ordinary commute setting.", action: "Keep the action continuous.", dialogue: "This is the everyday situation I wanted to check.", durationHint: 4 },
-      { id: "product", purpose: "product", visual: "The product and alignment applicator appear together.", action: "Use the alignment applicator in one clear motion.", dialogue: "The alignment applicator helps with placement.", durationHint: 4 },
-      { id: "evidence", purpose: "evidence", visual: "The use is visible without a cut.", action: "Show the ordinary result under the same conditions.", dialogue: "Here is the same use from the second viewpoint.", durationHint: 5, evidenceRole: "routine-context", briefTrace: { executesEvidence: true } },
-      { id: "cta", purpose: "cta", visual: "The compatibility information is visible.", action: "Point to the compatible model information.", dialogue: "Check which option matches your product.", durationHint: 4, briefTrace: { executesCTA: true } },
+      { id: "hook", purpose: "hook", visual: "通勤座位上的手机占满首帧。", action: "保持环境不变，将视角从正面移向侧面。", dialogue: "手机转向侧面时，画面会有什么变化？", evidenceRole: "建立视觉问题", durationHint: 3, briefTrace: { executesOpeningVisual: true } },
+      { id: "context", purpose: "context", visual: "手机旁边坐着一位通勤乘客。", action: "保持手机位置不变。", dialogue: "这是邻座在日常通勤中的观看角度。", evidenceRole: "交代使用场景", durationHint: 4 },
+      { id: "product", purpose: "product", visual: "手机与对位安装器同时出现。", action: "用对位安装器完成一次清晰操作。", dialogue: "对位安装器可以辅助安装。", evidenceRole: "连接产品事实", durationHint: 4 },
+      { id: "evidence", purpose: "evidence", visual: "同一镜头连续展示正面和侧面视角。", action: "在相同光线下对比两个位置。", dialogue: "随着观看角度变化，观察屏幕可见范围。", durationHint: 5, evidenceRole: "日常场景观察", briefTrace: { executesEvidence: true } },
+      { id: "cta", purpose: "cta", visual: "手机型号与包装信息同时出现。", action: "指向适配型号信息。", dialogue: "可以先确认适合自己手机的型号。", evidenceRole: "承接行动方向", durationHint: 4, briefTrace: { executesCTA: true } },
     ],
-    fullNarration: "What changes when the viewpoint moves? This is the everyday situation I wanted to check. The alignment applicator helps with placement. Here is the same use from the second viewpoint. Check which option matches your product.",
-    cta: "Check which option matches your product.",
-    language: "English",
+    fullNarration: "手机转向侧面时，画面会有什么变化？这是邻座在日常通勤中的观看角度。对位安装器可以辅助安装。随着观看角度变化，观察屏幕可见范围。可以先确认适合自己手机的型号。",
+    cta: "可以先确认适合自己手机的型号。",
+    workspaceLanguage: "zh-CN",
+    targetLanguage: "Spanish",
+    localizationStatus: "source",
     totalDurationHint: 20,
     ...overrides,
   };
@@ -65,14 +67,25 @@ function input(overrides = {}) {
     scriptDraft: draft(),
     platform: "TikTok",
     market: "Spain",
-    language: "English",
+    languageContext: { workspaceLanguage: "zh-CN", targetLanguage: "Spanish", market: "Spain", platform: "TikTok" },
+    language: "Spanish",
     preferences: { creatorStyle: "UGC", durationPreference: 20, spokenDensity: "balanced", tone: "natural" },
     ...overrides,
   };
 }
 
-const pass = (summary = "Aligned with the selected Brief.") => ({ verdict: "pass", issues: [], summary });
-const issue = (code, target, overrides = {}) => ({ code, severity: "major", target, message: "The execution drifts from the locked Brief.", rewriteInstruction: "Correct only this localized execution issue while preserving the Brief.", deterministic: false, ...overrides });
+const targetRefFor = (target) => {
+  if (typeof target === "string") return target;
+  if (target.scope === "title" && target.field === "title") return "TITLE";
+  if (target.scope === "hook" && target.field === "line") return "HOOK_LINE";
+  if (target.scope === "hook" && target.field === "openingVisualExecution") return "HOOK_OPENING_VISUAL";
+  if (target.scope === "narration" && target.field === "fullNarration") return "FULL_NARRATION";
+  if (target.scope === "cta" && target.field === "cta") return "CTA";
+  if (target.scope === "scene" && target.sceneId && ["visual", "action", "dialogue", "evidenceRole"].includes(target.field)) return `SCENE:${encodeURIComponent(target.sceneId)}:${target.field.toUpperCase()}`;
+  return `INVALID:${JSON.stringify(target)}`;
+};
+const pass = (summary = "脚本忠实执行了选定的创意简报。") => ({ verdict: "pass", issues: [], summary });
+const issue = (code, target, overrides = {}) => ({ code, severity: "major", targetRef: targetRefFor(target), message: "当前执行偏离了锁定的创意简报。", rewriteInstruction: "只修正这个局部执行问题，并保留简报决策。", deterministic: false, ...overrides });
 const critique = (...issues) => ({ verdict: issues.some((item) => item.severity !== "minor") ? "needs_rewrite" : "pass", issues });
 const response = (value, overrides = {}) => ({ content: typeof value === "string" ? value : JSON.stringify(value), providerRequested: "deepseek", providerUsed: "deepseek", model: "configured-model", responseTimeMs: 20, ...overrides });
 
@@ -147,12 +160,12 @@ test("real invalid briefField failure repairs with the shared canonical enum wit
   assert.deepEqual(initialContract.allowedValues, runtime.CRITIC_BRIEF_FIELD_VALUES);
   assert.deepEqual(repair.allowedBriefFields, runtime.CRITIC_BRIEF_FIELD_VALUES);
   assert.deepEqual(repair.issues[0], { code: "invalid_brief_field", path: "issues.0.briefField", stage: "critic_schema" });
-  assert.match(repair.instruction, /Correct only invalid structured addresses/i);
-  assert.match(repair.instruction, /Do not add or delete issues, change critique meaning, rewrite the script/i);
+  assert.match(repair.instruction, /invalid_target_ref/);
+  assert.match(repair.instruction, /Preserve issue count, order, code, severity, critique meaning/i);
   assert.deepEqual(sourceInput, before);
 });
 
-test("invalid scene target and invalid field are rejected and repaired at most once", async () => {
+test("invalid targetRef is rejected and repaired at most once", async () => {
   const requests = [];
   const bad = critique(issue("scene_filler", { scope: "scene", sceneId: "missing", field: "dialogue" }));
   const repaired = critique(issue("scene_filler", { scope: "scene", sceneId: "context", field: "dialogue" }));
@@ -164,47 +177,55 @@ test("invalid scene target and invalid field are rejected and repaired at most o
   assert.equal(result.metadata.repairAttempted, true);
   assert.equal(requests.length, 2);
   const repair = JSON.parse(requests[1].messages[1].content).repair;
-  assert.ok(repair.issues.some((item) => item.code === "unknown_scene" && item.path === "issues.0.target.sceneId"));
-  assert.deepEqual(repair.targetAddressContract, runtime.CRITIC_TARGET_SCHEMA);
-  assert.deepEqual(repair.validSceneIds, draft().scenes.map((scene) => scene.id));
+  assert.ok(repair.issues.some((item) => item.code === "invalid_target_ref" && item.path === "issues.0.targetRef"));
+  assert.equal(repair.issues[0].rejectedTargetRef, "SCENE:missing:DIALOGUE");
+  assert.ok(repair.targetCatalog.some((item) => item.targetRef === "SCENE:context:DIALOGUE"));
 });
 
 test("canonical target schema accepts and resolves every legal address to one real Draft node", () => {
   const value = draft();
-  for (const [scope, fields] of Object.entries(runtime.CRITIC_TARGET_SCHEMA)) {
-    for (const field of fields) {
-      const target = scope === "scene" ? { scope, sceneId: "evidence", field } : { scope, field };
-      const parsed = runtime.parseScriptCriticResult(JSON.stringify(critique(issue("scene_filler", target))), value);
-      assert.equal(parsed.issues.length, 0, `${scope}.${field}`);
-      const resolved = runtime.resolveCriticTarget(value, target);
-      assert.ok(resolved, `${scope}.${field}`);
-      assert.equal(typeof resolved.value, "string");
-      assert.ok(resolved.path.length > 0);
-    }
+  const catalog = runtime.buildCriticReviewTargetCatalog(value);
+  assert.equal(new Set(catalog.map((entry) => entry.targetRef)).size, catalog.length);
+  assert.equal(catalog.filter((entry) => entry.target.scope === "scene").length, value.scenes.length * 4);
+  for (const entry of catalog) {
+    const parsed = runtime.parseScriptCriticResult(JSON.stringify(critique(issue("scene_filler", entry.targetRef))), value);
+    assert.equal(parsed.issues.length, 0, entry.targetRef);
+    assert.deepEqual(runtime.resolveCriticTargetRef(value, entry.targetRef), entry.target);
+    const resolved = runtime.resolveCriticTarget(value, entry.target);
+    assert.ok(resolved, entry.targetRef);
+    assert.equal(typeof resolved.value, "string");
+    assert.equal(resolved.path, entry.path);
   }
 });
 
-test("target scope, field and sceneId rules reject aliases and cross-scope addresses", () => {
-  const invalidTargets = [
-    { target: { scope: "hook", field: "hookLine" }, code: "invalid_target_field" },
-    { target: { scope: "hook", field: "dialogue" }, code: "invalid_target_field" },
-    { target: { scope: "scene", sceneId: "evidence", field: "line" }, code: "invalid_target_field" },
-    { target: { scope: "cta", field: "line" }, code: "invalid_target_field" },
-    { target: { scope: "narration", field: "narration" }, code: "invalid_target_field" },
-    { target: { scope: "scene", sceneId: "scene-99", field: "dialogue" }, code: "unknown_scene" },
-    { target: { scope: "cta", sceneId: "cta", field: "cta" }, code: "unexpected_scene_id" },
-  ];
-  for (const { target, code } of invalidTargets) {
-    const parsed = runtime.parseScriptCriticResult(JSON.stringify(critique(issue("scene_filler", target))), draft());
+test("wrong Critic review language repairs once without changing critique semantics", async () => {
+  const english = critique({ ...issue("weak_hook_execution", "HOOK_LINE", { briefField: "opening.hookLine" }), message: "The hook is weak.", rewriteInstruction: "Strengthen only the hook." });
+  const chinese = critique(issue("weak_hook_execution", "HOOK_LINE", { briefField: "opening.hookLine" }));
+  const requests = [];
+  const result = await runtime.generateScriptCritique(input(), async (request) => {
+    requests.push(request);
+    return response(requests.length === 1 ? english : chinese);
+  });
+  assert.equal(result.status, "success");
+  assert.equal(requests.length, 2);
+  const repair = JSON.parse(requests[1].messages[1].content).repair;
+  assert.ok(repair.issues.some((item) => item.stage === "critic_language"));
+  assert.equal(result.critique.issues[0].targetRef, "HOOK_LINE");
+  assert.equal(result.critique.issues[0].target.field, "line");
+});
+
+test("aliases and unknown scene targetRefs are rejected without guessing", () => {
+  for (const targetRef of ["openingVisual", "hookText", "sceneDialogue", "narrationText", "SCENE:scene-99:DIALOGUE"]) {
+    const parsed = runtime.parseScriptCriticResult(JSON.stringify(critique(issue("scene_filler", targetRef))), draft());
     assert.equal(parsed.value, null);
-    assert.ok(parsed.issues.some((item) => item.code === code), JSON.stringify(target));
-    assert.equal(runtime.resolveCriticTarget(draft(), target), null);
+    assert.ok(parsed.issues.some((item) => item.code === "invalid_target_ref"), targetRef);
+    assert.equal(runtime.resolveCriticTargetRef(draft(), targetRef), null);
   }
 });
 
 test("invalid target alias repairs to canonical address without changing critique semantics", async () => {
   const requests = [];
-  const invalid = critique(issue("opening_visual_mismatch", { scope: "hook", field: "openingVisual" }, { briefField: "opening.visual" }));
+  const invalid = critique(issue("opening_visual_mismatch", "openingVisual", { briefField: "opening.visual" }));
   const repaired = critique(issue("opening_visual_mismatch", { scope: "hook", field: "openingVisualExecution" }, { briefField: "opening.visual" }));
   const result = await runtime.generateScriptCritique(input(), async (request) => {
     requests.push(request);
@@ -213,8 +234,8 @@ test("invalid target alias repairs to canonical address without changing critiqu
   assert.equal(result.status, "success");
   assert.equal(result.critique.issues[0].target.field, "openingVisualExecution");
   const payload = JSON.parse(requests[1].messages[1].content);
-  assert.deepEqual(payload.targetAddressContract, runtime.CRITIC_TARGET_SCHEMA);
-  assert.deepEqual(payload.repair.targetAddressContract, runtime.CRITIC_TARGET_SCHEMA);
+  assert.ok(payload.targetCatalog.some((item) => item.targetRef === "HOOK_OPENING_VISUAL"));
+  assert.deepEqual(payload.repair.targetCatalog, payload.targetCatalog);
   assert.deepEqual(payload.repair.allowedBriefFields, runtime.CRITIC_BRIEF_FIELD_VALUES);
 });
 
@@ -267,7 +288,7 @@ test("identity and deterministic draft failures stop before the Provider", async
     input({ projectId: "project-b" }),
     input({ creativeBriefReference: { briefId: "creative-brief-a", briefRevisionId: "wrong" } }),
     input({ productContextFingerprint: "wrong" }),
-    input({ scriptDraft: draft({ language: "Spanish" }) }),
+    input({ scriptDraft: draft({ title: "English source title" }) }),
   ]) {
     let calls = 0;
     const result = await runtime.generateScriptCritique(invalid, async () => { calls += 1; return response(pass()); });

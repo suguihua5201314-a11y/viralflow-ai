@@ -46,7 +46,8 @@ function input(overrides = {}) {
     productContextFingerprint: selection.productContextFingerprint(productContext),
     platform: "TikTok",
     market: "Spain",
-    language: "English",
+    languageContext: { workspaceLanguage: "zh-CN", targetLanguage: "Spanish", market: "Spain", platform: "TikTok" },
+    language: "Spanish",
     preferences: { durationSeconds: 20, creatorStyle: "UGC", spokenDensity: "balanced", toneSteering: "natural", variantCount: 1 },
     ...overrides,
   };
@@ -54,18 +55,20 @@ function input(overrides = {}) {
 
 function draft(overrides = {}) {
   return {
-    title: "An everyday viewpoint",
-    hook: { line: "What changes when the viewpoint moves?", openingVisualExecution: "The same product is shown as the viewpoint shifts." },
+    title: "邻座视角观察",
+    hook: { line: "手机转向侧面时，画面会有什么变化？", openingVisualExecution: "同一部手机从正面缓慢转到侧面。" },
     scenes: [
-      { id: "hook", purpose: "hook", visual: "The product fills the first frame.", action: "Shift the viewpoint while keeping the setting unchanged.", dialogue: "What changes when the viewpoint moves?", durationHint: 3, briefTrace: { executesOpeningVisual: true } },
-      { id: "context", purpose: "context", visual: "The product stays in an ordinary commute setting.", action: "Keep the action continuous.", dialogue: "This is the everyday situation I wanted to check.", durationHint: 4 },
-      { id: "product", purpose: "product", visual: "The product and alignment applicator appear together.", action: "Use the alignment applicator in one clear motion.", dialogue: "The alignment applicator helps with placement.", durationHint: 4 },
-      { id: "evidence", purpose: "evidence", visual: "The use is visible without a cut.", action: "Show the ordinary result under the same conditions.", dialogue: "Here is the same use from the second viewpoint.", durationHint: 5, evidenceRole: "routine-context", briefTrace: { executesEvidence: true } },
-      { id: "cta", purpose: "cta", visual: "The compatibility information is visible.", action: "Point to the compatible model information.", dialogue: "Check which option matches your product.", durationHint: 4, briefTrace: { executesCTA: true } },
+      { id: "hook", purpose: "hook", visual: "通勤座位上的手机占满首帧。", action: "保持环境不变，将视角从正面移向侧面。", dialogue: "手机转向侧面时，画面会有什么变化？", evidenceRole: "建立视觉问题", durationHint: 3, briefTrace: { executesOpeningVisual: true } },
+      { id: "context", purpose: "context", visual: "手机旁边坐着一位通勤乘客。", action: "保持手机位置不变。", dialogue: "这是邻座在日常通勤中的观看角度。", evidenceRole: "交代使用场景", durationHint: 4 },
+      { id: "product", purpose: "product", visual: "手机与对位安装器同时出现。", action: "用对位安装器完成一次清晰操作。", dialogue: "对位安装器可以辅助安装。", evidenceRole: "连接产品事实", durationHint: 4 },
+      { id: "evidence", purpose: "evidence", visual: "同一镜头连续展示正面和侧面视角。", action: "在相同光线下对比两个位置。", dialogue: "随着观看角度变化，观察屏幕可见范围。", durationHint: 5, evidenceRole: "日常场景观察", briefTrace: { executesEvidence: true } },
+      { id: "cta", purpose: "cta", visual: "手机型号与包装信息同时出现。", action: "指向适配型号信息。", dialogue: "可以先确认适合自己手机的型号。", evidenceRole: "承接行动方向", durationHint: 4, briefTrace: { executesCTA: true } },
     ],
-    fullNarration: "What changes when the viewpoint moves? This is the everyday situation I wanted to check. The alignment applicator helps with placement. Here is the same use from the second viewpoint. Check which option matches your product.",
-    cta: "Check which option matches your product.",
-    language: "English",
+    fullNarration: "手机转向侧面时，画面会有什么变化？这是邻座在日常通勤中的观看角度。对位安装器可以辅助安装。随着观看角度变化，观察屏幕可见范围。可以先确认适合自己手机的型号。",
+    cta: "可以先确认适合自己手机的型号。",
+    workspaceLanguage: "zh-CN",
+    targetLanguage: "Spanish",
+    localizationStatus: "source",
     totalDurationHint: 20,
     ...overrides,
   };
@@ -84,6 +87,17 @@ test("valid input reaches the mock Provider and returns a bound StructuredScript
   assert.equal(result.metadata.fallbackUsed, false);
 });
 
+test("Spanish, English and French targets all produce the same Chinese source contract", async () => {
+  for (const targetLanguage of ["Spanish", "English", "French"]) {
+    const languageContext = { workspaceLanguage: "zh-CN", targetLanguage, market: "Spain", platform: "TikTok" };
+    const result = await runtime.generateBriefDrivenScript(input({ languageContext }), async () => response(draft({ targetLanguage })));
+    assert.equal(result.status, "success", targetLanguage);
+    assert.equal(result.draft.workspaceLanguage, "zh-CN");
+    assert.equal(result.draft.localizationStatus, "source");
+    assert.equal(result.script.language, "zh-CN");
+  }
+});
+
 test("foreign Project, wrong Brief revision and Product fingerprint stop before Provider", async () => {
   for (const invalid of [
     input({ projectId: "project-b" }),
@@ -99,11 +113,11 @@ test("foreign Project, wrong Brief revision and Product fingerprint stop before 
 });
 
 test("market, language, platform and expression preferences are validated before Provider", async () => {
-  const invalid = input({ market: "France", language: "", platform: "", preferences: { durationSeconds: 500, spokenDensity: "extreme", variantCount: 2 } });
+  const invalid = input({ market: "France", languageContext: { workspaceLanguage: "zh-CN", targetLanguage: "", market: "", platform: "" }, preferences: { durationSeconds: 500, spokenDensity: "extreme", variantCount: 2 } });
   let calls = 0;
   const result = await runtime.generateBriefDrivenScript(invalid, async () => { calls += 1; return response(draft()); });
   assert.equal(calls, 0);
-  for (const code of ["market_mismatch", "missing_language", "missing_platform", "invalid_duration_preference", "invalid_variant_count", "invalid_spoken_density"]) assert.ok(result.issues.some((item) => item.code === code), code);
+  for (const code of ["market_mismatch", "missing_target_language", "missing_platform", "invalid_duration_preference", "invalid_variant_count", "invalid_spoken_density"]) assert.ok(result.issues.some((item) => item.code === code), code);
 });
 
 test("prompt has layered locked Brief, canonical truth, preferences and output contract", () => {
@@ -135,6 +149,12 @@ test("valid fenced JSON is accepted without normalizing invalid output", async (
   assert.deepEqual(result.draft, draft());
 });
 
+test("new Writer output rejects the ambiguous legacy language field", async () => {
+  const result = await runtime.generateBriefDrivenScript(input(), async () => response({ ...draft(), language: "Spanish" }));
+  assert.equal(result.status, "failure");
+  assert.ok(result.issues.some((item) => item.code === "unexpected_legacy_language" && item.path === "language"));
+});
+
 test("malformed JSON repairs once with structured code and path context", async () => {
   const requests = [];
   const result = await runtime.generateBriefDrivenScript(input(), async (request) => {
@@ -152,7 +172,7 @@ test("missing trace, invalid purpose and language mismatch share one constrained
   for (const broken of [
     (() => { const value = draft(); delete value.scenes[0].briefTrace; return value; })(),
     (() => { const value = draft(); value.scenes[1].purpose = "director"; return value; })(),
-    draft({ language: "Spanish" }),
+    draft({ workspaceLanguage: "en-US" }),
   ]) {
     let calls = 0;
     const result = await runtime.generateBriefDrivenScript(input(), async () => { calls += 1; return response(calls === 1 ? broken : draft()); });
@@ -162,8 +182,8 @@ test("missing trace, invalid purpose and language mismatch share one constrained
   }
 });
 
-test("wrong consumer language receives one constrained repair and remains explicit when repair is still wrong", async () => {
-  const wrongLanguage = draft({ language: "Spanish" });
+test("wrong source language receives one constrained repair and remains explicit when repair is still wrong", async () => {
+  const wrongLanguage = draft({ title: "English title", hook: { line: "English hook", openingVisualExecution: "English visual" } });
   const requests = [];
   const repaired = await runtime.generateBriefDrivenScript(input(), async (request) => {
     requests.push(request);
@@ -172,15 +192,15 @@ test("wrong consumer language receives one constrained repair and remains explic
   assert.equal(repaired.status, "success");
   assert.equal(requests.length, 2);
   const repair = JSON.parse(requests[1].messages[1].content).repair;
-  assert.ok(repair.issues.some((item) => item.code === "language_mismatch" && item.path === "language"));
-  assert.match(repair.instruction, /consumer-facing hook, dialogue, narration, and CTA/);
+  assert.ok(repair.issues.some((item) => item.code === "internal_language_mismatch"));
+  assert.match(repair.instruction, /Simplified Chinese/);
 
   let calls = 0;
   const failed = await runtime.generateBriefDrivenScript(input(), async () => { calls += 1; return response(wrongLanguage); });
   assert.equal(calls, 2);
   assert.equal(failed.status, "failure");
   assert.equal(failed.metadata.errorType, "repair_failed");
-  assert.ok(failed.issues.some((item) => item.code === "language_mismatch"));
+  assert.ok(failed.issues.some((item) => item.code === "internal_language_mismatch"));
 });
 
 test("claim-safety failures receive at most one constrained repair", async () => {

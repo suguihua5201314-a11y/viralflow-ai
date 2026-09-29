@@ -1,6 +1,7 @@
 import {
   deriveBriefLockedDecisions,
   parseScriptDraftV2,
+  resolveScriptWriterLanguageContext,
   CRITIC_BRIEF_FIELD_VALUES,
   CRITIC_TARGET_SCHEMA,
   validateScriptDraftDeterministically,
@@ -14,6 +15,7 @@ import { validateBriefDrivenWriterInput } from "./brief-driven-script-writer";
 import type { CreativeBriefV2 } from "./creative-contract";
 import type { CanonicalProductContext } from "./product-context";
 import type { ProviderErrorType, ProviderId } from "./provider-types";
+import { validateInternalCreativeLanguage, type CreationLanguageContext } from "./creation-language-context";
 
 export { CRITIC_BRIEF_FIELD_VALUES, CRITIC_TARGET_SCHEMA } from "./brief-driven-script";
 
@@ -27,7 +29,10 @@ export type ScriptCriticInput = {
   scriptDraft: ScriptDraftV2;
   platform: string;
   market: string;
-  language: string;
+  languageContext?: CreationLanguageContext;
+  language?: string;
+  workspaceLanguage?: "zh-CN";
+  targetLanguage?: string;
   preferences?: {
     creatorStyle?: string;
     durationPreference?: number;
@@ -45,7 +50,8 @@ export type ScriptCriticResult = {
 export type ScriptCriticValidationIssue = {
   code: string;
   path?: string;
-  stage: "input_validation" | "critic_json_parse" | "critic_schema" | "critic_target";
+  rejectedTargetRef?: string;
+  stage: "input_validation" | "critic_json_parse" | "critic_schema" | "critic_target" | "critic_language";
   validator: string;
 };
 
@@ -87,7 +93,7 @@ export type BriefAwareScriptCriticResponse = {
 export type ScriptCriticObservation = {
   correlationId: string;
   attempt: number;
-  stage: "input_validation" | "provider_transport" | "provider_http" | "provider_parse" | "critic_json_parse" | "critic_schema" | "critic_target" | "repair_failed" | "completed";
+  stage: "input_validation" | "provider_transport" | "provider_http" | "provider_parse" | "critic_json_parse" | "critic_schema" | "critic_target" | "critic_language" | "repair_failed" | "completed";
   provider?: ProviderId | null;
   model?: string | null;
   latencyMs?: number | null;
@@ -114,12 +120,10 @@ const criticCodes = new Set<BriefAwareCriticIssueCode>([
   "cta_too_hard", "cta_unsupported_claim",
 ]);
 const severities = new Set(["critical", "major", "minor"]);
-const scopes = new Set(Object.keys(CRITIC_TARGET_SCHEMA));
 const fieldsByScope = Object.fromEntries(Object.entries(CRITIC_TARGET_SCHEMA).map(([scope, fields]) => [scope, new Set(fields)])) as Record<CriticIssueTarget["scope"], Set<string>>;
 const briefFields = new Set<string>(CRITIC_BRIEF_FIELD_VALUES);
 const topFields = new Set(["verdict", "issues", "summary"]);
-const issueFields = new Set(["code", "severity", "target", "message", "rewriteInstruction", "deterministic", "briefField"]);
-const targetFields = new Set(["scope", "sceneId", "field"]);
+const issueFields = new Set(["code", "severity", "targetRef", "message", "rewriteInstruction", "deterministic", "briefField"]);
 const isRecord = (value: unknown): value is Record<string, unknown> => Boolean(value) && typeof value === "object" && !Array.isArray(value);
 const isText = (value: unknown): value is string => typeof value === "string" && Boolean(value.trim());
 const validationIssue = (code: string, stage: ScriptCriticValidationIssue["stage"], path?: string): ScriptCriticValidationIssue => ({ code, ...(path ? { path } : {}), stage, validator: stage === "input_validation" ? "validateScriptCriticInput" : "parseScriptCriticResult" });
@@ -135,6 +139,9 @@ function writerInput(input: ScriptCriticInput): ScriptWriterInput {
     platform: input.platform,
     market: input.market,
     language: input.language,
+    languageContext: input.languageContext,
+    workspaceLanguage: input.workspaceLanguage,
+    targetLanguage: input.targetLanguage,
     preferences: {
       creatorStyle: input.preferences?.creatorStyle,
       durationSeconds: input.preferences?.durationPreference,
@@ -143,6 +150,33 @@ function writerInput(input: ScriptCriticInput): ScriptWriterInput {
       variantCount: 1,
     },
   };
+}
+
+export type CriticReviewTarget = { targetRef: string; target: CriticIssueTarget; path: string };
+
+const fixedTargets: Array<[string, CriticIssueTarget, string]> = [
+  ["TITLE", { scope: "title", field: "title" }, "title"],
+  ["HOOK_LINE", { scope: "hook", field: "line" }, "hook.line"],
+  ["HOOK_OPENING_VISUAL", { scope: "hook", field: "openingVisualExecution" }, "hook.openingVisualExecution"],
+  ["FULL_NARRATION", { scope: "narration", field: "fullNarration" }, "fullNarration"],
+  ["CTA", { scope: "cta", field: "cta" }, "cta"],
+];
+const sceneTargetRef = (sceneId: string, field: "visual" | "action" | "dialogue" | "evidenceRole") => `SCENE:${encodeURIComponent(sceneId)}:${field.toUpperCase()}`;
+
+export function buildCriticReviewTargetCatalog(draft: ScriptDraftV2): CriticReviewTarget[] {
+  const catalog = fixedTargets.map(([targetRef, target, path]) => ({ targetRef, target, path }));
+  draft.scenes.forEach((scene, index) => {
+    for (const field of CRITIC_TARGET_SCHEMA.scene) {
+      if (typeof scene[field] !== "string") continue;
+      catalog.push({ targetRef: sceneTargetRef(scene.id, field), target: { scope: "scene", sceneId: scene.id, field }, path: `scenes.${index}.${field}` });
+    }
+  });
+  return catalog;
+}
+
+export function resolveCriticTargetRef(draft: ScriptDraftV2, targetRef: string): CriticIssueTarget | null {
+  const matches = buildCriticReviewTargetCatalog(draft).filter((entry) => entry.targetRef === targetRef);
+  return matches.length === 1 ? structuredClone(matches[0].target) : null;
 }
 
 export function validateScriptCriticInput(input: ScriptCriticInput): ScriptCriticValidationIssue[] {
@@ -175,7 +209,7 @@ export function parseScriptCriticResult(content: string, draft: ScriptDraftV2): 
   if (!Array.isArray(parsed.issues)) issues.push(validationIssue("invalid_type", "critic_schema", "issues"));
   else {
     if (parsed.issues.length > SCRIPT_CRITIC_BUDGET.maximumIssues) issues.push(validationIssue("too_many_issues", "critic_schema", "issues"));
-    const sceneIds = new Set(draft.scenes.map((scene) => scene.id));
+    const normalizedIssues: CriticIssue[] = [];
     parsed.issues.forEach((raw, index) => {
       const base = `issues.${index}`;
       if (!isRecord(raw)) { issues.push(validationIssue("invalid_type", "critic_schema", base)); return; }
@@ -186,16 +220,26 @@ export function parseScriptCriticResult(content: string, draft: ScriptDraftV2): 
       if (!isText(raw.rewriteInstruction)) issues.push(validationIssue("invalid_type", "critic_schema", `${base}.rewriteInstruction`));
       if (raw.deterministic !== false) issues.push(validationIssue("invalid_deterministic_flag", "critic_schema", `${base}.deterministic`));
       if (raw.briefField !== undefined && !briefFields.has(raw.briefField as string)) issues.push(validationIssue("invalid_brief_field", "critic_schema", `${base}.briefField`));
-      if (!isRecord(raw.target)) { issues.push(validationIssue("invalid_target", "critic_target", `${base}.target`)); return; }
-      unexpected(raw.target, targetFields, `${base}.target`, issues);
-      const scope = raw.target.scope as CriticIssueTarget["scope"];
-      if (!scopes.has(scope)) { issues.push(validationIssue("invalid_target_scope", "critic_target", `${base}.target.scope`)); return; }
-      if (scope === "scene") {
-        if (!isText(raw.target.sceneId) || !sceneIds.has(raw.target.sceneId)) issues.push(validationIssue("unknown_scene", "critic_target", `${base}.target.sceneId`));
-      } else if (raw.target.sceneId !== undefined) issues.push(validationIssue("unexpected_scene_id", "critic_target", `${base}.target.sceneId`));
-      if (!isText(raw.target.field) || !fieldsByScope[scope].has(raw.target.field)) issues.push(validationIssue("invalid_target_field", "critic_target", `${base}.target.field`));
+      const target = isText(raw.targetRef) ? resolveCriticTargetRef(draft, raw.targetRef) : null;
+      if (!target) {
+        const invalid = validationIssue("invalid_target_ref", "critic_target", `${base}.targetRef`);
+        if (isText(raw.targetRef) && raw.targetRef.length <= 200 && /^[A-Za-z0-9:_%.\-]+$/.test(raw.targetRef)) invalid.rejectedTargetRef = raw.targetRef;
+        issues.push(invalid);
+      }
+      else normalizedIssues.push({ ...(raw as Omit<CriticIssue, "target">), targetRef: raw.targetRef as string, target } as CriticIssue);
     });
     if (parsed.verdict === "pass" && parsed.issues.some((item) => isRecord(item) && item.severity !== "minor")) issues.push(validationIssue("pass_has_blocking_issue", "critic_schema", "verdict"));
+    if (!issues.length) {
+      const languageFields = [
+        ...(isText(parsed.summary) ? [{ path: "summary", text: parsed.summary }] : []),
+        ...normalizedIssues.flatMap((item, index) => [
+          { path: `issues.${index}.message`, text: item.message },
+          { path: `issues.${index}.rewriteInstruction`, text: item.rewriteInstruction },
+        ]),
+      ];
+      for (const mismatch of validateInternalCreativeLanguage(languageFields, "zh-CN")) issues.push(validationIssue(mismatch.code, "critic_language", mismatch.path));
+    }
+    if (!issues.length) parsed.issues = normalizedIssues;
   }
   return issues.length ? { value: null, issues } : { value: structuredClone(parsed as ScriptCriticResult), issues: [] };
 }
@@ -235,7 +279,8 @@ export const SCRIPT_CRITIC_SYSTEM_PROMPT = [
   "The LOCKED CREATIVE BRIEF is authoritative for audience, moment, motivation, angle, mechanism, hook intent, opening visual, evidence strategy, CTA direction, and risk boundaries.",
   "Evaluate semantic Brief fidelity, hook and opening-visual execution, evidence observability, visual/action/dialogue coherence, UGC spoken naturalness, repetition, pacing, filmability, CTA coherence, and semantic truth/compliance risk.",
   "Do not report deterministic schema, trace, identity, language-field, numeric, or literal banned-claim checks already enforced by code. Do not score, rank, rewrite, or return replacement copy.",
-  "For target, use the exact supplied targetAddressContract. Do not invent aliases, semantic synonyms, field names, or scene IDs. A scene target requires one exact supplied scene ID; every non-scene target must omit sceneId.",
+  "Write every issue message, rewriteInstruction, and summary in Simplified Chinese. Review the Chinese source Script; do not evaluate future target-language localization quality.",
+  "For targetRef, select one exact value from the supplied targetCatalog. Do not invent aliases, semantic synonyms, field names, or scene IDs.",
   "For briefField, use one exact value from the supplied allowedBriefFields list, or omit briefField when the issue is not tied to one locked Brief decision. Never invent aliases or alternate naming.",
   "Return exactly one JSON object containing verdict, at most 8 actionable issues, and an optional summary. Use only the supplied stable issue codes, severities, targets, and existing scene IDs.",
 ].join(" ");
@@ -244,20 +289,19 @@ const outputContract = {
   verdict: "pass | needs_rewrite",
   issues: [{
     code: [...criticCodes], severity: "critical | major | minor",
-    target: { scope: "exact key from targetAddressContract", sceneId: "required only for scene and must equal one validSceneId", field: "exact value from targetAddressContract[scope]" },
-    message: "concise diagnosis", rewriteInstruction: "localized correction instruction, not replacement copy", deterministic: false,
+    targetRef: "one exact targetRef from targetCatalog",
+    message: "concise Chinese diagnosis", rewriteInstruction: "Chinese correction instruction, not replacement copy", deterministic: false,
     briefField: { optional: true, allowedValues: CRITIC_BRIEF_FIELD_VALUES, instruction: "use one exact value or omit" },
   }],
   summary: "optional concise summary",
 };
 
 export function buildScriptCriticMessages(input: ScriptCriticInput, repairIssues: ScriptCriticValidationIssue[] = []) {
-  const validSceneIds = input.scriptDraft.scenes.map((scene) => scene.id);
+  const targetCatalog = buildCriticReviewTargetCatalog(input.scriptDraft).map(({ targetRef, path }) => ({ targetRef, path }));
   const repair = repairIssues.length ? {
-    instruction: "Return only the corrected critique JSON object. Correct only invalid structured addresses or briefField values. Preserve issue count, order, code, severity, message, rewriteInstruction, deterministic flag, verdict, and summary. Do not add or delete issues, change critique meaning, rewrite the script, or change the Brief or Product Truth. Use only exact targetAddressContract fields and current validSceneIds. For invalid_brief_field, use one exact allowedBriefFields value or omit briefField.",
-    issues: repairIssues.map(({ code, path, stage }) => ({ code, ...(path ? { path } : {}), stage })),
-    targetAddressContract: CRITIC_TARGET_SCHEMA,
-    validSceneIds,
+    instruction: "Return only the corrected critique JSON object. For invalid_target_ref, replace only targetRef with one exact supplied targetCatalog value. For invalid_brief_field, use one exact allowedBriefFields value or omit it. For internal_language_mismatch, re-express only the indicated message, rewriteInstruction, or summary in Simplified Chinese. Preserve issue count, order, code, severity, critique meaning, deterministic flag, verdict, Brief relationship, and every already-valid field. Do not rewrite the Script, Brief, or Product Truth.",
+    issues: repairIssues.map(({ code, path, stage, rejectedTargetRef }) => ({ code, ...(path ? { path } : {}), stage, ...(rejectedTargetRef ? { rejectedTargetRef } : {}) })),
+    targetCatalog,
     allowedBriefFields: CRITIC_BRIEF_FIELD_VALUES,
   } : undefined;
   return [
@@ -266,10 +310,9 @@ export function buildScriptCriticMessages(input: ScriptCriticInput, repairIssues
       task: "Critique this draft against its locked Creative Brief without rewriting it",
       lockedCreativeBrief: deriveBriefLockedDecisions(input.creativeBrief),
       canonicalProductTruth: compactProductTruth(input),
-      context: { platform: input.platform, market: input.market, language: input.language, preferences: input.preferences || {} },
+      languageContext: resolveScriptWriterLanguageContext(writerInput(input)),
       scriptDraft: input.scriptDraft,
-      targetAddressContract: CRITIC_TARGET_SCHEMA,
-      validSceneIds,
+      targetCatalog,
       allowedBriefFields: CRITIC_BRIEF_FIELD_VALUES,
       outputContract,
       ...(repair ? { repair } : {}),
@@ -277,16 +320,16 @@ export function buildScriptCriticMessages(input: ScriptCriticInput, repairIssues
   ];
 }
 
-function repairSemanticSignature(content: string) {
+function repairSemanticSignature(content: string, includeLanguageText = true) {
   try {
     const parsed = JSON.parse(content.trim().replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/i, ""));
     if (!isRecord(parsed) || !Array.isArray(parsed.issues)) return null;
     const signatureIssues = parsed.issues.map((item) => {
       if (!isRecord(item)) return null;
-      return { code: item.code, severity: item.severity, message: item.message, rewriteInstruction: item.rewriteInstruction, deterministic: item.deterministic };
+      return { code: item.code, severity: item.severity, ...(includeLanguageText ? { message: item.message, rewriteInstruction: item.rewriteInstruction } : {}), deterministic: item.deterministic };
     });
     if (signatureIssues.some((item) => item === null)) return null;
-    return JSON.stringify({ verdict: parsed.verdict, summary: parsed.summary, issues: signatureIssues });
+    return JSON.stringify({ verdict: parsed.verdict, ...(includeLanguageText ? { summary: parsed.summary } : {}), issues: signatureIssues });
   } catch { return null; }
 }
 
@@ -326,6 +369,7 @@ export async function generateScriptCritique(
 
   let parseIssues: ScriptCriticValidationIssue[] = [];
   let repairSignature: string | null = null;
+  let languageRepair = false;
   for (let attempt = 0; attempt < SCRIPT_CRITIC_BUDGET.maximumProviderAttempts; attempt++) {
     let response: ScriptCriticProviderResponse;
     try {
@@ -347,7 +391,7 @@ export async function generateScriptCritique(
     resultMetadata.latencyMs = (resultMetadata.latencyMs || 0) + response.responseTimeMs;
     const parsed = parseScriptCriticResult(response.content, input.scriptDraft);
     if (parsed.value) {
-      if (attempt > 0 && repairSignature && repairSemanticSignature(response.content) !== repairSignature) {
+      if (attempt > 0 && repairSignature && repairSemanticSignature(response.content, !languageRepair) !== repairSignature) {
         parseIssues = [validationIssue("repair_changed_critique", "critic_schema", "issues")];
         options.observe?.({ correlationId, attempt: attempt + 1, stage: "critic_schema", provider: response.providerUsed, model: response.model, latencyMs: response.responseTimeMs, repairAttempted: resultMetadata.repairAttempted, issueCount: 1, issues: parseIssues });
         continue;
@@ -356,7 +400,10 @@ export async function generateScriptCritique(
       return { status: "success", critique: parsed.value, metadata: resultMetadata, validationIssues: [] };
     }
     parseIssues = parsed.issues;
-    if (attempt === 0) repairSignature = repairSemanticSignature(response.content);
+    if (attempt === 0) {
+      languageRepair = parseIssues.some((item) => item.stage === "critic_language");
+      repairSignature = repairSemanticSignature(response.content, !languageRepair);
+    }
     const stage = parseIssues[0]?.stage || "critic_schema";
     options.observe?.({ correlationId, attempt: attempt + 1, stage, provider: response.providerUsed, model: response.model, latencyMs: response.responseTimeMs, repairAttempted: resultMetadata.repairAttempted, issueCount: parseIssues.length, issues: parseIssues });
     if (attempt === 0) { resultMetadata.repairAttempted = true; continue; }

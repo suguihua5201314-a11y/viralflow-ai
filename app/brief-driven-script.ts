@@ -5,7 +5,8 @@ import { checkCompliance } from "./compliance-rules";
 import { buildKnowledgeContext, findFactViolations } from "./knowledge-context";
 import type { StructuredScript } from "./script-generation";
 import { bindScriptToCreativeBrief, ensureScriptRevision } from "./script-foundation";
-import { normalizeLanguageIdentity, validateScriptLanguage } from "./language-guard";
+import { normalizeLanguageIdentity } from "./language-guard";
+import { resolveCreationLanguageContext, validateInternalCreativeLanguage, type CreationLanguageContext } from "./creation-language-context";
 
 export type ScriptWriterInput = {
   projectId: string;
@@ -14,9 +15,12 @@ export type ScriptWriterInput = {
   creativeBrief: CreativeBriefV2;
   productContext: CanonicalProductContext;
   productContextFingerprint: string;
+  languageContext?: CreationLanguageContext;
   platform: string;
   market: string;
-  language: string;
+  language?: string;
+  workspaceLanguage?: "zh-CN";
+  targetLanguage?: string;
   preferences?: {
     durationSeconds?: number;
     creatorStyle?: string;
@@ -66,7 +70,11 @@ export type ScriptDraftV2 = {
   scenes: ScriptDraftScene[];
   fullNarration: string;
   cta: string;
-  language: string;
+  workspaceLanguage: "zh-CN";
+  targetLanguage: string;
+  localizationStatus: "source";
+  /** Read-only compatibility for legacy Draft records. */
+  language?: string;
   totalDurationHint?: number;
 };
 
@@ -164,6 +172,7 @@ export type CriticBriefField = typeof CRITIC_BRIEF_FIELD_VALUES[number];
 export type CriticIssue = {
   code: CriticIssueCode | BriefAwareCriticIssueCode;
   severity: "low" | "medium" | "high" | "minor" | "major" | "critical";
+  targetRef: string;
   target: CriticIssueTarget;
   message: string;
   rewriteInstruction: string;
@@ -181,7 +190,7 @@ export type TargetedRewrite = {
 export type ParseScriptDraftResult = { value: ScriptDraftV2 | null; issues: ScriptWriterValidationIssue[] };
 
 const purposes = new Set<ScriptDraftScenePurpose>(["hook", "context", "product", "evidence", "cta"]);
-const topLevelFields = new Set(["title", "hook", "scenes", "fullNarration", "cta", "language", "totalDurationHint"]);
+const topLevelFields = new Set(["title", "hook", "scenes", "fullNarration", "cta", "workspaceLanguage", "targetLanguage", "localizationStatus", "language", "totalDurationHint"]);
 const hookFields = new Set(["line", "openingVisualExecution"]);
 const sceneFields = new Set(["id", "purpose", "visual", "action", "dialogue", "durationHint", "evidenceRole", "briefTrace"]);
 const traceFields = new Set(["executesOpeningVisual", "executesEvidence", "executesCTA"]);
@@ -236,7 +245,11 @@ export function validateScriptWriterInput(input: ScriptWriterInput): ScriptWrite
   return issues;
 }
 
-export function parseScriptDraftV2(content: string): ParseScriptDraftResult {
+export function resolveScriptWriterLanguageContext(input: ScriptWriterInput): CreationLanguageContext {
+  return input.languageContext || resolveCreationLanguageContext(input);
+}
+
+export function parseScriptDraftV2(content: string, options: { requireCanonicalLanguage?: boolean } = {}): ParseScriptDraftResult {
   let parsed: unknown;
   try { parsed = JSON.parse(content.trim().replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/i, "")); }
   catch { return { value: null, issues: [issue("invalid_json", "draft_parse", "parseScriptDraftV2")] }; }
@@ -246,7 +259,13 @@ export function parseScriptDraftV2(content: string): ParseScriptDraftResult {
   requiredText(parsed.title, "title", issues);
   requiredText(parsed.fullNarration, "fullNarration", issues);
   requiredText(parsed.cta, "cta", issues);
-  requiredText(parsed.language, "language", issues);
+  const hasCanonicalLanguage = parsed.workspaceLanguage !== undefined || parsed.targetLanguage !== undefined || parsed.localizationStatus !== undefined;
+  if (options.requireCanonicalLanguage || hasCanonicalLanguage) {
+    if (parsed.workspaceLanguage !== "zh-CN") issues.push(issue("invalid_workspace_language", "draft_schema", "parseScriptDraftV2", "workspaceLanguage"));
+    requiredText(parsed.targetLanguage, "targetLanguage", issues);
+    if (parsed.localizationStatus !== "source") issues.push(issue("invalid_localization_status", "draft_schema", "parseScriptDraftV2", "localizationStatus"));
+    if (options.requireCanonicalLanguage && parsed.language !== undefined) issues.push(issue("unexpected_legacy_language", "draft_schema", "parseScriptDraftV2", "language"));
+  } else requiredText(parsed.language, "language", issues);
   if (parsed.totalDurationHint !== undefined && !positiveDuration(parsed.totalDurationHint)) issues.push(issue("invalid_duration", "draft_schema", "parseScriptDraftV2", "totalDurationHint"));
 
   if (!record(parsed.hook)) issues.push(issue(parsed.hook === undefined ? "missing_field" : "invalid_type", "draft_schema", "parseScriptDraftV2", "hook"));
@@ -272,6 +291,7 @@ export function parseScriptDraftV2(content: string): ParseScriptDraftResult {
       if (!purposes.has(scene.purpose as ScriptDraftScenePurpose)) issues.push(issue("invalid_scene_purpose", "draft_schema", "parseScriptDraftV2", `${path}.purpose`));
       if (scene.durationHint !== undefined && !positiveDuration(scene.durationHint)) issues.push(issue("invalid_duration", "draft_schema", "parseScriptDraftV2", `${path}.durationHint`));
       if (scene.evidenceRole !== undefined && !text(scene.evidenceRole)) issues.push(issue("blank_or_invalid_string", "draft_schema", "parseScriptDraftV2", `${path}.evidenceRole`));
+      if (options.requireCanonicalLanguage && !text(scene.evidenceRole)) issues.push(issue("missing_field", "draft_schema", "parseScriptDraftV2", `${path}.evidenceRole`));
       if (scene.briefTrace !== undefined) {
         if (!record(scene.briefTrace)) issues.push(issue("malformed_trace", "draft_schema", "parseScriptDraftV2", `${path}.briefTrace`));
         else {
@@ -304,27 +324,28 @@ export function validateScriptDraftDeterministically(input: ScriptWriterInput, d
   if (!draft.scenes[0]?.briefTrace?.executesOpeningVisual) issues.push(issue("opening_visual_trace_missing", "structural_fidelity", validator, "scenes.0.briefTrace.executesOpeningVisual"));
   if (input.creativeBrief.evidence.type !== "none-required" && !draft.scenes.some((scene) => scene.purpose === "evidence" && scene.briefTrace?.executesEvidence === true)) issues.push(issue("evidence_trace_missing", "structural_fidelity", validator, "scenes"));
   if (!draft.scenes.some((scene) => scene.purpose === "cta" && scene.briefTrace?.executesCTA === true)) issues.push(issue("cta_trace_missing", "structural_fidelity", validator, "scenes"));
-  if (normalizeLanguageIdentity(draft.language) !== normalizeLanguageIdentity(input.language)) issues.push(issue("language_mismatch", "structural_fidelity", validator, "language"));
-  const consumerLanguage = validateScriptLanguage({
-    title: draft.title,
-    hook: draft.hook.line,
-    narration: draft.fullNarration,
-    cta: draft.cta,
-    scenes: draft.scenes.map((scene) => ({ line: scene.dialogue })),
-  }, input.language);
-  if (!consumerLanguage.passed) {
-    for (const path of consumerLanguage.offendingFields) {
-      const draftPath = path.startsWith("scenes.") ? path.replace(/\.line$/, ".dialogue") : path === "hook" ? "hook.line" : path === "narration" ? "fullNarration" : path;
-      issues.push(issue("language_mismatch", "structural_fidelity", validator, draftPath));
-    }
-  }
+  const languageContext = resolveScriptWriterLanguageContext(input);
+  const draftWorkspaceLanguage = draft.workspaceLanguage || (normalizeLanguageIdentity(draft.language || "") === normalizeLanguageIdentity("zh-CN") ? "zh-CN" : undefined);
+  if (draftWorkspaceLanguage !== languageContext.workspaceLanguage) issues.push(issue("language_mismatch", "structural_fidelity", validator, draft.workspaceLanguage ? "workspaceLanguage" : "language"));
+  if (draft.targetLanguage !== undefined && normalizeLanguageIdentity(draft.targetLanguage) !== normalizeLanguageIdentity(languageContext.targetLanguage)) issues.push(issue("target_language_mismatch", "structural_fidelity", validator, "targetLanguage"));
+  if (draft.localizationStatus !== undefined && draft.localizationStatus !== "source") issues.push(issue("invalid_localization_status", "structural_fidelity", validator, "localizationStatus"));
+  const sourceFields = [
+    { path: "title", text: draft.title }, { path: "hook.line", text: draft.hook.line },
+    { path: "hook.openingVisualExecution", text: draft.hook.openingVisualExecution },
+    ...draft.scenes.flatMap((scene, index) => [
+      { path: `scenes.${index}.visual`, text: scene.visual }, { path: `scenes.${index}.action`, text: scene.action },
+      { path: `scenes.${index}.dialogue`, text: scene.dialogue }, { path: `scenes.${index}.evidenceRole`, text: scene.evidenceRole },
+    ]),
+    { path: "fullNarration", text: draft.fullNarration }, { path: "cta", text: draft.cta },
+  ];
+  for (const mismatch of validateInternalCreativeLanguage(sourceFields, languageContext.workspaceLanguage)) issues.push(issue(mismatch.code, "structural_fidelity", validator, mismatch.path));
 
   const knowledge = buildKnowledgeContext({
     product: input.productContext.productName,
     sellingPoints: input.productContext.productKnowledge?.sellingPoints || "",
     audience: input.creativeBrief.opportunity.targetAudience,
     country: input.market,
-    language: input.language,
+    language: languageContext.workspaceLanguage,
     platform: input.platform,
     offer: input.productContext.productKnowledge?.offer || "",
     productKnowledge: input.productContext.productKnowledge,
@@ -380,7 +401,7 @@ export function adaptScriptDraftToStructuredScript(input: ScriptWriterInput, dra
   const base: StructuredScript = {
     title: draft.title,
     product: input.productContext.productName,
-    language: input.language,
+    language: resolveScriptWriterLanguageContext(input).workspaceLanguage,
     country: input.market,
     style: input.preferences?.creatorStyle || brief.direction.contentFormat || brief.direction.creatorPersona || "Creative Brief",
     creativeAngle: brief.direction.creativeAngle,

@@ -75,7 +75,8 @@ function input(overrides = {}) {
     productContextFingerprint: fingerprint,
     platform: "TikTok",
     market: "Spain",
-    language: "English",
+    languageContext: { workspaceLanguage: "zh-CN", targetLanguage: "Spanish", market: "Spain", platform: "TikTok" },
+    language: "Spanish",
     preferences: { durationSeconds: 20, creatorStyle: "UGC", spokenDensity: "balanced", toneSteering: "natural", variantCount: 1 },
     ...overrides,
   };
@@ -83,18 +84,20 @@ function input(overrides = {}) {
 
 function draft(overrides = {}) {
   return {
-    title: "The next-seat view",
-    hook: { line: "What changes when the phone turns?", openingVisualExecution: "The same phone moves from a front view to a side view." },
+    title: "邻座视角观察",
+    hook: { line: "手机转向侧面时，画面会有什么变化？", openingVisualExecution: "同一部手机从正面缓慢转到侧面。" },
     scenes: [
-      { id: "scene-hook", purpose: "hook", visual: "A phone fills the frame on a train seat.", action: "Move from the front of the phone toward its side.", dialogue: "What changes when the phone turns?", durationHint: 3, briefTrace: { executesOpeningVisual: true } },
-      { id: "scene-context", purpose: "context", visual: "A nearby passenger sits beside the phone owner.", action: "Keep the phone in the same position.", dialogue: "This is the everyday angle from the next seat.", durationHint: 4 },
-      { id: "scene-product", purpose: "product", visual: "CrystalArmor is shown on the same phone.", action: "Hold the phone without changing brightness.", dialogue: "This screen protector is designed around a 28° viewing angle.", durationHint: 4 },
-      { id: "scene-evidence", purpose: "evidence", visual: "The phone is viewed from front and side in one continuous move.", action: "Compare both positions under the same light.", dialogue: "Compare the visible screen as the viewing angle changes.", durationHint: 5, evidenceRole: "routine-context", briefTrace: { executesEvidence: true } },
-      { id: "scene-cta", purpose: "cta", visual: "The phone model and package appear together.", action: "Point to the compatibility label.", dialogue: "Check which model matches your phone.", durationHint: 4, briefTrace: { executesCTA: true } },
+      { id: "hook", purpose: "hook", visual: "通勤座位上的手机占满首帧。", action: "保持环境不变，将视角从正面移向侧面。", dialogue: "手机转向侧面时，画面会有什么变化？", evidenceRole: "建立视觉问题", durationHint: 3, briefTrace: { executesOpeningVisual: true } },
+      { id: "context", purpose: "context", visual: "手机旁边坐着一位通勤乘客。", action: "保持手机位置不变。", dialogue: "这是邻座在日常通勤中的观看角度。", evidenceRole: "交代使用场景", durationHint: 4 },
+      { id: "product", purpose: "product", visual: "手机与对位安装器同时出现。", action: "用对位安装器完成一次清晰操作。", dialogue: "对位安装器可以辅助安装。", evidenceRole: "连接产品事实", durationHint: 4 },
+      { id: "evidence", purpose: "evidence", visual: "同一镜头连续展示正面和侧面视角。", action: "在相同光线下对比两个位置。", dialogue: "随着观看角度变化，观察屏幕可见范围。", durationHint: 5, evidenceRole: "日常场景观察", briefTrace: { executesEvidence: true } },
+      { id: "cta", purpose: "cta", visual: "手机型号与包装信息同时出现。", action: "指向适配型号信息。", dialogue: "可以先确认适合自己手机的型号。", evidenceRole: "承接行动方向", durationHint: 4, briefTrace: { executesCTA: true } },
     ],
-    fullNarration: "What changes when the phone turns? This is the everyday angle from the next seat. This screen protector is designed around a 28° viewing angle. Compare the visible screen as the viewing angle changes. Check which model matches your phone.",
-    cta: "Check which model matches your phone.",
-    language: "English",
+    fullNarration: "手机转向侧面时，画面会有什么变化？这是邻座在日常通勤中的观看角度。对位安装器可以辅助安装。随着观看角度变化，观察屏幕可见范围。可以先确认适合自己手机的型号。",
+    cta: "可以先确认适合自己手机的型号。",
+    workspaceLanguage: "zh-CN",
+    targetLanguage: "Spanish",
+    localizationStatus: "source",
     totalDurationHint: 20,
     ...overrides,
   };
@@ -131,6 +134,19 @@ test("strict parser accepts a valid ScriptDraftV2", () => {
   assert.deepEqual(result.value, draft());
 });
 
+test("legacy Draft language records remain readable without destructive migration", () => {
+  const legacy = draft();
+  delete legacy.workspaceLanguage;
+  delete legacy.targetLanguage;
+  delete legacy.localizationStatus;
+  legacy.language = "Spanish";
+  const snapshot = JSON.stringify(legacy);
+  const parsed = parse(legacy);
+  assert.ok(parsed.value);
+  assert.equal(parsed.value.language, "Spanish");
+  assert.equal(JSON.stringify(legacy), snapshot);
+});
+
 test("strict parser rejects invalid JSON, missing and blank fields", () => {
   assert.equal(parse("not-json").issues[0].code, "invalid_json");
   const missing = draft(); delete missing.title;
@@ -150,7 +166,7 @@ test("strict parser rejects invalid purpose, duplicate IDs, durations and traces
 
 test("strict parser rejects empty scenes, invalid language and Provider-controlled identities or Director fields", () => {
   assert.ok(issueCodes(parse({ ...draft(), scenes: [] }).issues).includes("empty_scenes"));
-  assert.ok(parse({ ...draft(), language: 7 }).issues.some((item) => item.path === "language"));
+  assert.ok(parse({ ...draft(), workspaceLanguage: "en-US" }).issues.some((item) => item.path === "workspaceLanguage"));
   assert.ok(parse({ ...draft(), projectId: "project-a" }).issues.some((item) => item.code === "unexpected_field" && item.path === "projectId"));
   const directorDraft = draft(); directorDraft.scenes[0].cameraMovement = "Push In";
   assert.ok(parse(directorDraft).issues.some((item) => item.code === "unexpected_field" && item.path.endsWith("cameraMovement")));
@@ -162,48 +178,22 @@ test("structural fidelity requires hook first, opening trace, evidence trace, CT
   delete value.scenes[0].briefTrace;
   delete value.scenes[3].briefTrace;
   delete value.scenes[4].briefTrace;
-  value.language = "Spanish";
+  value.workspaceLanguage = "en-US";
   const codes = issueCodes(api.validateScriptDraftDeterministically(input(), value));
   for (const code of ["first_scene_must_be_hook", "opening_visual_trace_missing", "evidence_trace_missing", "cta_trace_missing", "language_mismatch"]) assert.ok(codes.includes(code), code);
 });
 
-test("language fidelity normalizes aliases and checks consumer copy without scanning production instructions", () => {
-  const spanish = draft({
-    title: "La vista desde el asiento de al lado",
-    hook: { line: "¿Qué cambia cuando giras el teléfono?", openingVisualExecution: "内部开场执行说明" },
-    scenes: draft().scenes.map((scene, index) => ({
-      ...scene,
-      visual: `内部中文画面说明 ${index}`,
-      action: `内部中文动作说明 ${index}`,
-      dialogue: [
-        "¿Qué cambia cuando giras el teléfono?",
-        "Así se ve desde el asiento de al lado.",
-        "CrystalArmor mantiene el ángulo de visión indicado.",
-        "Compara la pantalla de frente y desde un lado.",
-        "Comprueba qué modelo corresponde a tu teléfono.",
-      ][index],
-    })),
-    fullNarration: "¿Qué cambia cuando giras el teléfono? Así se ve desde el asiento de al lado. Compara la pantalla de frente y desde un lado. Comprueba qué modelo corresponde a tu teléfono.",
-    cta: "Comprueba qué modelo corresponde a tu teléfono.",
-    language: "es-ES",
-  });
-  for (const alias of ["Spanish", "Español", "es", "es-ES", "西班牙语"]) {
-    assert.equal(api.validateScriptDraftDeterministically(input({ language: "Spanish" }), { ...spanish, language: alias }).some((item) => item.code === "language_mismatch"), false, alias);
+test("target language changes do not change the canonical Chinese source language", () => {
+  for (const targetLanguage of ["Spanish", "English", "French"]) {
+    const languageContext = { workspaceLanguage: "zh-CN", targetLanguage, market: "Spain", platform: "TikTok" };
+    const value = draft({ targetLanguage });
+    assert.equal(api.validateScriptDraftDeterministically(input({ languageContext }), value).some((item) => item.code === "internal_language_mismatch"), false, targetLanguage);
   }
 });
 
-test("language fidelity rejects English consumer copy for Spanish while allowing product names and borrowed words", () => {
-  const english = draft({ language: "Spanish" });
-  assert.ok(api.validateScriptDraftDeterministically(input({ language: "Spanish" }), english).some((item) => item.code === "language_mismatch"));
-  const spanishWithBrand = draft({
-    title: "CrystalArmor en el tren",
-    hook: { line: "¿Qué cambia con CrystalArmor cuando giras el teléfono?", openingVisualExecution: "Show the opening" },
-    scenes: draft().scenes.map((scene, index) => ({ ...scene, dialogue: ["¿Qué cambia al girarlo?", "Así se ve desde el asiento.", "CrystalArmor acompaña tu smartphone.", "Compara el ángulo en un clip continuo.", "Comprueba tu modelo online."][index] })),
-    fullNarration: "¿Qué cambia con CrystalArmor cuando giras el teléfono? Así se ve desde el asiento. Compara el ángulo en un clip continuo y comprueba tu modelo online.",
-    cta: "Comprueba tu modelo online.",
-    language: "Español",
-  });
-  assert.equal(api.validateScriptDraftDeterministically(input({ language: "Spanish" }), spanishWithBrand).some((item) => item.code === "language_mismatch"), false);
+test("language fidelity rejects non-Chinese canonical source copy", () => {
+  const english = draft({ title: "English title", hook: { line: "English hook", openingVisualExecution: "English visual" }, fullNarration: "English narration", cta: "English CTA" });
+  assert.ok(api.validateScriptDraftDeterministically(input(), english).some((item) => item.code === "internal_language_mismatch"));
 });
 
 test("semantic fidelity is intentionally deferred instead of approximated with string heuristics", () => {
@@ -260,10 +250,19 @@ test("Brief revisions produce distinct Script revisions without mutating old Scr
   assert.deepEqual(oldScript, snapshot);
 });
 
+test("target language changes do not rewrite the canonical Chinese Script revision", () => {
+  const spanish = input({ languageContext: { workspaceLanguage: "zh-CN", targetLanguage: "Spanish", market: "Spain", platform: "TikTok" } });
+  const french = input({ languageContext: { workspaceLanguage: "zh-CN", targetLanguage: "French", market: "Spain", platform: "TikTok" } });
+  const first = api.adaptScriptDraftToStructuredScript(spanish, draft({ targetLanguage: "Spanish" }), "script-revision-source-a");
+  const second = api.adaptScriptDraftToStructuredScript(french, draft({ targetLanguage: "French" }), "script-revision-source-a");
+  assert.deepEqual(second, first);
+  assert.equal(first.language, "zh-CN");
+});
+
 test("TargetedRewrite contract accepts only stable field patches and rejects entire-script or identity targets", () => {
-  assert.deepEqual(api.validateTargetedRewrite({ changes: [{ target: { scope: "scene", sceneId: "scene-evidence", field: "dialogue" }, replacement: "A clearer evidence line." }] }, draft()), []);
+  assert.deepEqual(api.validateTargetedRewrite({ changes: [{ target: { scope: "scene", sceneId: "evidence", field: "dialogue" }, replacement: "更清楚的证据表达。" }] }, draft()), []);
   assert.ok(issueCodes(api.validateTargetedRewrite({ changes: [{ target: { scope: "replaceEntireScript" }, replacement: "replacement" }] }, draft())).includes("invalid_patch_scope"));
-  assert.ok(issueCodes(api.validateTargetedRewrite({ changes: [{ target: { scope: "scene", sceneId: "scene-evidence", field: "sourceCreativeBriefId" }, replacement: "wrong" }] }, draft())).includes("invalid_patch_field"));
+  assert.ok(issueCodes(api.validateTargetedRewrite({ changes: [{ target: { scope: "scene", sceneId: "evidence", field: "sourceCreativeBriefId" }, replacement: "wrong" }] }, draft())).includes("invalid_patch_field"));
 });
 
 const categoryFixtures = [
@@ -288,7 +287,7 @@ test("five product categories use the same foundation contract with creativity s
       truth: { primaryProductTruth: `${name} supported product fact`, secondaryProductTruths: [] },
     });
     const categoryInput = input({ projectId: categoryBrief.projectId, creativeBrief: categoryBrief, creativeBriefReference: { id: categoryBrief.id, revisionId: categoryBrief.revisionId }, productContext: context, productContextFingerprint: contextFingerprint });
-    const categoryDraft = draft({ scenes: draft().scenes.map((scene) => ({ ...scene, visual: "A safe product scene.", action: "Show the supported product use.", dialogue: "A supported product use is shown." })), fullNarration: "A supported product use is shown.", cta: "Check the product details." });
+    const categoryDraft = draft({ scenes: draft().scenes.map((scene) => ({ ...scene, visual: "安全的产品使用场景。", action: "展示已支持的产品用法。", dialogue: "这里展示的是已支持的产品用法。" })), fullNarration: "这里展示的是已支持的产品用法。", cta: "可以查看产品详情。" });
     assert.deepEqual(api.validateScriptWriterInput(categoryInput), []);
     assert.deepEqual(api.validateScriptDraftDeterministically(categoryInput, categoryDraft), [], name);
     const script = api.adaptScriptDraftToStructuredScript(categoryInput, categoryDraft, `script-${name}`);

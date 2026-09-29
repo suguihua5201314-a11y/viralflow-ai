@@ -2,6 +2,7 @@ import {
   adaptScriptDraftToStructuredScript,
   deriveBriefLockedDecisions,
   parseScriptDraftV2,
+  resolveScriptWriterLanguageContext,
   validateScriptDraftDeterministically,
   validateScriptWriterInput,
   type ScriptDraftV2,
@@ -96,10 +97,11 @@ const safeIssue = (code: string, path?: string): ScriptWriterValidationIssue => 
 
 export function validateBriefDrivenWriterInput(input: ScriptWriterInput): ScriptWriterValidationIssue[] {
   const issues = [...validateScriptWriterInput(input)];
+  const languageContext = resolveScriptWriterLanguageContext(input);
   if (!input.requestId?.trim()) issues.push(safeIssue("missing_request_id", "requestId"));
-  if (!input.platform?.trim()) issues.push(safeIssue("missing_platform", "platform"));
-  if (!input.market?.trim()) issues.push(safeIssue("missing_market", "market"));
-  if (!input.language?.trim()) issues.push(safeIssue("missing_language", "language"));
+  if (!languageContext.platform) issues.push(safeIssue("missing_platform", "languageContext.platform"));
+  if (!languageContext.market) issues.push(safeIssue("missing_market", "languageContext.market"));
+  if (!languageContext.targetLanguage) issues.push(safeIssue("missing_target_language", "languageContext.targetLanguage"));
   const configuredMarkets = split(input.productContext.productKnowledge?.markets);
   if (configuredMarkets.length && !configuredMarkets.some((market) => normalized(market) === normalized(input.market))) issues.push(safeIssue("market_mismatch", "market"));
   const preferences = input.preferences;
@@ -137,12 +139,14 @@ const requiredShape = {
     action: "shootable action, without camera or Director settings",
     dialogue: "spoken or on-screen expression",
     durationHint: "optional positive number",
-    evidenceRole: "optional string",
+    evidenceRole: "Chinese description of this scene's evidence or narrative role",
     briefTrace: { executesOpeningVisual: "optional boolean", executesEvidence: "optional boolean", executesCTA: "optional boolean" },
   }],
   fullNarration: "string",
   cta: "string",
-  language: "requested language",
+  workspaceLanguage: "zh-CN",
+  targetLanguage: "future localization target copied from context",
+  localizationStatus: "source",
   totalDurationHint: "optional positive number",
 };
 
@@ -153,13 +157,16 @@ export const BRIEF_DRIVEN_WRITER_SYSTEM_PROMPT = [
   "Use CANONICAL PRODUCT TRUTH as the only factual authority. Never invent facts, effects, parameters, prices, offers, certifications, comparisons, or guarantees.",
   "Return exactly one ScriptDraftV2 JSON object. Do not return Markdown, identity fields, creativeAngle, product truth fields, camera/lens/lighting settings, or image/video prompts.",
   "The first scene must be purpose=hook and trace executesOpeningVisual=true. When evidence is required, include an evidence scene with executesEvidence=true. Include a CTA scene with executesCTA=true.",
-  "Write consumer-facing copy (hook line, dialogue, narration, and CTA) in the requested language. Internal visual and action instructions may use the workspace language. Set ScriptDraftV2.language to the requested language or a standard equivalent language name/code.",
+  "Write the entire canonical source Draft in Simplified Chinese, including title, hook, dialogue, narration, CTA, opening visual execution, visual, action, and evidence role.",
+  "targetLanguage and market are future localization context only. Do not output consumer copy in targetLanguage; avoid source-only wordplay that cannot be localized.",
+  "Set workspaceLanguage=zh-CN, copy targetLanguage from context, and set localizationStatus=source.",
 ].join(" ");
 
 export function buildBriefDrivenWriterMessages(input: ScriptWriterInput, repairIssues: ScriptWriterValidationIssue[] = []) {
+  const languageContext = resolveScriptWriterLanguageContext(input);
   const repair = repairIssues.length ? {
     mode: "repair",
-    instruction: "Return one corrected ScriptDraftV2. Fix only the listed output-contract, language, or claim-safety issues. For language_mismatch, preserve the Brief, scenes, meaning, evidence strategy, and CTA direction; correct the language metadata and re-express only consumer-facing hook, dialogue, narration, and CTA in the requested language. Internal visual/action instructions do not require translation. Keep the same locked Brief; do not select a new strategy.",
+    instruction: "Return one corrected ScriptDraftV2. Fix only the listed output-contract, source-language, or claim-safety issues. For internal_language_mismatch or language_mismatch, preserve scene IDs, scene structure, Brief decisions, meaning, evidence strategy, CTA intent, Product Truth, and lineage; re-express only the affected field in Simplified Chinese. Keep the same locked Brief and do not select a new strategy.",
     issues: repairIssues.map(({ code, path, stage }) => ({ code, ...(path ? { path } : {}), stage })),
   } : undefined;
   return [
@@ -168,7 +175,7 @@ export function buildBriefDrivenWriterMessages(input: ScriptWriterInput, repairI
       task: "Express this locked Creative Brief as one ScriptDraftV2",
       lockedCreativeBrief: deriveBriefLockedDecisions(input.creativeBrief),
       canonicalProductTruth: canonicalProductTruth(input),
-      context: { platform: input.platform, market: input.market, language: input.language },
+      languageContext,
       expressionPreferences: input.preferences || {},
       outputContract: requiredShape,
       ...(repair ? { repair } : {}),
@@ -244,7 +251,7 @@ export async function generateBriefDrivenScript(
     resultMetadata.providerUsed = response.providerUsed;
     resultMetadata.model = response.model;
     resultMetadata.latencyMs = (resultMetadata.latencyMs || 0) + response.responseTimeMs;
-    const parsed = parseScriptDraftV2(response.content);
+    const parsed = parseScriptDraftV2(response.content, { requireCanonicalLanguage: true });
     issues = parsed.value ? validateScriptDraftDeterministically(input, parsed.value) : parsed.issues;
     if (parsed.value && issues.length === 0) {
       const script = adaptScriptDraftToStructuredScript(input, parsed.value);
