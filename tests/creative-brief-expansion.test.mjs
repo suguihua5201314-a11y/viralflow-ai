@@ -211,6 +211,95 @@ test("repair receives safe structured issue codes and paths", async () => {
   assert.doesNotMatch(JSON.stringify(repair.repairIssues), /generated-invalid-value/);
 });
 
+test("canonical expansion contract drives parser and both prompt attempts", async () => {
+  assert.deepEqual(api.CREATIVE_BRIEF_EXPANSION_CONTRACT.requiredFields, [
+    "hookMechanism", "evidenceStrategy", "ctaDirection", "riskBoundaries",
+  ]);
+  assert.deepEqual(api.CREATIVE_BRIEF_EXPANSION_CONTRACT.optionalFields, [
+    "creatorPersona", "contentFormat", "spokenTone",
+  ]);
+  const requests = [];
+  const result = await api.generateCreativeBrief(input, async request => {
+    requests.push(JSON.parse(request.messages[1].content));
+    return response(requests.length === 1 ? {} : expansion);
+  });
+  assert.equal(result.status, "success");
+  for (const request of requests) {
+    assert.deepEqual(request.expansionContract.requiredFields, api.CREATIVE_BRIEF_EXPANSION_CONTRACT.requiredFields);
+    assert.deepEqual(request.expansionContract.requiredShape, api.CREATIVE_BRIEF_EXPANSION_CONTRACT.requiredShape);
+  }
+});
+
+test("missing hookMechanism retains a bounded structural candidate and repairs the exact path", async () => {
+  const malformed = { ...expansion, hookMechanism: undefined };
+  const parsed = api.parseCreativeBriefExpansion(JSON.stringify({ expansion: malformed }));
+  assert.equal(parsed.value, null);
+  assert.deepEqual(parsed.issues, [{ code: "missing_field", path: "hookMechanism", stage: "expansion_schema", validator: "parseCreativeBriefExpansion" }]);
+  assert.equal(parsed.structuralCandidate.envelope, "expansion");
+  assert.equal(parsed.structuralCandidate.candidate.ctaDirection, expansion.ctaDirection);
+  assert.equal("hookMechanism" in parsed.structuralCandidate.candidate, false);
+
+  const requests = [];
+  const result = await api.generateCreativeBrief(input, async request => {
+    requests.push(JSON.parse(request.messages[1].content));
+    return response(requests.length === 1 ? malformed : expansion);
+  });
+  assert.equal(result.status, "success");
+  assert.deepEqual(requests[1].repairIssues.map(issue => issue.path), ["hookMechanism"]);
+  assert.equal(requests[1].malformedStructuralCandidate.candidate.ctaDirection, expansion.ctaDirection);
+  assert.match(requests[1].repairInstruction, /Preserve every already-valid canonical value/);
+  assert.deepEqual(requests[1].selectedDirection, requests[0].selectedDirection);
+});
+
+test("all missing canonical fields are reported and supplied to one constrained repair", async () => {
+  const requests = [];
+  let calls = 0;
+  const result = await api.generateCreativeBrief(input, async request => {
+    calls += 1;
+    requests.push(JSON.parse(request.messages[1].content));
+    return response({ unexpectedDocument: { title: "not an expansion" } });
+  });
+  assert.equal(result.status, "failure");
+  assert.equal(result.brief, null);
+  assert.equal(result.metadata.errorType, "validation_failed");
+  assert.equal(result.metadata.repairAttempted, true);
+  assert.equal(result.metadata.fallbackUsed, false);
+  assert.equal(calls, 2);
+  assert.deepEqual(result.issues.map(issue => issue.path), api.CREATIVE_BRIEF_EXPANSION_CONTRACT.requiredFields);
+  assert.deepEqual(requests[1].repairIssues.map(issue => issue.path), api.CREATIVE_BRIEF_EXPANSION_CONTRACT.requiredFields);
+  assert.deepEqual(requests[1].malformedStructuralCandidate, {
+    envelope: "expansion",
+    candidate: { unexpectedDocument: { title: "not an expansion" } },
+  });
+  assert.equal("repairExpansion" in requests[1], false);
+});
+
+test("aliases, wrong nesting and full Brief output remain strictly rejected", () => {
+  const alias = api.parseCreativeBriefExpansion(JSON.stringify({ ...expansion, hookMechanism: undefined, hookType: "visual question" }));
+  assert.deepEqual(alias.issues.map(issue => issue.path), ["hookMechanism"]);
+
+  const wrongNesting = api.parseCreativeBriefExpansion(JSON.stringify({ ...expansion, hookMechanism: undefined, opening: { hookMechanism: "visual question" } }));
+  assert.deepEqual(wrongNesting.issues.map(issue => issue.path), ["hookMechanism"]);
+
+  const fullBrief = api.buildCreativeBrief(input, expansion);
+  const fullBriefParsed = api.parseCreativeBriefExpansion(JSON.stringify(fullBrief));
+  assert.equal(fullBriefParsed.value, null);
+  assert.deepEqual(fullBriefParsed.issues.map(issue => issue.path), ["hookMechanism", "evidenceStrategy"]);
+});
+
+test("direct and single expansion wrapper remain compatible", () => {
+  assert.deepEqual(api.parseCreativeBriefExpansion(JSON.stringify(expansion)).value, expansion);
+  assert.deepEqual(api.parseCreativeBriefExpansion(JSON.stringify({ expansion })).value, expansion);
+});
+
+test("malformed repair context is bounded and never exposed as a valid expansion", () => {
+  const oversized = { preserved: "x".repeat(2_000), list: Array.from({ length: 30 }, (_, index) => index) };
+  const parsed = api.parseCreativeBriefExpansion(JSON.stringify(oversized));
+  assert.equal(parsed.value, null);
+  assert.equal(parsed.structuralCandidate.candidate.preserved.length, 1_000);
+  assert.equal(parsed.structuralCandidate.candidate.list.length, 20);
+});
+
 test("validation issues are exposed only to Preview clients", () => {
   const issues = [{ code: "invalid_enum", path: "evidenceStrategy.type", stage: "expansion_schema", validator: "parseCreativeBriefExpansion" }];
   assert.deepEqual(api.validationIssuesForEnvironment(issues, "preview"), issues);

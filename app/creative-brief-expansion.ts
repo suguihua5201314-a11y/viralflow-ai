@@ -45,6 +45,31 @@ export type CreativeBriefExecutionExpansion = {
   spokenTone?: string;
 };
 
+export const CREATIVE_BRIEF_EXPANSION_CONTRACT = {
+  wrapper: "expansion",
+  requiredFields: ["hookMechanism", "evidenceStrategy", "ctaDirection", "riskBoundaries"],
+  optionalFields: ["creatorPersona", "contentFormat", "spokenTone"],
+  requiredShape: {
+    hookMechanism: "string",
+    evidenceStrategy: { type: "allowed enum", objective: "string", visualEvidence: ["string"], limitations: ["string"] },
+    ctaDirection: "strategy, not final copy",
+    riskBoundaries: { prohibitedClaims: ["string"], requiredQualifiers: ["string"], safetyConstraints: ["string"] },
+    creatorPersona: "optional string",
+    contentFormat: "optional string",
+    spokenTone: "optional string",
+  },
+} as const satisfies {
+  wrapper: "expansion";
+  requiredFields: readonly (keyof CreativeBriefExecutionExpansion)[];
+  optionalFields: readonly (keyof CreativeBriefExecutionExpansion)[];
+  requiredShape: Record<keyof CreativeBriefExecutionExpansion, unknown>;
+};
+
+export type CreativeBriefExpansionStructuralCandidate = {
+  envelope: "direct" | "expansion";
+  candidate: Record<string, unknown>;
+};
+
 export type CreativeBriefExpansionMetadata = {
   repairAttempted: boolean;
   fallbackUsed: false;
@@ -69,6 +94,7 @@ export type CreativeBriefValidationIssue = {
 export type CreativeBriefExpansionParseResult = {
   value: CreativeBriefExecutionExpansion | null;
   issues: CreativeBriefValidationIssue[];
+  structuralCandidate?: CreativeBriefExpansionStructuralCandidate;
 };
 
 export function validationIssuesForEnvironment(issues: CreativeBriefValidationIssue[], environment?: string) {
@@ -90,6 +116,10 @@ const text = (value: unknown): value is string => typeof value === "string" && B
 const strings = (value: unknown): value is string[] => Array.isArray(value) && value.every(text);
 const MAX_SAFETY_ITEMS = 12;
 const MAX_SAFETY_TEXT_LENGTH = 500;
+const MAX_REPAIR_STRING_LENGTH = 1_000;
+const MAX_REPAIR_ARRAY_ITEMS = 20;
+const MAX_REPAIR_OBJECT_KEYS = 40;
+const MAX_REPAIR_DEPTH = 6;
 
 export function resolveCreativeBriefInputLanguageContext(input: CreativeBriefExpansionInput) {
   return input.languageContext || resolveCreationLanguageContext(input);
@@ -102,13 +132,34 @@ const issue = (
   path?: string,
 ): CreativeBriefValidationIssue => ({ code, ...(path ? { path } : {}), stage, validator });
 
+function sanitizeRepairValue(value: unknown, depth = 0): unknown {
+  if (depth > MAX_REPAIR_DEPTH) return "[truncated]";
+  if (typeof value === "string") return value.slice(0, MAX_REPAIR_STRING_LENGTH);
+  if (typeof value === "number" || typeof value === "boolean" || value === null) return value;
+  if (Array.isArray(value)) return value.slice(0, MAX_REPAIR_ARRAY_ITEMS).map((item) => sanitizeRepairValue(item, depth + 1));
+  if (value && typeof value === "object") {
+    return Object.fromEntries(
+      Object.entries(value as Record<string, unknown>)
+        .slice(0, MAX_REPAIR_OBJECT_KEYS)
+        .map(([key, item]) => [key.slice(0, 100), sanitizeRepairValue(item, depth + 1)]),
+    );
+  }
+  return undefined;
+}
+
+function structuralCandidate(value: Record<string, unknown>, envelope: "direct" | "expansion"): CreativeBriefExpansionStructuralCandidate {
+  return { envelope, candidate: sanitizeRepairValue(value) as Record<string, unknown> };
+}
+
 export function parseCreativeBriefExpansion(content: string): CreativeBriefExpansionParseResult {
   let value: unknown;
   try { value = JSON.parse(content.trim().replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/i, "")); }
   catch { return { value: null, issues: [issue("invalid_json", "json_parse", "parseCreativeBriefExpansion")] }; }
-  const item = value && typeof value === "object" && "expansion" in value ? (value as { expansion?: unknown }).expansion : value;
+  const envelope = value && typeof value === "object" && "expansion" in value ? "expansion" : "direct";
+  const item = envelope === "expansion" ? (value as { expansion?: unknown }).expansion : value;
   if (!item || typeof item !== "object" || Array.isArray(item)) return { value: null, issues: [issue("invalid_top_level", "expansion_schema", "parseCreativeBriefExpansion")] };
   const candidate = item as Record<string, unknown>;
+  const retainedCandidate = structuralCandidate(candidate, envelope);
   const issues: CreativeBriefValidationIssue[] = [];
   const requiredText = (path: string, field: unknown) => {
     if (field === undefined) issues.push(issue("missing_field", "expansion_schema", "parseCreativeBriefExpansion", path));
@@ -127,31 +178,41 @@ export function parseCreativeBriefExpansion(content: string): CreativeBriefExpan
   const optionalString = (path: string, field: unknown) => {
     if (field !== undefined && !text(field)) issues.push(issue("invalid_type", "expansion_schema", "parseCreativeBriefExpansion", path));
   };
-  requiredText("hookMechanism", candidate.hookMechanism);
-  if (candidate.evidenceStrategy === undefined) issues.push(issue("missing_field", "expansion_schema", "parseCreativeBriefExpansion", "evidenceStrategy"));
-  else if (!candidate.evidenceStrategy || typeof candidate.evidenceStrategy !== "object" || Array.isArray(candidate.evidenceStrategy)) issues.push(issue("invalid_type", "expansion_schema", "parseCreativeBriefExpansion", "evidenceStrategy"));
-  else {
-    const evidence = candidate.evidenceStrategy as Record<string, unknown>;
-    if (evidence.type === undefined) issues.push(issue("missing_field", "expansion_schema", "parseCreativeBriefExpansion", "evidenceStrategy.type"));
-    else if (typeof evidence.type !== "string") issues.push(issue("invalid_type", "expansion_schema", "parseCreativeBriefExpansion", "evidenceStrategy.type"));
-    else if (!evidenceTypes.has(evidence.type as EvidenceStrategyType)) issues.push(issue("invalid_enum", "expansion_schema", "parseCreativeBriefExpansion", "evidenceStrategy.type"));
-    requiredText("evidenceStrategy.objective", evidence.objective);
-    requiredStrings("evidenceStrategy.visualEvidence", evidence.visualEvidence);
-    safetyStrings("evidenceStrategy.limitations", evidence.limitations);
+  for (const field of CREATIVE_BRIEF_EXPANSION_CONTRACT.requiredFields) {
+    if (candidate[field] !== undefined) continue;
+    issues.push(issue("missing_field", "expansion_schema", "parseCreativeBriefExpansion", field));
   }
-  requiredText("ctaDirection", candidate.ctaDirection);
-  if (candidate.riskBoundaries === undefined) issues.push(issue("missing_field", "expansion_schema", "parseCreativeBriefExpansion", "riskBoundaries"));
-  else if (!candidate.riskBoundaries || typeof candidate.riskBoundaries !== "object" || Array.isArray(candidate.riskBoundaries)) issues.push(issue("invalid_type", "expansion_schema", "parseCreativeBriefExpansion", "riskBoundaries"));
+  if (candidate.hookMechanism !== undefined) requiredText("hookMechanism", candidate.hookMechanism);
+  if (candidate.evidenceStrategy !== undefined && (!candidate.evidenceStrategy || typeof candidate.evidenceStrategy !== "object" || Array.isArray(candidate.evidenceStrategy))) issues.push(issue("invalid_type", "expansion_schema", "parseCreativeBriefExpansion", "evidenceStrategy"));
   else {
-    const risk = candidate.riskBoundaries as Record<string, unknown>;
-    safetyStrings("riskBoundaries.prohibitedClaims", risk.prohibitedClaims);
-    safetyStrings("riskBoundaries.requiredQualifiers", risk.requiredQualifiers);
-    safetyStrings("riskBoundaries.safetyConstraints", risk.safetyConstraints);
+    if (candidate.evidenceStrategy === undefined) {
+      // The canonical top-level required-field loop owns the missing-field issue.
+    } else {
+      const evidence = candidate.evidenceStrategy as Record<string, unknown>;
+      if (evidence.type === undefined) issues.push(issue("missing_field", "expansion_schema", "parseCreativeBriefExpansion", "evidenceStrategy.type"));
+      else if (typeof evidence.type !== "string") issues.push(issue("invalid_type", "expansion_schema", "parseCreativeBriefExpansion", "evidenceStrategy.type"));
+      else if (!evidenceTypes.has(evidence.type as EvidenceStrategyType)) issues.push(issue("invalid_enum", "expansion_schema", "parseCreativeBriefExpansion", "evidenceStrategy.type"));
+      requiredText("evidenceStrategy.objective", evidence.objective);
+      requiredStrings("evidenceStrategy.visualEvidence", evidence.visualEvidence);
+      safetyStrings("evidenceStrategy.limitations", evidence.limitations);
+    }
+  }
+  if (candidate.ctaDirection !== undefined) requiredText("ctaDirection", candidate.ctaDirection);
+  if (candidate.riskBoundaries !== undefined && (!candidate.riskBoundaries || typeof candidate.riskBoundaries !== "object" || Array.isArray(candidate.riskBoundaries))) issues.push(issue("invalid_type", "expansion_schema", "parseCreativeBriefExpansion", "riskBoundaries"));
+  else {
+    if (candidate.riskBoundaries === undefined) {
+      // The canonical top-level required-field loop owns the missing-field issue.
+    } else {
+      const risk = candidate.riskBoundaries as Record<string, unknown>;
+      safetyStrings("riskBoundaries.prohibitedClaims", risk.prohibitedClaims);
+      safetyStrings("riskBoundaries.requiredQualifiers", risk.requiredQualifiers);
+      safetyStrings("riskBoundaries.safetyConstraints", risk.safetyConstraints);
+    }
   }
   optionalString("creatorPersona", candidate.creatorPersona);
   optionalString("contentFormat", candidate.contentFormat);
   optionalString("spokenTone", candidate.spokenTone);
-  if (issues.length > 0) return { value: null, issues };
+  if (issues.length > 0) return { value: null, issues, structuralCandidate: retainedCandidate };
   const normalized = structuredClone(candidate as CreativeBriefExecutionExpansion);
   const normalizeSafety = (items: string[]) => [...new Set(items.map((item) => item.trim()))];
   normalized.evidenceStrategy.limitations = normalizeSafety(normalized.evidenceStrategy.limitations);
@@ -243,13 +304,18 @@ export function buildCreativeBrief(input: CreativeBriefExpansionInput, expansion
   });
 }
 
-function renderPrompt(input: CreativeBriefExpansionInput, repairIssues: CreativeBriefValidationIssue[] = [], repairExpansion?: CreativeBriefExecutionExpansion | null) {
+function renderPrompt(
+  input: CreativeBriefExpansionInput,
+  repairIssues: CreativeBriefValidationIssue[] = [],
+  repairExpansion?: CreativeBriefExecutionExpansion | null,
+  malformedCandidate?: CreativeBriefExpansionStructuralCandidate | null,
+) {
   const compliance = getGenerationComplianceKnowledge();
   const languageContext = resolveCreativeBriefInputLanguageContext(input);
   const providerRepairIssues = repairIssues.map(({ code, path, stage, validator }) => ({ code, ...(path ? { path } : {}), stage, validator }));
   return [
     { role: "system" as const, content: "Create an internal creative strategy document for a Chinese-speaking production team. Return all human-readable strategy content in Simplified Chinese. The target market and targetLanguage are downstream audience and localization constraints; do not localize the Brief into targetLanguage. Expand the selected direction without replacing or rewriting its audience, use moment, motivation, tension, angle, content mechanism, hook line, or opening visual. Return JSON only. Never invent product facts, prices, offers, certifications, measurements, or effects. On language repair, only re-express the previous expansion in Simplified Chinese and preserve every strategy decision." },
-    { role: "user" as const, content: JSON.stringify({ task: "Return one expansion object", selectedDirection: input.selectedDirection, productTruth: input.productContext, languageContext, preferences: input.preferences, sourceContext: input.sourceContext, recentCreativeHistory: input.recentCreativeHistory, allowedEvidenceTypes: [...evidenceTypes], requiredShape: { hookMechanism: "string", evidenceStrategy: { type: "allowed enum", objective: "string", visualEvidence: ["string"], limitations: ["string"] }, ctaDirection: "strategy, not final copy", riskBoundaries: { prohibitedClaims: ["string"], requiredQualifiers: ["string"], safetyConstraints: ["string"] }, creatorPersona: "optional string", contentFormat: "optional string", spokenTone: "optional string" }, compliance: { highRiskExpressions: compliance.highRiskExpressions, productForbiddenClaims: split(input.productContext.productKnowledge?.bannedWords) }, repairIssues: providerRepairIssues, ...(repairExpansion ? { repairExpansion, repairInstruction: "Re-express only in Simplified Chinese; preserve meaning and structure." } : {}) }) },
+    { role: "user" as const, content: JSON.stringify({ task: "Return exactly one Creative Brief Expansion object", selectedDirection: input.selectedDirection, productTruth: input.productContext, languageContext, preferences: input.preferences, sourceContext: input.sourceContext, recentCreativeHistory: input.recentCreativeHistory, allowedEvidenceTypes: [...evidenceTypes], expansionContract: { requiredFields: CREATIVE_BRIEF_EXPANSION_CONTRACT.requiredFields, optionalFields: CREATIVE_BRIEF_EXPANSION_CONTRACT.optionalFields, requiredShape: CREATIVE_BRIEF_EXPANSION_CONTRACT.requiredShape, allowedEnvelope: { expansion: CREATIVE_BRIEF_EXPANSION_CONTRACT.requiredShape } }, outputRules: ["Return the direct expansion object or the single allowed expansion wrapper only.", "Do not return a full CreativeBriefV2, Creative Direction, explanation, Markdown, aliases, or alternate nesting."], compliance: { highRiskExpressions: compliance.highRiskExpressions, productForbiddenClaims: split(input.productContext.productKnowledge?.bannedWords) }, repairIssues: providerRepairIssues, ...(malformedCandidate ? { malformedStructuralCandidate: malformedCandidate, repairInstruction: "Repair only the invalid or missing canonical structure. Preserve every already-valid canonical value. Include every required canonical field. Do not change selected Creative Direction identity. Do not invent Product Truth." } : repairExpansion ? { repairExpansion, repairInstruction: "Re-express only in Simplified Chinese; preserve meaning and structure." } : {}) }) },
   ];
 }
 
@@ -261,14 +327,20 @@ export async function generateCreativeBrief(
   const metadata: CreativeBriefExpansionMetadata = { repairAttempted: false, fallbackUsed: false, errorType: null };
   let issues: CreativeBriefValidationIssue[] = [];
   let repairExpansion: CreativeBriefExecutionExpansion | null = null;
+  let malformedCandidate: CreativeBriefExpansionStructuralCandidate | null = null;
   for (let attempt = 0; attempt < 2; attempt++) {
     try {
-      const response = await provider({ messages: renderPrompt(input, issues, repairExpansion), temperature: 0.45, topP: 0.9, maxTokens: 1400, timeoutMs: 45_000 });
+      const response = await provider({ messages: renderPrompt(input, issues, repairExpansion, malformedCandidate), temperature: 0.45, topP: 0.9, maxTokens: 1400, timeoutMs: 45_000 });
       const parsed = parseCreativeBriefExpansion(response.content);
       issues = parsed.value ? validateCreativeBriefExpansion(parsed.value, input) : parsed.issues;
       if (issues.length > 0) observeValidation?.({ attempt: attempt + 1, issues });
       if (parsed.value && issues.length === 0) return { status: "success", brief: buildCreativeBrief(input, parsed.value), metadata, issues: [] };
-      if (attempt === 0) { metadata.repairAttempted = true; repairExpansion = parsed.value; continue; }
+      if (attempt === 0) {
+        metadata.repairAttempted = true;
+        repairExpansion = parsed.value;
+        malformedCandidate = parsed.structuralCandidate || null;
+        continue;
+      }
       metadata.errorType = "validation_failed";
       return { status: "failure", brief: null, metadata, issues };
     } catch (error) {
