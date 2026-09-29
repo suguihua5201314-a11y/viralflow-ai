@@ -6,10 +6,11 @@ import { createJiti } from "jiti";
 const jiti = createJiti(import.meta.url, { interopDefault: true });
 const runtime = await jiti.import("../app/creative-directions.ts");
 const productApi = await jiti.import("../app/product-context.ts");
+const selection = await jiti.import("../app/creative-opportunity-selection.ts");
 
 const profile = { id: 7, name: "CrystalArmor Screen Protector", brand: "CrystalArmor", category: "Phone accessory", sellingPoints: "alignment applicator; dust-removal strip; privacy viewing; oleophobic surface", parameters: "privacy viewing", bannedWords: "100% unbreakable", markets: "Spain", audience: "phone users", price: "", offer: "", notes: "Avoid destructive testing" };
 const productContext = productApi.resolveCanonicalProductContext({ productName: profile.name, selectedProductId: 7, profiles: [profile] });
-const input = { projectId: "project-a", productContext, market: "Spain", language: "Spanish", platform: "TikTok", preferences: { hookStrategy: "curiosity", framework: "AIDA" }, recentCreativeHistory: [] };
+const input = { projectId: "project-a", productContext, productContextFingerprint: selection.productContextFingerprint(productContext), productBinding: { projectProductName: profile.name, projectProductProfileId: profile.id }, market: "Spain", language: "Spanish", platform: "TikTok", preferences: { hookStrategy: "curiosity", framework: "AIDA" }, recentCreativeHistory: [] };
 const variants = {
   A: ["commuters", "on a train", "keep side viewing private", "shared seats", "privacy in motion", "camera viewpoint switch", "Can the next seat read this?", "phone", "train seat", "rotate from front to side", "the viewing angle changes"],
   B: ["first-time installers", "at a home desk", "avoid installation rework", "dust under film", "one-pass setup", "guided hand sequence", "Watch what the strip removes", "dust strip", "clean desk", "slide across the screen", "dust lifts before placement"],

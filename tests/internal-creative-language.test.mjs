@@ -10,7 +10,7 @@ const contract = await jiti.import("../app/creative-contract.ts");
 
 const languageContext = { workspaceLanguage: "zh-CN", targetLanguage: "Spanish", market: "Spain", platform: "TikTok" };
 const productContext = { productName: "晶盾", profileId: 7, productKnowledge: { id: 7, name: "晶盾", category: "手机配件", sellingPoints: "辅助对位；日常防窥", parameters: "", bannedWords: "绝对防摔", notes: "不要承诺绝对效果" } };
-const brainInput = { projectId: "project-a", productContext, languageContext, market: "Spain", language: "Spanish", platform: "TikTok", recentCreativeHistory: [] };
+const brainInput = { projectId: "project-a", productContext, productContextFingerprint: selection.productContextFingerprint(productContext), productBinding: { projectProductName: productContext.productName, projectProductProfileId: productContext.profileId }, languageContext, market: "Spain", language: "Spanish", platform: "TikTok", recentCreativeHistory: [] };
 
 const chineseDirection = (id, angle = "通勤视角切换") => ({
   id, targetAudience: "通勤用户", useMoment: "乘坐地铁时", coreMotivation: "减少旁人看到屏幕内容的顾虑",

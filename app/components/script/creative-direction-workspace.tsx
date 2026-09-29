@@ -11,6 +11,9 @@ type Props = {
   disabled: boolean;
   onGenerate: () => void;
   onSelect: (opportunityId: string) => void;
+  acceptanceEnabled: boolean;
+  acceptanceActive: boolean;
+  onActivateAcceptance: () => void;
   writerAcceptanceEnabled: boolean;
   writerAcceptance: ScriptWriterAcceptanceState;
   onTestWriter: () => void;
@@ -25,7 +28,7 @@ const evidenceLabels: Record<string, string> = {
   comparison: "对照", education: "知识解释", testimonial: "体验证言", "none-required": "无需额外证明",
 };
 
-export default function CreativeDirectionWorkspace({ session, currentBrief, disabled, onGenerate, onSelect, writerAcceptanceEnabled, writerAcceptance, onTestWriter, criticAcceptanceEnabled, criticAcceptance, onTestCritic }: Props) {
+export default function CreativeDirectionWorkspace({ session, currentBrief, disabled, onGenerate, onSelect, acceptanceEnabled, acceptanceActive, onActivateAcceptance, writerAcceptanceEnabled, writerAcceptance, onTestWriter, criticAcceptanceEnabled, criticAcceptance, onTestCritic }: Props) {
   const hasDirections = session.directions.length > 0;
   return (
     <section className="creative-direction-workspace" aria-labelledby="creative-direction-title">
@@ -39,6 +42,8 @@ export default function CreativeDirectionWorkspace({ session, currentBrief, disa
           {session.status === "loading" ? "正在生成方向…" : hasDirections ? "重新生成方向" : "生成创意方向"}
         </button>
       </header>
+
+      {acceptanceEnabled && <div className="creative-direction-notice"><button className="vf-button" disabled={acceptanceActive || session.status === "loading"} onClick={onActivateAcceptance}>{acceptanceActive ? "L3A 验收产品已绑定" : "绑定 L3A 验收产品"}</button>{acceptanceActive && <small>Transformers Screen Protector · Spain · TikTok · 中文创作源</small>}</div>}
 
       {session.status === "loading" && <div className="creative-direction-notice is-loading" role="status">正在分析产品事实并构建不同创意方向…</div>}
       {session.status === "partial" && <div className="creative-direction-notice">部分方向生成未完成，以下方向仍可使用，也可以重新生成。</div>}

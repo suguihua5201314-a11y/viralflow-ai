@@ -1,10 +1,14 @@
 import { callProvider, DEFAULT_PROVIDER, getProviderStatuses, type ProviderResponse } from "../../provider-router";
 import type { ProviderId } from "../../provider-types";
 import { creativeBrainErrorType, resolveCreativeBrainLanguageContext, type CreativeBrainInput, type CreativeBrainProviderRequest, type CreativeBrainProviderResponse } from "../../creative-brain";
-import { generateCreativeDirections, type CreativeDirectionResult } from "../../creative-directions";
+import { generateCreativeDirections, validateGroundedCreativeBrainInput, type CreativeDirectionResult } from "../../creative-directions";
 
 export const runtime = "nodejs";
 export const maxDuration = 120;
+
+export async function GET() {
+  return Response.json({ acceptanceHarnessEnabled: process.env.VERCEL_ENV === "preview" });
+}
 
 export function resolveCreativeBrainProvider(
   requested: ProviderId,
@@ -45,6 +49,8 @@ export async function POST(request: Request) {
     if (!body.projectId?.trim() || !body.productContext?.productName?.trim() || !languageContext.market || !languageContext.targetLanguage || !languageContext.platform) {
       return Response.json({ error: "Creative Brain input is incomplete" }, { status: 400 });
     }
+    const inputIssues = validateGroundedCreativeBrainInput(body);
+    if (inputIssues.length) return Response.json({ status: "failure", directions: [], issues: inputIssues, error: { type: "invalid_input", message: "Product Context is not coherently grounded" } }, { status: 400 });
     const requested = body.provider || DEFAULT_PROVIDER;
     if (!(requested in getProviderStatuses())) return Response.json({ error: "Unknown provider" }, { status: 400 });
     const providerUsed = resolveCreativeBrainProvider(requested);

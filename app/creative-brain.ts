@@ -26,6 +26,11 @@ export type RecentCreativeHistory = Pick<MemoryScript, "title" | "hook" | "creat
 export type CreativeBrainInput = {
   projectId: string;
   productContext: CanonicalProductContext;
+  productContextFingerprint?: string;
+  productBinding?: {
+    projectProductName: string;
+    projectProductProfileId: number;
+  };
   languageContext?: CreationLanguageContext;
   market: string;
   language?: string;
@@ -62,7 +67,10 @@ export type CreativeBrainProvider = (request: CreativeBrainProviderRequest) => P
 
 export type OpportunityValidationIssue = {
   candidateId?: string;
-  type: "schema" | "truth" | "compliance" | "history" | "diversity" | "feasibility" | "language";
+  type: "schema" | "truth" | "grounding" | "compliance" | "history" | "diversity" | "feasibility" | "language";
+  code?: string;
+  path?: string;
+  capabilityFamily?: string;
   message: string;
 };
 

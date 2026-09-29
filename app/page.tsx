@@ -39,7 +39,8 @@ import ProjectAssetWorkspace from "./project-asset-workspace";
 import FramePromptWorkspace from "./frame-prompt-workspace";
 import {mergeReplicationAdoption,restoreProjectAnalyzer,restoreProjectReplication,type ReplicationWorkspaceAsset} from "./analyzer-replication-workspace";
 import {createScriptRevisionId,ensureScriptRevision,scriptRevisionIdentity} from "./script-foundation";
-import {resolveCanonicalProductContext} from "./product-context";
+import {resolveCanonicalProductContext,resolveGroundedCanonicalProductContext} from "./product-context";
+import {CREATIVE_BRAIN_ACCEPTANCE_CONTEXT,CREATIVE_BRAIN_ACCEPTANCE_FINGERPRINT,CREATIVE_BRAIN_ACCEPTANCE_PROFILE,validateCreativeBrainAcceptanceBinding} from "./creative-brain-acceptance-fixture";
 import {activateDirectorContext,directorRequestIdentity,resolveDirectorWorkspace,sameDirectorRequestIdentity,saveDirectorWorkspace,selectDirectorShot,type DirectorRequestIdentity} from "./director-contexts";
 import {beginCreativeBriefRequest,beginCreativeDirectionRequest,completeCreativeBriefRequest,completeCreativeDirectionRequest,emptyCreativeDirectionSession,failCreativeBriefRequest,failCreativeDirectionRequest,type CreativeDirectionSessions} from "./creative-direction-state";
 import {type CreativeBrainInput,type RecentCreativeHistory} from "./creative-brain";
@@ -191,6 +192,8 @@ export default function Home() {
   const [writerAcceptanceEnabled,setWriterAcceptanceEnabled]=useState(false);
   const [writerAcceptance,setWriterAcceptance]=useState<ScriptWriterAcceptanceState>(emptyScriptWriterAcceptanceState);
   const [criticAcceptanceEnabled,setCriticAcceptanceEnabled]=useState(false);
+  const [creativeBrainAcceptanceEnabled,setCreativeBrainAcceptanceEnabled]=useState(false);
+  const [creativeBrainAcceptanceProjectId,setCreativeBrainAcceptanceProjectId]=useState<string|null>(null);
   const [criticAcceptance,setCriticAcceptance]=useState<ScriptCriticAcceptanceState>(emptyScriptCriticAcceptanceState);
   const [memorySaveState,setMemorySaveState]=useState<"saved"|"saving">("saved");
   const [projectMemory,setProjectMemory]=useState<ProjectMemory>(()=>({
@@ -211,6 +214,7 @@ export default function Home() {
   useEffect(() => {
     fetch("/api/script-writer", { cache: "no-store" }).then(response=>response.ok?response.json():null).then(data=>setWriterAcceptanceEnabled(data?.acceptanceHarnessEnabled===true)).catch(()=>setWriterAcceptanceEnabled(false));
     fetch("/api/script-critic", { cache: "no-store" }).then(response=>response.ok?response.json():null).then(data=>setCriticAcceptanceEnabled(data?.acceptanceHarnessEnabled===true)).catch(()=>setCriticAcceptanceEnabled(false));
+    fetch("/api/creative-brain", { cache: "no-store" }).then(response=>response.ok?response.json():null).then(data=>setCreativeBrainAcceptanceEnabled(data?.acceptanceHarnessEnabled===true)).catch(()=>setCreativeBrainAcceptanceEnabled(false));
     fetch("/api/scripts", { cache: "no-store" })
       .then(res => res.json())
       .then(data => { setHistory(JSON.parse(localStorage.getItem("viralcraft-history") || "[]")); setAiConnected(Boolean(data.aiConnected));if(data.providers)setProviderStatuses(data.providers); })
@@ -409,8 +413,17 @@ export default function Home() {
   activeScriptGenerationIdentity.current=`${projectMemory.workspace.currentProjectId||""}:${result?scriptRevisionIdentity(result):"none"}`;
 
   function currentProductContext(productName=form.product){
+    if(creativeBrainAcceptanceProjectId===projectMemory.workspace.currentProjectId)return CREATIVE_BRAIN_ACCEPTANCE_CONTEXT;
     const project=projectMemory.projects.find(item=>item.id===projectMemory.workspace.currentProjectId);
     return resolveCanonicalProductContext({productName,selectedProductId,projectProductProfileId:project?.productProfileId,profiles:productProfiles});
+  }
+
+  function activateCreativeBrainAcceptanceFixture(){
+    if(!creativeBrainAcceptanceEnabled)return;
+    setCreativeBrainAcceptanceProjectId(projectMemory.workspace.currentProjectId);
+    setSelectedProductId(CREATIVE_BRAIN_ACCEPTANCE_PROFILE.id);
+    updateProjectMemory({}, {product:CREATIVE_BRAIN_ACCEPTANCE_PROFILE.name,productProfileId:CREATIVE_BRAIN_ACCEPTANCE_PROFILE.id,market:"Spain",platform:"TikTok",workspaceLanguage:"zh-CN",targetLanguage:"Spanish",language:"Spanish"});
+    setForm(previous=>{const next={...previous,product:CREATIVE_BRAIN_ACCEPTANCE_PROFILE.name,sellingPoints:CREATIVE_BRAIN_ACCEPTANCE_PROFILE.sellingPoints,audience:CREATIVE_BRAIN_ACCEPTANCE_PROFILE.audience,country:"Spain",language:"Spanish",offer:""};saveWorkspaceSnapshot({form:next});return next;});
   }
 
   async function generate(controls:GenerationControls) {
@@ -464,9 +477,21 @@ export default function Home() {
     const recentScripts=(project.assets.scriptVersions as Script[]).slice(-6).reverse();
     const recent=recentScripts.map(({title,hook,creativeAngle,scenario,proofMechanism,cta})=>({title,hook,creativeAngle,scenario,proofMechanism,cta})) as RecentCreativeHistory[];
     const languageContext=resolveCreationLanguageContext({...project,targetLanguage:form.language,market:form.country,platform:controls.platform});
+    const acceptanceActive=creativeBrainAcceptanceProjectId===projectId;
+    const resolution=acceptanceActive
+      ? {context:CREATIVE_BRAIN_ACCEPTANCE_CONTEXT,issues:[]}
+      : resolveGroundedCanonicalProductContext({productName:form.product,selectedProductId,projectProductProfileId:project.productProfileId,profiles:productProfiles});
+    if(!resolution.context){setCreativeDirectionSessions(current=>failCreativeDirectionRequest(current,projectId,requestId,`产品事实未绑定：${resolution.issues.map(item=>item.code).join(", ")}`));return;}
+    const productContext=resolution.context;
+    const fingerprint=productContextFingerprint(productContext);
+    if(acceptanceActive&&!validateCreativeBrainAcceptanceBinding({projectProductName:project.product,projectProductProfileId:project.productProfileId,productContext,productContextFingerprint:fingerprint})){
+      setCreativeDirectionSessions(current=>failCreativeDirectionRequest(current,projectId,requestId,"验收产品绑定失效，请重新启用验收产品"));return;
+    }
     const brainInput:CreativeBrainInput={
       projectId,
-      productContext:resolveCanonicalProductContext({productName:form.product,selectedProductId,projectProductProfileId:project.productProfileId,profiles:productProfiles}),
+      productContext,
+      productContextFingerprint:fingerprint,
+      productBinding:{projectProductName:project.product,projectProductProfileId:project.productProfileId!},
       languageContext,
       market:form.country,
       language:form.language,
@@ -712,6 +737,9 @@ export default function Home() {
         currentCreativeBrief={currentCreativeBrief}
         onGenerateCreativeDirections={generateCreativeDirections}
         onSelectCreativeDirection={selectCreativeDirection}
+        creativeBrainAcceptanceEnabled={creativeBrainAcceptanceEnabled}
+        creativeBrainAcceptanceActive={creativeBrainAcceptanceProjectId===projectMemory.workspace.currentProjectId}
+        onActivateCreativeBrainAcceptance={activateCreativeBrainAcceptanceFixture}
         writerAcceptanceEnabled={writerAcceptanceEnabled}
         writerAcceptance={currentWriterAcceptance}
         onTestBriefWriter={testBriefWriter}

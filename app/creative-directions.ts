@@ -12,6 +12,8 @@ import {
 import { checkCompliance, getGenerationComplianceKnowledge } from "./compliance-rules";
 import { buildKnowledgeContext, findFactViolations } from "./knowledge-context";
 import { validateInternalCreativeLanguage } from "./creation-language-context";
+import { productContextFingerprint } from "./creative-opportunity-selection";
+import { validateCreativeDirectionProductGrounding } from "./product-claim-grounding";
 
 export const CREATIVE_DIRECTION_COUNT = 3;
 export const CREATIVE_DIRECTION_MAX_TOKENS = 1200;
@@ -22,6 +24,17 @@ export type CreativeDirectionResult = {
   metadata: CreativeBrainMetadata;
   validationSummary: { issues: OpportunityValidationIssue[]; diversityPassed: boolean };
 };
+
+export function validateGroundedCreativeBrainInput(input: CreativeBrainInput): OpportunityValidationIssue[] {
+  const issues: OpportunityValidationIssue[] = [];
+  const knowledge = input.productContext.productKnowledge;
+  if (!knowledge) issues.push({ type: "grounding", code: "missing_product_truth", path: "productContext.productKnowledge", message: "Canonical Product Truth is required" });
+  if (input.productContext.profileId == null) issues.push({ type: "grounding", code: "missing_product_truth", path: "productContext.profileId", message: "Canonical Product Profile is required" });
+  if (input.productBinding?.projectProductName !== input.productContext.productName) issues.push({ type: "grounding", code: "product_identity_mismatch", path: "productBinding.projectProductName", message: "Project product must match Product Context" });
+  if (input.productBinding?.projectProductProfileId !== input.productContext.profileId) issues.push({ type: "grounding", code: "product_identity_mismatch", path: "productBinding.projectProductProfileId", message: "Project profile must match Product Context" });
+  if (input.productContextFingerprint !== productContextFingerprint(input.productContext)) issues.push({ type: "grounding", code: "product_context_fingerprint_mismatch", path: "productContextFingerprint", message: "Product Context fingerprint does not match canonical facts" });
+  return issues;
+}
 
 const requiredText = (value: unknown, max = 500) => typeof value === "string" && Boolean(value.trim()) && value.trim().length <= max;
 const optionalText = (value: unknown, max = 500) => value === undefined || requiredText(value, max);
@@ -138,6 +151,9 @@ export function validateCreativeDirection(item: CreativeDirectionCandidate, inpu
     }
   }
   for (const violation of findFactViolations(text, context)) issues.push({ candidateId: item.id, type: "truth", message: violation });
+  for (const issue of validateCreativeDirectionProductGrounding(item, input.productContext)) {
+    issues.push({ candidateId: item.id, type: "grounding", ...issue, message: issue.code });
+  }
   for (const hit of checkCompliance(text).filter((entry) => entry.level === "高")) issues.push({ candidateId: item.id, type: "compliance", message: `${hit.category}:${hit.term}` });
   const truth = Object.values(knowledge || {}).join(" ");
   const unsupportedMedical = /(?:治愈|治疗|根治|修复疾病|杀菌|抗菌|cure|treat|heals?|kills? bacteria|medical(?:ly)? proven)/iu;
@@ -156,12 +172,12 @@ export function validateCreativeDirection(item: CreativeDirectionCandidate, inpu
   return issues;
 }
 
-type RepairContext = { preserved: CreativeDirectionCandidate[]; languageCandidates: CreativeDirectionCandidate[]; missingCount: number; issues: OpportunityValidationIssue[] };
+type RepairContext = { preserved: CreativeDirectionCandidate[]; correctionCandidates: CreativeDirectionCandidate[]; missingCount: number; issues: OpportunityValidationIssue[] };
 
 export function creativeDirectionMessages(input: CreativeBrainInput, repair?: RepairContext) {
   const repairInstruction = repair
-    ? repair.languageCandidates.length
-      ? ` One repair only. Return ${repair.missingCount} corrected directions only. Re-express these wrong-language directions in Simplified Chinese without changing their IDs or strategy: ${JSON.stringify(repair.languageCandidates)}. Keep meaning, audience, moment, motivation, tension, angle, mechanism, hook, and opening visual. Do not repeat: ${JSON.stringify(repair.preserved)}. Fix: ${JSON.stringify(repair.issues)}.`
+    ? repair.correctionCandidates.length
+      ? ` One repair only. Return ${repair.missingCount} corrected directions only. Re-express these wrong-language directions in Simplified Chinese without changing their IDs. Keep these candidate IDs and their audience, moment, angle, mechanism, and strategy identity: ${JSON.stringify(repair.correctionCandidates)}. Correct only the listed language or Product Truth grounding issues. Delete or narrow unsupported assertions, or replace them only with facts present in productTruth. Do not invent facts. Do not repeat or rewrite preserved candidates: ${JSON.stringify(repair.preserved)}. Safe issues (candidateId, code, path, capabilityFamily): ${JSON.stringify(repair.issues.map(({candidateId,code,path,capabilityFamily,type})=>({candidateId,code,path,capabilityFamily,type})))}.`
       : ` This is the only repair. Return ${repair.missingCount} replacement directions only. Do not repeat: ${JSON.stringify(repair.preserved)}. Fix: ${JSON.stringify(repair.issues)}.`
     : "";
   return [
@@ -178,10 +194,12 @@ export async function generateCreativeDirections(input: CreativeBrainInput, prov
   const metadata = emptyMetadata();
   const allIssues: OpportunityValidationIssue[] = [];
   let preserved: CreativeDirectionCandidate[] = [];
-  let languageCandidates: CreativeDirectionCandidate[] = [];
+  const inputIssues = validateGroundedCreativeBrainInput(input);
+  if (inputIssues.length) return { status: "failure", directions: [], metadata: { ...metadata, errorType: "invalid_output" }, validationSummary: { issues: inputIssues, diversityPassed: false } };
+  let correctionCandidates: CreativeDirectionCandidate[] = [];
   for (let attempt = 0; attempt < 2; attempt++) {
     try {
-      const repair = attempt ? { preserved, languageCandidates, missingCount: Math.max(1, CREATIVE_DIRECTION_COUNT - preserved.length), issues: [...allIssues] } : undefined;
+      const repair = attempt ? { preserved, correctionCandidates, missingCount: correctionCandidates.length || Math.max(1, CREATIVE_DIRECTION_COUNT - preserved.length), issues: [...allIssues] } : undefined;
       const response = await provider({
         messages: creativeDirectionMessages(input, repair), temperature: attempt ? .65 : .82, topP: .9,
         maxTokens: CREATIVE_DIRECTION_MAX_TOKENS,
@@ -195,14 +213,14 @@ export async function generateCreativeDirections(input: CreativeBrainInput, prov
       let valid = parsed.directions.filter((item) => {
         const issues = validateCreativeDirection(item, input);
         allIssues.push(...issues);
-        if (!attempt && issues.length > 0 && issues.every((entry) => entry.type === "language")) languageCandidates.push(item);
+        if (!attempt && issues.length > 0 && issues.every((entry) => entry.type === "language" || entry.type === "grounding")) correctionCandidates.push(item);
         return issues.length === 0;
       });
-      if (attempt && languageCandidates.length) {
+      if (attempt && correctionCandidates.length) {
         const returnedIds = new Set(valid.map((item) => item.id));
-        for (const candidate of languageCandidates) if (!returnedIds.has(candidate.id)) allIssues.push({ candidateId: candidate.id, type: "language", message: "Language repair must preserve Direction ID and strategy identity" });
-        if (languageCandidates.length === repair!.missingCount) {
-          const expectedIds = new Set(languageCandidates.map((item) => item.id));
+        for (const candidate of correctionCandidates) if (!returnedIds.has(candidate.id)) allIssues.push({ candidateId: candidate.id, type: "grounding", code: "repair_identity_mismatch", path: "id", message: "Grounding repair must preserve Direction ID and strategy identity" });
+        if (correctionCandidates.length === repair!.missingCount) {
+          const expectedIds = new Set(correctionCandidates.map((item) => item.id));
           valid = valid.filter((item) => expectedIds.has(item.id));
         }
       }

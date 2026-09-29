@@ -153,6 +153,9 @@ type Props = {
   currentCreativeBrief: CreativeBriefV2 | null;
   onGenerateCreativeDirections: (controls: GenerationControls) => void;
   onSelectCreativeDirection: (opportunityId: string, controls: GenerationControls) => void;
+  creativeBrainAcceptanceEnabled: boolean;
+  creativeBrainAcceptanceActive: boolean;
+  onActivateCreativeBrainAcceptance: () => void;
   writerAcceptanceEnabled: boolean;
   writerAcceptance: ScriptWriterAcceptanceState;
   onTestBriefWriter: (controls: GenerationControls) => void;
@@ -651,6 +654,9 @@ export default function ScriptStudio(props: Props) {
         disabled={!props.inputReady || !providerReady}
         onGenerate={() => props.onGenerateCreativeDirections(controls(1))}
         onSelect={(opportunityId) => props.onSelectCreativeDirection(opportunityId, controls(1))}
+        acceptanceEnabled={props.creativeBrainAcceptanceEnabled}
+        acceptanceActive={props.creativeBrainAcceptanceActive}
+        onActivateAcceptance={props.onActivateCreativeBrainAcceptance}
         writerAcceptanceEnabled={props.writerAcceptanceEnabled}
         writerAcceptance={props.writerAcceptance}
         onTestWriter={() => props.onTestBriefWriter(controls(1))}
