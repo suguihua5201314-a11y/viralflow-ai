@@ -64,9 +64,10 @@ test("partial results remain visible and failures do not invent candidates", () 
 });
 
 test("UI wiring uses canonical Product Context, Creative Brain API and 2A selection without Script or Director generation", async () => {
-  const [page, studio, component] = await Promise.all([
+  const [page, studio, stage, component] = await Promise.all([
     readFile(new URL("../app/page.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/script-studio.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/components/creative/creative-stage.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/components/script/creative-direction-workspace.tsx", import.meta.url), "utf8"),
   ]);
   const generationPath = page.slice(page.indexOf("async function generateCreativeDirections"), page.indexOf("function update("));
@@ -75,12 +76,13 @@ test("UI wiring uses canonical Product Context, Creative Brain API and 2A select
   assert.match(generationPath, /parseCreativeDirectionApiResponse/);
   assert.doesNotMatch(generationPath, /\/api\/scripts|generate\(|Director|Image/);
   assert.doesNotMatch(generationPath, /selectCreativeOpportunity|createCreativeBrief|appendCreativeBriefRevision/);
-  assert.match(studio, /CreativeDirectionWorkspace/);
+  assert.match(stage, /CreativeDirectionWorkspace/);
+  assert.doesNotMatch(studio, /<CreativeDirectionWorkspace/);
   assert.match(component, /生成创意方向/);
-  assert.match(component, /创意简报已准备/);
+  assert.match(component, /创意方案已确认/);
   assert.match(component, /使用这个方向/);
   assert.match(component, /正在生成完整创意简报/);
-  assert.match(component, /创意简报已准备/);
+  assert.match(component, /根据此创意生成脚本/);
   assert.match(page, /fetch\("\/api\/creative-brief"/);
 });
 

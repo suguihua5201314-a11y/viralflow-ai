@@ -23,11 +23,7 @@ import {
   type ScriptVariant,
 } from "./script-variants";
 import { synchronizeScriptScenes } from "./script-foundation";
-import CreativeDirectionWorkspace from "./components/script/creative-direction-workspace";
 import type { CreativeBriefV2 } from "./creative-contract";
-import type { CreativeDirectionSession } from "./creative-direction-state";
-import type { ScriptWriterAcceptanceState } from "./script-writer-acceptance";
-import type { ScriptCriticAcceptanceState } from "./script-critic-acceptance";
 
 export type StudioScene = {
   time: string;
@@ -150,19 +146,8 @@ type Props = {
     view: "history" | "director" | "voice" | "products" | "library",
   ) => void;
   scoreScript: (script: StudioScript) => StudioScore;
-  creativeDirectionSession: CreativeDirectionSession;
   currentCreativeBrief: CreativeBriefV2 | null;
-  onGenerateCreativeDirections: (controls: GenerationControls) => void;
-  onSelectCreativeDirection: (opportunityId: string, controls: GenerationControls) => void;
-  creativeBrainAcceptanceEnabled: boolean;
-  creativeBrainAcceptanceActive: boolean;
-  onActivateCreativeBrainAcceptance: () => void;
-  writerAcceptanceEnabled: boolean;
-  writerAcceptance: ScriptWriterAcceptanceState;
-  onTestBriefWriter: (controls: GenerationControls) => void;
-  criticAcceptanceEnabled: boolean;
-  criticAcceptance: ScriptCriticAcceptanceState;
-  onTestScriptCritic: (controls: GenerationControls) => void;
+  onReturnToCreative: () => void;
 };
 
 type EditorBlock = CopilotBlock & { duration: string };
@@ -329,6 +314,7 @@ export default function ScriptStudio(props: Props) {
   const [hookStrategy, setHookStrategy] = useState("好奇");
   const [creativity, set创意强度] = useState("平衡");
   const [outputCount, set生成数量Count] = useState<1 | 5>(1);
+  const [legacyRaceOpen, setLegacyRaceOpen] = useState(false);
   const [locked, setLocked] = useState<Record<string, boolean>>({});
   const [editing, setEditing] = useState<string | null>(null);
   const [selectedBlockKey, setSelectedBlockKey] =
@@ -637,6 +623,7 @@ export default function ScriptStudio(props: Props) {
           </p>
         </div>
         <div className="os-studio-title-actions">
+          <button onClick={() => setLegacyRaceOpen(open => !open)}>{legacyRaceOpen ? "收起旧版生成" : "更多生成方式"}</button>
           <button onClick={() => props.onNavigate("history")}>
             历史脚本 <b>{props.historyCount}</b>
           </button>
@@ -649,24 +636,12 @@ export default function ScriptStudio(props: Props) {
         </div>
       </header>
 
-      <CreativeDirectionWorkspace
-        session={props.creativeDirectionSession}
-        currentBrief={props.currentCreativeBrief}
-        disabled={!props.inputReady || !providerReady}
-        onGenerate={() => props.onGenerateCreativeDirections(controls(1))}
-        onSelect={(opportunityId) => props.onSelectCreativeDirection(opportunityId, controls(1))}
-        acceptanceEnabled={props.creativeBrainAcceptanceEnabled}
-        acceptanceActive={props.creativeBrainAcceptanceActive}
-        onActivateAcceptance={props.onActivateCreativeBrainAcceptance}
-        writerAcceptanceEnabled={props.writerAcceptanceEnabled}
-        writerAcceptance={props.writerAcceptance}
-        onTestWriter={() => props.onTestBriefWriter(controls(1))}
-        criticAcceptanceEnabled={props.criticAcceptanceEnabled}
-        criticAcceptance={props.criticAcceptance}
-        onTestCritic={() => props.onTestScriptCritic(controls(1))}
-      />
+      <section className="script-current-creative" aria-label="当前创意">
+        <div><span>当前创意</span><b>{props.currentCreativeBrief?.direction.creativeAngle || "尚未确认创意方向"}</b>{props.currentCreativeBrief && <small>{props.currentCreativeBrief.opening.hookLine}</small>}</div>
+        <button type="button" onClick={props.onReturnToCreative}>返回修改创意</button>
+      </section>
 
-      <section className="os-script-version-rail">
+      {legacyRaceOpen && <section className="os-script-version-rail" aria-label="旧版脚本赛马">
         <header>
           <div>
             <span>SCRIPT VARIATIONS</span>
@@ -762,7 +737,7 @@ export default function ScriptStudio(props: Props) {
             );
           })}
         </div>
-      </section>
+      </section>}
       <div className="creative-script-layout">
         <main className="os-studio-center">
           <div className="os-studio-editor-head">
@@ -1245,7 +1220,7 @@ export default function ScriptStudio(props: Props) {
             </>
           )}
 
-          <details className="creative-race-details">
+          {legacyRaceOpen && <details className="creative-race-details">
             <summary>赛马详情与版本比较</summary>
             <section className="os-race-arena">
               <header>
@@ -1366,7 +1341,7 @@ export default function ScriptStudio(props: Props) {
                 </div>
               )}
             </section>
-          </details>
+          </details>}
           <footer className="os-pipeline-bar">
             <div className="os-pipeline-context">
               <span>当前方案</span>

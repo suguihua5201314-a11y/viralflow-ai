@@ -6,6 +6,28 @@
   color: var(--vf-text);
 }
 
+.creative-stage {
+  max-width: 1240px;
+  margin: 0 auto;
+  padding: 28px 32px 64px;
+  color: var(--vf-text);
+}
+.creative-stage-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 28px; margin-bottom: 18px; }
+.creative-stage-heading > div > span { color: var(--vf-brand); font-size: 12px; font-weight: 800; letter-spacing: .08em; }
+.creative-stage-heading h1 { margin: 7px 0; font-size: clamp(25px, 3vw, 36px); letter-spacing: -.025em; }
+.creative-stage-heading p { margin: 0; color: var(--vf-text-secondary); }
+.creative-stage-heading aside { display: grid; min-width: 260px; max-width: 380px; gap: 4px; padding: 14px 16px; border: 1px solid var(--vf-border); border-radius: 12px; background: var(--vf-surface); }
+.creative-stage-heading aside span, .creative-stage-heading aside small { color: var(--vf-text-secondary); line-height: 1.45; }
+.creative-stage .creative-direction-workspace { margin-top: 0; }
+.creative-confirmed { display: flex !important; align-items: center; justify-content: space-between; gap: 18px; }
+.creative-confirmed > div { display: grid; gap: 4px; }
+.creative-brief-details, .creative-preview-diagnostics { margin-top: 14px; }
+.creative-brief-details > summary, .creative-preview-diagnostics > summary { cursor: pointer; color: var(--vf-text-secondary); font-size: 13px; font-weight: 700; }
+.script-current-creative { display: flex; align-items: center; justify-content: space-between; gap: 20px; margin: 0 0 16px; padding: 13px 16px; border: 1px solid var(--vf-border); border-radius: 12px; background: var(--vf-surface); }
+.script-current-creative > div { display: grid; gap: 3px; }
+.script-current-creative span, .script-current-creative small { color: var(--vf-text-secondary); font-size: 12px; }
+.script-current-creative button { border: 0; background: transparent; color: var(--vf-brand); font-weight: 700; cursor: pointer; }
+
 .vnext-writing-header {
   display: flex;
   align-items: center;
@@ -793,6 +815,9 @@
 }
 
 @media (max-width: 900px) {
+  .creative-stage { padding: 20px 18px 48px; }
+  .creative-stage-heading, .creative-confirmed, .script-current-creative { display: grid !important; }
+  .creative-stage-heading aside { min-width: 0; max-width: none; }
   .creative-direction-grid { grid-template-columns: 1fr; }
   .current-creative-brief dl { grid-template-columns: 1fr; }
   .os-script-studio .creative-script-layout {

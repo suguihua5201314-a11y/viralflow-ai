@@ -11,6 +11,7 @@ type Props = {
   disabled: boolean;
   onGenerate: () => void;
   onSelect: (opportunityId: string) => void;
+  onContinueToScript: () => void;
   acceptanceEnabled: boolean;
   acceptanceActive: boolean;
   onActivateAcceptance: () => void;
@@ -28,22 +29,22 @@ const evidenceLabels: Record<string, string> = {
   comparison: "对照", education: "知识解释", testimonial: "体验证言", "none-required": "无需额外证明",
 };
 
-export default function CreativeDirectionWorkspace({ session, currentBrief, disabled, onGenerate, onSelect, acceptanceEnabled, acceptanceActive, onActivateAcceptance, writerAcceptanceEnabled, writerAcceptance, onTestWriter, criticAcceptanceEnabled, criticAcceptance, onTestCritic }: Props) {
+export default function CreativeDirectionWorkspace({ session, currentBrief, disabled, onGenerate, onSelect, onContinueToScript, acceptanceEnabled, acceptanceActive, onActivateAcceptance, writerAcceptanceEnabled, writerAcceptance, onTestWriter, criticAcceptanceEnabled, criticAcceptance, onTestCritic }: Props) {
   const hasDirections = session.directions.length > 0;
   return (
     <section className="creative-direction-workspace" aria-labelledby="creative-direction-title">
       <header>
         <div>
-          <span>CREATIVE DIRECTION</span>
-          <h2 id="creative-direction-title">先决定拍什么，再开始写脚本</h2>
-          <p>Creative Brain 会根据当前产品、市场和平台提出不同的可拍摄方向。</p>
+          <span>CREATIVE DIRECTIONS</span>
+          <h2 id="creative-direction-title">选择一个创意方向</h2>
+          <p>比较 Hook、开场画面和使用时刻，然后选择最值得拍的方案。</p>
         </div>
-        <button className="vf-button vf-button-primary" disabled={disabled || session.status === "loading"} onClick={onGenerate}>
-          {session.status === "loading" ? "正在生成方向…" : hasDirections ? "重新生成方向" : "生成创意方向"}
+        <button className={`vf-button ${hasDirections ? "vf-button-secondary" : "vf-button-primary"}`} disabled={disabled || session.status === "loading"} onClick={onGenerate}>
+          {session.status === "loading" ? "正在生成方向…" : hasDirections ? "换一批创意" : "生成创意方向"}
         </button>
       </header>
 
-      {acceptanceEnabled && <div className="creative-direction-notice"><button className="vf-button" disabled={acceptanceActive || session.status === "loading"} onClick={onActivateAcceptance}>{acceptanceActive ? "L3A 验收产品已绑定" : "绑定 L3A 验收产品"}</button>{acceptanceActive && <small>Transformers Screen Protector · Spain · TikTok · 中文创作源</small>}</div>}
+      {acceptanceEnabled && <details className="creative-preview-diagnostics"><summary>Preview 验收工具</summary><div className="creative-direction-notice"><button className="vf-button" disabled={acceptanceActive || session.status === "loading"} onClick={onActivateAcceptance}>{acceptanceActive ? "L3A 验收产品已绑定" : "绑定 L3A 验收产品"}</button>{acceptanceActive && <small>Transformers Screen Protector · Spain · TikTok · 中文创作源</small>}</div></details>}
 
       {session.status === "loading" && <div className="creative-direction-notice is-loading" role="status">正在分析产品事实并构建不同创意方向…</div>}
       {session.status === "partial" && <div className="creative-direction-notice">部分方向生成未完成，以下方向仍可使用，也可以重新生成。</div>}
@@ -65,20 +66,19 @@ export default function CreativeDirectionWorkspace({ session, currentBrief, disa
                 <dl>
                   <div><dt>开场画面</dt><dd>{item.openingVisual.subject} · {item.openingVisual.action}{item.openingVisual.visibleChangeOrQuestion ? ` · ${item.openingVisual.visibleChangeOrQuestion}` : ""}</dd></div>
                   <div><dt>使用时刻</dt><dd>{item.useMoment}</dd></div>
-                  <div><dt>目标观众</dt><dd>{item.targetAudience}</dd></div>
-                  <div><dt>内容机制</dt><dd>{item.contentMechanism}</dd></div>
+                  {item.rationale && <div><dt>为什么值得拍</dt><dd>{item.rationale}</dd></div>}
                 </dl>
                 <details>
                   <summary>查看方向细节</summary>
                   <p><b>目标观众</b>{item.targetAudience}</p>
                   <p><b>核心动机</b>{item.coreMotivation}</p>
                   {item.coreTension && <p><b>张力 / 顾虑</b>{item.coreTension}</p>}
-                  {item.rationale && <p><b>方向理由</b>{item.rationale}</p>}
+                  <p><b>内容机制</b>{item.contentMechanism}</p>
                 </details>
                 <button disabled={disabled || Boolean(session.selectingOpportunityId)} onClick={() => onSelect(canonical.id)}>
                   {selecting ? "正在生成完整创意简报…" : session.briefStatus === "error" && session.selectedOpportunityId === canonical.id ? "重试生成简报" : "使用这个方向"}
                 </button>
-                {session.briefStatus === "error" && session.selectedOpportunityId === canonical.id && <div className="creative-direction-notice is-error" role="alert"><p>{session.briefError || "创意简报生成失败，请重试"}</p>{session.briefDiagnostic && <small>Validation: {session.briefDiagnostic}</small>}{session.briefRuleFamily && <small>Rule family: {session.briefRuleFamily}</small>}</div>}
+                {session.briefStatus === "error" && session.selectedOpportunityId === canonical.id && <div className="creative-direction-notice is-error" role="alert"><p>创意方案没有成功生成，我们已经保留你选择的方向。</p><span>可以重试当前方向，或选择另一张卡片。</span>{(session.briefDiagnostic || session.briefRuleFamily) && <details><summary>技术详情</summary>{session.briefDiagnostic && <small>Validation: {session.briefDiagnostic}</small>}{session.briefRuleFamily && <small>Rule family: {session.briefRuleFamily}</small>}</details>}</div>}
               </article>
             );
           })}
@@ -89,14 +89,19 @@ export default function CreativeDirectionWorkspace({ session, currentBrief, disa
 
       {currentBrief && (!session.selectedOpportunityId || currentBrief.opportunityReference?.canonicalOpportunityId === session.selectedOpportunityId) && (
         <aside className="current-creative-brief">
-          <div><span>创意简报已准备</span><b>{currentBrief.direction.creativeAngle}</b></div>
-          <dl>
+          <div className="creative-confirmed"><div><span>创意方案已确认</span><b>{currentBrief.direction.creativeAngle}</b></div><button className="vf-button vf-button-primary" onClick={onContinueToScript}>根据此创意生成脚本 →</button></div>
+          <details className="creative-brief-details"><summary>查看创意依据</summary><dl>
+            <div><dt>目标观众</dt><dd>{currentBrief.opportunity.targetAudience}</dd></div>
+            <div><dt>使用时刻</dt><dd>{currentBrief.opportunity.useMoment}</dd></div>
+            <div><dt>购买动机 / 张力</dt><dd>{currentBrief.opportunity.purchaseMotivation} · {currentBrief.opportunity.tensionOrObjection}</dd></div>
+            <div><dt>内容机制</dt><dd>{currentBrief.direction.contentMechanisms.join(" · ")}</dd></div>
             <div><dt>Hook</dt><dd>{currentBrief.opening.hookLine}</dd></div>
             <div><dt>开场画面</dt><dd>{currentBrief.opening.visual.subject} · {currentBrief.opening.visual.action}</dd></div>
             <div><dt>证明方式</dt><dd>{evidenceLabels[currentBrief.evidence.type] || currentBrief.evidence.type} · {currentBrief.evidence.objective}</dd></div>
             <div><dt>CTA方向</dt><dd>{currentBrief.ctaDirection}</dd></div>
             <div><dt>风险边界</dt><dd>{[...currentBrief.riskBoundaries.prohibitedClaims, ...currentBrief.riskBoundaries.requiredQualifiers, ...currentBrief.riskBoundaries.safetyConstraints].slice(0, 3).join("；") || "遵循产品事实与平台规范"}</dd></div>
-          </dl>
+          </dl></details>
+          {writerAcceptanceEnabled && <details className="creative-preview-diagnostics"><summary>高级诊断工具</summary>
           {writerAcceptanceEnabled && (
             <section className="script-writer-acceptance" aria-label="Brief Writer Preview Acceptance">
               <header><b>Preview Writer Acceptance</b><button disabled={writerAcceptance.status === "loading"} onClick={onTestWriter}>{writerAcceptance.status === "loading" ? "正在测试 Writer…" : "测试 Brief Writer"}</button></header>
@@ -131,6 +136,7 @@ export default function CreativeDirectionWorkspace({ session, currentBrief, disa
               )}
             </section>
           )}
+          </details>}
         </aside>
       )}
     </section>
