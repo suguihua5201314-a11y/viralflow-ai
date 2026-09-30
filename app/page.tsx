@@ -16,6 +16,7 @@ import Dashboard, { type RecentWorkItem } from "./dashboard";
 import { buildDashboardMetrics } from "./dashboard-metrics";
 import ScriptStudio, { type GenerationControls } from "./script-studio";
 import CreativeStage from "./components/creative/creative-stage";
+import FinalScriptStage, { type FinalScriptStageStatus } from "./components/script/final-script-stage";
 import ViralAnalyzer from "./viral-analyzer";
 import ViralReplication from "./viral-replication";
 import { adaptLegacyCases, viralCaseReference, type ViralCase } from "./viral-analysis";
@@ -51,6 +52,10 @@ import {parseCreativeBriefApiResponse,persistExpandedCreativeBrief,type Creative
 import {productContextFingerprint} from "./creative-opportunity-selection";
 import {beginScriptWriterAcceptance,completeScriptWriterAcceptance,emptyScriptWriterAcceptanceState,failScriptWriterAcceptance,parseScriptWriterAcceptanceResponse,sameScriptWriterAcceptanceIdentity,type ScriptWriterAcceptanceIdentity,type ScriptWriterAcceptanceState} from "./script-writer-acceptance";
 import {beginScriptCriticAcceptance,completeScriptCriticAcceptance,emptyScriptCriticAcceptanceState,failScriptCriticAcceptance,parseScriptCriticAcceptanceResponse,sameScriptCriticAcceptanceIdentity,type ScriptCriticAcceptanceIdentity,type ScriptCriticAcceptanceState} from "./script-critic-acceptance";
+import {orchestrateFinalScript} from "./final-script-orchestration";
+import type {ScriptWriterInput} from "./brief-driven-script";
+import type {ScriptCriticInput} from "./brief-driven-script-critic";
+import type {TargetedRewriteInput} from "./brief-driven-script-rewriter";
 
 type Scene = { time: string; visual: string; line: string; edit: string };
 type Script = { revisionId?: string; sourceCreativeBriefId?: string; sourceCreativeBriefRevisionId?: string; id?: number; title: string; product: string; language: string; country: string; style: string; hook: string; alternateHooks: string[]; narration: string; scenes: Scene[]; createdAt?: string; aiGenerated?: boolean; creativeAngle?:string; hookType?:string; framework?:string; conflict?:string; productReveal?:string; proof?:string; sellingPoints?:string; cta?:string; shootingSuggestion?:string; scenario?:string; proofMechanism?:string; ctaStyle?:string };
@@ -199,6 +204,11 @@ export default function Home() {
   const [criticAcceptance,setCriticAcceptance]=useState<ScriptCriticAcceptanceState>(emptyScriptCriticAcceptanceState);
   const [memorySaveState,setMemorySaveState]=useState<"saved"|"saving">("saved");
   const [requestedProductionStage,setRequestedProductionStage]=useState<ProductionStage|null>(null);
+  const [finalScriptStatus,setFinalScriptStatus]=useState<FinalScriptStageStatus>("idle");
+  const [finalScriptDiagnostic,setFinalScriptDiagnostic]=useState("");
+  const [finalScriptSummary,setFinalScriptSummary]=useState("");
+  const [finalScriptRewritten,setFinalScriptRewritten]=useState(false);
+  const [scriptEditorOpen,setScriptEditorOpen]=useState(false);
   const [productionImageAssets,setProductionImageAssets]=useState<ReturnType<typeof readImageAssets>>([]);
   const [projectMemory,setProjectMemory]=useState<ProjectMemory>(()=>({
     version:1,
@@ -604,6 +614,36 @@ export default function Home() {
     }
   }
   function update(key: keyof typeof form, value: string) { if(key==="product")updateProjectMemory({}, {product:value}); setForm(prev => {const next={...prev,[key]:value};saveWorkspaceSnapshot({form:next});return next;}); }
+  async function generateFinalScript(){
+    const projectId=projectMemory.workspace.currentProjectId;
+    const project=projectMemory.projects.find(item=>item.id===projectId);
+    const brief=project?.assets.creativeBriefRevisions?.find(item=>item.revisionId===project.assets.currentCreativeBriefRevisionId);
+    if(!projectId||!project||!brief){setFinalScriptStatus("error");setFinalScriptDiagnostic("missing_current_creative_brief");return;}
+    const productContext=resolveCanonicalProductContext({productName:form.product,selectedProductId,projectProductProfileId:project.productProfileId,profiles:productProfiles});
+    const fingerprint=productContextFingerprint(productContext);
+    const requestId=crypto.randomUUID();
+    activeScriptGenerationIdentity.current=requestId;
+    setFinalScriptStatus("writer");setFinalScriptDiagnostic("");setFinalScriptSummary("");setScriptEditorOpen(false);
+    const languageContext=resolveCreationLanguageContext({...project,targetLanguage:form.language,market:form.country,platform:creativeStageControls.platform});
+    const writerInput:ScriptWriterInput={projectId,requestId,creativeBriefReference:{id:brief.id,revisionId:brief.revisionId},creativeBrief:brief,productContext,productContextFingerprint:fingerprint,languageContext,workspaceLanguage:languageContext.workspaceLanguage,targetLanguage:languageContext.targetLanguage,platform:creativeStageControls.platform,market:form.country,language:form.language,preferences:{durationSeconds:Number(form.duration)||30,creatorStyle:creativeStageControls.creationMode,spokenDensity:"balanced",toneSteering:form.style,variantCount:1},recentScriptHistory:(project.assets.scriptVersions as StructuredScript[]).slice(-6)};
+    const criticInput:Omit<ScriptCriticInput,"requestId"|"scriptDraft">={projectId,creativeBriefReference:{briefId:brief.id,briefRevisionId:brief.revisionId},creativeBrief:brief,canonicalProductContext:productContext,productContextFingerprint:fingerprint,languageContext,workspaceLanguage:languageContext.workspaceLanguage,targetLanguage:languageContext.targetLanguage,platform:creativeStageControls.platform,market:form.country,language:form.language,preferences:{creatorStyle:creativeStageControls.creationMode,durationPreference:Number(form.duration)||30,spokenDensity:"balanced",tone:form.style}};
+    const readRewrite=async(response:Response)=>{const data=response.headers.get("content-type")?.includes("application/json")?await response.json().catch(()=>null):null;if(!response.ok||data?.status!=="success"||!data.script||!data.draft){const issue=Array.isArray(data?.issues)?data.issues[0]:null;const err=new Error(data?.error?.message||"AI 检查发现脚本仍有无法安全自动修改的问题。");(err as Error&{validationIssue?:{stage?:string;code?:string;path?:string}}).validationIssue=issue||undefined;throw err;}return data;};
+    const result=await orchestrateFinalScript({writerInput,criticInput,provider:selectedProvider},{
+      write:async input=>{const response=await fetch("/api/script-writer",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify(input)});const data=await parseScriptWriterAcceptanceResponse(response);if(!data.script.revisionId)throw new Error("missing_script_revision");return {...data,script:data.script as StructuredScript&{revisionId:string}};},
+      critique:async input=>{const response=await fetch("/api/script-critic",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify(input)});return parseScriptCriticAcceptanceResponse(response);},
+      rewrite:async input=>readRewrite(await fetch("/api/script-rewriter",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify(input satisfies TargetedRewriteInput&{provider?:string})})),
+    },progress=>setFinalScriptStatus(progress));
+    if(activeScriptGenerationIdentity.current!==requestId||activeProjectId.current!==projectId||activeCreativeBriefRevision.current!==brief.revisionId||activeProductFingerprints.current[projectId]!==fingerprint)return;
+    if(result.status==="failure"){
+      setFinalScriptStatus("error");
+      const first=result.issues[0];setFinalScriptDiagnostic([result.stage,first?.code||result.code,first?.path].filter(Boolean).join(" · "));
+      return;
+    }
+    const accepted=result.script as Script;
+    adoptCurrentScript(accepted,{duration:Number(form.duration)||30,offer:form.offer});
+    setFinalScriptSummary(result.critique.summary||"已检查创意一致性、产品事实、自然表达、合规与可拍摄性。");
+    setFinalScriptRewritten(result.rewritten);setFinalScriptStatus("complete");
+  }
   function saveScriptVersion(script: Script) {
     const {id:_legacyId,revisionId:_previousRevision,...revisionSource}=script;
     void _legacyId;void _previousRevision;
@@ -661,10 +701,11 @@ export default function Home() {
   const groundedProductResolution=currentDirectorProject?resolveGroundedCanonicalProductContext({productName:currentDirectorProject.product,selectedProductId,projectProductProfileId:currentDirectorProject.productProfileId,profiles:productProfiles}):null;
   const currentDirectorReady=Boolean(persistentDirectorWorkspace&&expectedDirectorContextId&&storedDirectorContextId===expectedDirectorContextId&&persistentDirectorWorkspace.shots?.length);
   const currentImageReady=Boolean(currentDirectorReady&&currentDirectorProject&&productionImageAssets.some(asset=>asset.projectId===currentDirectorProject.id));
+  const acceptedCurrentScript=result&&currentCreativeBrief&&result.sourceCreativeBriefRevisionId===currentCreativeBrief.revisionId?result:null;
   const productionAssets:ProductionStageAssets={
     productContextCoherent:Boolean(groundedProductResolution?.context&&!groundedProductResolution.issues.length),
     hasSelectedCreativeBrief:Boolean(currentCreativeBrief),
-    hasCurrentScriptRevision:Boolean(result&&currentCreativeBrief&&scriptRevisionIdentity(result)&&result.sourceCreativeBriefRevisionId===currentCreativeBrief.revisionId),
+    hasCurrentScriptRevision:Boolean(acceptedCurrentScript&&scriptRevisionIdentity(acceptedCurrentScript)),
     hasCurrentDirectorContext:currentDirectorReady,
     hasCurrentImageAssets:currentImageReady,
   };
@@ -678,7 +719,7 @@ export default function Home() {
     const view=PRODUCTION_STAGE_META[stage].view;
     setActive(view);
     saveWorkspaceSnapshot({activeView:view});
-    if(view==="create")window.setTimeout(()=>document.querySelector(stage==="creative"?".creative-direction-workspace":".os-studio-editor-head")?.scrollIntoView({behavior:"smooth",block:"start"}),0);
+    if(view==="create")window.setTimeout(()=>document.querySelector(stage==="creative"?".creative-direction-workspace":".final-script-stage")?.scrollIntoView({behavior:"smooth",block:"start"}),0);
   };
   useEffect(()=>{
     if(memoryHydrationState.current!=="ready"||!currentDirectorProject||!directorInput||!persistentDirectorWorkspace||storedDirectorContextId===expectedDirectorContextId)return;
@@ -748,7 +789,20 @@ export default function Home() {
         criticAcceptanceEnabled={criticAcceptanceEnabled}
         criticAcceptance={currentCriticAcceptance}
         onTestCritic={()=>testScriptCritic(creativeStageControls)}
-      /> : active === "create" ? <ScriptStudio
+      /> : active === "create" ? <><FinalScriptStage
+        brief={currentCreativeBrief}
+        script={acceptedCurrentScript}
+        status={finalScriptStatus}
+        error={finalScriptStatus==="error"?(finalScriptDiagnostic.includes("critic_issues_not_safely_targetable")?"AI 检查发现脚本仍有无法安全自动修改的问题。":"脚本没有成功生成，请重试。"):undefined}
+        diagnostic={finalScriptDiagnostic}
+        aiSummary={finalScriptSummary}
+        rewritten={finalScriptRewritten}
+        onGenerate={()=>void generateFinalScript()}
+        onReturnToCreative={()=>navigateProductionStage("creative")}
+        onEdit={()=>setScriptEditorOpen(open=>!open)}
+        onAiModify={()=>{setScriptEditorOpen(true);notifyWorkspace("请在编辑器中选择需要修改的内容",{detail:"现有安全编辑路径不会绕过脚本校验"});}}
+        onDirector={()=>{setDirectorSourceType("script-studio");navigateProductionStage("director");}}
+      />{scriptEditorOpen&&acceptedCurrentScript&&<ScriptStudio
         mode={active}
         productionStage={productionStage === "creative" ? "creative" : "script"}
         form={form}
@@ -757,7 +811,7 @@ export default function Home() {
         styles={styles}
         frameworks={frameworkCatalog}
         referenceScript={referenceScript}
-        result={result}
+        result={acceptedCurrentScript}
         raceResults={raceResults}
         loading={loading}
         raceLoading={raceLoading}
@@ -784,7 +838,7 @@ export default function Home() {
         scoreScript={scoreScript}
         currentCreativeBrief={currentCreativeBrief}
         onReturnToCreative={()=>navigateProductionStage("creative")}
-      /> : active === "checker" ? <section className="checker-panel"><div className="checker-grid"><section className="checker-input"><span className="modal-kicker">文案安全检查</span><h2>粘贴需要检测的文案</h2><p>支持中文、西班牙语和英语。结果仅作为发布前辅助检查，平台还会结合画面、字幕、商品和账号情况。</p><textarea value={checkText} onChange={e => { setCheckText(e.target.value); setHasChecked(false); }} rows={18} placeholder="把完整口播、字幕或商品文案粘贴到这里…" /><div><small>{checkText.length}字</small><button className="vf-button vf-button-primary" disabled={!checkText.trim()} onClick={() => setHasChecked(true)}>开始检测</button></div></section><section className="checker-result">{!hasChecked ? <div className="checker-empty"><span>✓</span><h3>等待检测</h3><p>系统会逐项标出风险词和修改建议。</p></div> : complianceHits.length === 0 ? <div className="checker-clear"><span>✓</span><h3>暂未命中已知风险词</h3><p>这不代表平台一定审核通过，请继续检查画面真实性、测试条件和促销信息。</p></div> : <><div className="checker-summary"><div><span>检测结果</span><strong>{complianceHits.length}处风险</strong></div><b>{complianceHits.filter(x => x.level === "高").length}项高风险</b></div><div className="risk-list">{complianceHits.map((hit,index) => <article key={`${hit.category}-${hit.term}-${index}`} className={hit.level === "高" ? "risk-high" : "risk-medium"}><div><span>{hit.level}风险</span><em>{hit.category}</em></div><h3>命中：{hit.term}</h3><p>{hit.suggestion}</p></article>)}</div></>}</section></div></section> : active === "library" ? <section className="library-panel">
+      />}</> : active === "checker" ? <section className="checker-panel"><div className="checker-grid"><section className="checker-input"><span className="modal-kicker">文案安全检查</span><h2>粘贴需要检测的文案</h2><p>支持中文、西班牙语和英语。结果仅作为发布前辅助检查，平台还会结合画面、字幕、商品和账号情况。</p><textarea value={checkText} onChange={e => { setCheckText(e.target.value); setHasChecked(false); }} rows={18} placeholder="把完整口播、字幕或商品文案粘贴到这里…" /><div><small>{checkText.length}字</small><button className="vf-button vf-button-primary" disabled={!checkText.trim()} onClick={() => setHasChecked(true)}>开始检测</button></div></section><section className="checker-result">{!hasChecked ? <div className="checker-empty"><span>✓</span><h3>等待检测</h3><p>系统会逐项标出风险词和修改建议。</p></div> : complianceHits.length === 0 ? <div className="checker-clear"><span>✓</span><h3>暂未命中已知风险词</h3><p>这不代表平台一定审核通过，请继续检查画面真实性、测试条件和促销信息。</p></div> : <><div className="checker-summary"><div><span>检测结果</span><strong>{complianceHits.length}处风险</strong></div><b>{complianceHits.filter(x => x.level === "高").length}项高风险</b></div><div className="risk-list">{complianceHits.map((hit,index) => <article key={`${hit.category}-${hit.term}-${index}`} className={hit.level === "高" ? "risk-high" : "risk-medium"}><div><span>{hit.level}风险</span><em>{hit.category}</em></div><h3>命中：{hit.term}</h3><p>{hit.suggestion}</p></article>)}</div></>}</section></div></section> : active === "library" ? <section className="library-panel">
         <div className="library-toolbar"><div className="library-tabs"><button className={libraryType === "hooks" ? "selected" : ""} onClick={() => setLibraryType("hooks")}>爆款开头库 <em>{hookLibrary.length}</em></button><button className={libraryType === "points" ? "selected" : ""} onClick={() => setLibraryType("points")}>产品卖点库 <em>{pointLibrary.length}</em></button><button className={libraryType === "cases" ? "selected" : ""} onClick={() => setLibraryType("cases")}>爆款案例库 <em>{viralCases.length}</em></button></div><input value={librarySearch} onChange={e => setLibrarySearch(e.target.value)} placeholder="搜索内容或产品…" /></div>
         <div className="library-grid"><section className="library-form">{libraryType === "hooks" ? <><span className="modal-kicker">新增开场钩子</span><h2>新增爆款开头</h2><label>名称<input value={hookDraft.title} onChange={e => setHookDraft(prev => ({ ...prev, title: e.target.value }))} placeholder="例如：斧头暴力测试" /></label><label>语言<select value={hookDraft.language} onChange={e => setHookDraft(prev => ({ ...prev, language: e.target.value }))}>{languages.map(x => <option key={x}>{x}</option>)}</select></label><label>开头文案<textarea rows={7} value={hookDraft.copy} onChange={e => setHookDraft(prev => ({ ...prev, copy: e.target.value }))} placeholder="粘贴前3–8秒爆款开头" /></label><button className="modal-primary vf-button vf-button-primary" disabled={!hookDraft.title.trim() || !hookDraft.copy.trim()} onClick={addHookItem}>保存到开头库</button></> : libraryType === "points" ? <><span className="modal-kicker">新增产品卖点</span><h2>新增产品卖点</h2><label>产品名称<input value={pointDraft.product} onChange={e => setPointDraft(prev => ({ ...prev, product: e.target.value }))} placeholder="例如：变形金刚钢化膜" /></label><label>完整卖点<textarea rows={10} value={pointDraft.points} onChange={e => setPointDraft(prev => ({ ...prev, points: e.target.value }))} placeholder="每条卖点用分号隔开" /></label><button className="modal-primary vf-button vf-button-primary" disabled={!pointDraft.product.trim() || !pointDraft.points.trim()} onClick={addPointItem}>保存到卖点库</button></> : <><span className="modal-kicker">爆款案例</span><h2>结构化爆款案例</h2><p>案例从爆款拆解器保存，包含Hook机制、Creative Angle、Proof、CTA和可复刻公式。</p><button className="modal-primary vf-button vf-button-primary" onClick={()=>setActive("breakdown")}>＋ 分析新案例</button></>}</section>
           <section className="library-list">{libraryType === "hooks" ? hookLibrary.filter(item => `${item.title}${item.copy}${item.language}`.toLowerCase().includes(librarySearch.toLowerCase())).map(item => <article key={item.id}><div><span>{item.language}</span><button onClick={() => saveHooks(hookLibrary.filter(x => x.id !== item.id))}>删除</button></div><h3>{item.title}</h3><p>{item.copy}</p><footer><button onClick={() => copyText(item.copy)}>复制</button><button className="use-item" onClick={() => { setReferenceScript(item.copy);saveWorkspaceSnapshot({referenceScript:item.copy,activeView:"replicate"}); setActive("replicate"); }}>用它复刻</button></footer></article>) : libraryType === "points" ? pointLibrary.filter(item => `${item.product}${item.points}`.toLowerCase().includes(librarySearch.toLowerCase())).map(item => <article key={item.id}><div><span>产品卖点</span><button onClick={() => savePoints(pointLibrary.filter(x => x.id !== item.id))}>删除</button></div><h3>{item.product}</h3><p>{item.points}</p><footer><button onClick={() => copyText(item.points)}>复制</button><button className="use-item" onClick={() => { setForm(prev => {const next={ ...prev, product: item.product, sellingPoints: item.points };saveWorkspaceSnapshot({form:next});return next;}); setActive("create"); }}>用于生成</button></footer></article>) : viralCases.filter(item=>`${item.title}${item.source.product}${item.analysis.hook.mechanism}${item.analysis.creativeAngle}`.toLowerCase().includes(librarySearch.toLowerCase())).map(item=><article key={item.id}><div><span>{item.legacy?"历史兼容案例":"结构化案例"}</span><button onClick={()=>saveViralCases(viralCases.filter(x=>x.id!==item.id))}>删除</button></div><h3>{item.title}</h3><p>{item.analysis.hook.original}</p><small>{item.analysis.hook.mechanism} · {item.analysis.creativeAngle} · {item.analysis.ctaStyle}</small><footer><button onClick={()=>replicateViralCase(item)}>用于脚本生成</button><button className="use-item" onClick={()=>replicateViralCase(item)}>基于此案例复刻</button></footer></article>)}</section>

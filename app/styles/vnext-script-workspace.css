@@ -229,6 +229,45 @@
 .script-critic-acceptance-result li { display: grid; gap: 3px; font-size: 12px; }
 .script-critic-acceptance-result li span,.script-critic-acceptance-result small { color: var(--vf-text-secondary); }
 
+.final-script-stage { display: grid; gap: 20px; width: min(1040px, calc(100% - 40px)); margin: 0 auto; padding: 28px 0 64px; }
+.final-script-hero { display: flex; align-items: start; justify-content: space-between; gap: 24px; }
+.final-script-hero span,.final-script-creative-summary>span,.final-script-document>header>span { color: var(--vf-brand); font-size: 11px; font-weight: 800; letter-spacing: .12em; }
+.final-script-hero h1 { margin: 5px 0 7px; font-size: clamp(28px,4vw,44px); }
+.final-script-hero p,.final-script-creative-summary p { margin: 0; color: var(--vf-text-secondary); }
+.final-script-hero button,.final-script-actions>button:not(.vf-button),.final-script-error button { border: 1px solid var(--vf-border); border-radius: 9px; padding: 10px 14px; background: white; color: var(--vf-text-primary); font-weight: 700; }
+.final-script-creative-summary,.final-script-generate,.final-script-check,.final-script-document,.final-script-error { border: 1px solid var(--vf-border); border-radius: 16px; background: white; box-shadow: 0 10px 30px rgba(15,23,42,.04); }
+.final-script-creative-summary { padding: 18px 20px; }
+.final-script-creative-summary strong { display: block; margin: 5px 0; font-size: 18px; }
+.final-script-generate,.final-script-empty { justify-items: center; padding: 56px 24px; text-align: center; }
+.final-script-generate h2,.final-script-generate p,.final-script-empty h1,.final-script-empty p { margin: 0 0 10px; }
+.final-script-generate>.vf-button { margin-top: 12px; min-width: 220px; min-height: 46px; }
+.final-script-progress { display: flex; align-items: center; gap: 9px; margin-top: 14px; color: var(--vf-text-secondary); }
+.final-script-progress i { width: 9px; height: 9px; border-radius: 50%; background: var(--vf-brand); box-shadow: 0 0 0 6px rgba(82,73,255,.12); }
+.final-script-progress-card { margin: 0; padding: 14px 18px; border: 1px solid var(--vf-border); border-radius: 12px; background: white; }
+.final-script-check { display: flex; align-items: center; justify-content: space-between; gap: 20px; padding: 16px 20px; }
+.final-script-check>div { display: grid; grid-template-columns: auto auto; gap: 2px 8px; align-items: center; }
+.final-script-check>div>span { grid-row: span 2; display: grid; place-items: center; width: 30px; height: 30px; border-radius: 50%; background: #e9fbf1; color: #16824b; }
+.final-script-check small { color: var(--vf-text-secondary); }
+.final-script-check details { max-width: 48%; }
+.final-script-check summary { cursor: pointer; font-weight: 700; }
+.final-script-document { padding: 28px; }
+.final-script-document h2 { margin: 5px 0 22px; font-size: 28px; }
+.final-script-document>section { margin-top: 20px; padding-top: 18px; border-top: 1px solid var(--vf-border); }
+.final-script-document h3,.final-script-document p { margin: 0; }
+.final-script-document p { margin-top: 7px; line-height: 1.75; }
+.final-script-scenes { display: grid; gap: 10px; margin-top: 20px; }
+.final-script-scenes>section { display: grid; grid-template-columns: 78px 1fr; gap: 16px; padding: 16px; border-radius: 12px; background: var(--vf-surface-subtle); }
+.final-script-scenes b { color: var(--vf-brand); }
+.final-script-scenes small { color: var(--vf-text-secondary); font-weight: 700; }
+.final-script-scenes p { margin: 3px 0 12px; }
+.final-script-actions { display: flex; justify-content: flex-end; flex-wrap: wrap; gap: 10px; }
+.final-script-actions .vf-button { margin-left: auto; }
+.final-script-error { padding: 20px; border-color: #f0b8b8; }
+.final-script-error h2 { margin: 0 0 14px; font-size: 16px; }
+.final-script-error>div { display: flex; gap: 8px; }
+.final-script-error details { margin-top: 14px; color: var(--vf-text-secondary); }
+@media (max-width: 760px) { .final-script-stage { width: min(100% - 24px,1040px); } .final-script-hero,.final-script-check { align-items: stretch; flex-direction: column; } .final-script-check details { max-width: none; } .final-script-scenes>section { grid-template-columns: 1fr; gap: 6px; } .final-script-actions .vf-button { margin-left: 0; width: 100%; } }
+
 .os-script-studio .os-script-version-rail {
   position: relative;
   margin-bottom: 18px;

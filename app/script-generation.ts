@@ -38,6 +38,9 @@ export type StructuredScript = {
   providerRequested?: "deepseek"|"doubao"|"openai"; providerUsed?: "deepseek"|"doubao"|"openai"|"local";
   fallbackUsed?:boolean; providerErrorType?:string|null; responseTimeMs?:number|null; aiGenerated?:boolean;
   languageRepairAttempted?:boolean;
+  workspaceLanguage?: "zh-CN";
+  localizationStatus?: "source";
+  productContextFingerprint?: string;
   scenes?: Array<{time:string;visual:string;line:string;edit:string}>;
 };
 
