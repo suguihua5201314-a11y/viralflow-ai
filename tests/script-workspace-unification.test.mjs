@@ -11,11 +11,12 @@ const recovery=read("../app/script-workspace.ts");
 const css=read("../app/styles/workspace-components.css");
 
 test("Script and Director share product sidebar while workflow keeps project steps",()=>{
-  assert.match(sidebar,/active : "projects"/);
+  assert.match(sidebar,/toolActive \? "tools" : "projects"/);
   assert.match(page,/sidebar=\{<Sidebar active=\{active\}/);
-  for(const id of ["create","director","frames","images"]) assert.ok(workflow.includes(`id: "${id}"`));
+  assert.match(workflow,/PRODUCTION_STAGES\.map/);
+  assert.match(workflow,/PRODUCTION_STAGE_META\[stage\]/);
   assert.doesNotMatch(sidebar,/label: "脚本创作"|label: "AI分镜导演"|label: "画面提示词"/);
-  assert.match(page,/const projectMode=active==="brain"\|\|active==="director"\|\|active==="frames"\|\|active==="create"/);
+  assert.match(page,/const projectMode=active==="brain"\|\|active==="director"\|\|active==="frames"\|\|active==="create"\|\|active==="images"/);
 });
 
 test("Script is workspace-first with version rail, block canvas and assistant",()=>{

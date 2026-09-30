@@ -22,6 +22,7 @@ import type { StructuredScript } from "./script-generation";
 import type { ReplicationSetup } from "./replication-core";
 import type {ProviderId,ProviderRunMetadata,ProviderStatus} from "./provider-types";
 import { viewMeta, type ActiveView } from "./navigation";
+import { PRODUCTION_STAGE_META, productionStageStatuses, resolveProductionStage, type ProductionStage, type ProductionStageAssets } from "./production-stage";
 import type {DirectorRequest,DirectorSourceType} from "./director-core";
 import {notifyWorkspace} from "./components/ui/workspace-feedback";
 import DataCenter from "./data-center";
@@ -34,7 +35,7 @@ import ProjectWorkspace from "./project-workspace";
 import {cacheProjectMemory,cloneProjectWorkspace,getOrCreateProjectMemoryWriterId,mutateProjectMemory,normalizeProjectMemory,readProjectMemory,removeProjectWorkspace,resolveProjectMemoryState,resolveProjectWorkspace,shouldPersistProjectMemory,touchProject,updateProjectWorkspace,type PersistentProject,type ProjectMemory,type ProjectMemoryHydrationState,type ProjectMemoryResolution,type ProjectWorkspaceSnapshot,type ProjectWorkspaceState} from "./project-memory";
 import {DEFAULT_WORKSPACE_LANGUAGE,resolveCreationLanguageContext} from "./creation-language-context";
 import ImageStudio from "./image-studio";
-import type { ImageReturnContext } from "./image-assets";
+import { readImageAssets, type ImageReturnContext } from "./image-assets";
 import ProjectAssetWorkspace from "./project-asset-workspace";
 import FramePromptWorkspace from "./frame-prompt-workspace";
 import {mergeReplicationAdoption,restoreProjectAnalyzer,restoreProjectReplication,type ReplicationWorkspaceAsset} from "./analyzer-replication-workspace";
@@ -196,6 +197,8 @@ export default function Home() {
   const [creativeBrainAcceptanceProjectId,setCreativeBrainAcceptanceProjectId]=useState<string|null>(null);
   const [criticAcceptance,setCriticAcceptance]=useState<ScriptCriticAcceptanceState>(emptyScriptCriticAcceptanceState);
   const [memorySaveState,setMemorySaveState]=useState<"saved"|"saving">("saved");
+  const [requestedProductionStage,setRequestedProductionStage]=useState<ProductionStage|null>(null);
+  const [productionImageAssets,setProductionImageAssets]=useState<ReturnType<typeof readImageAssets>>([]);
   const [projectMemory,setProjectMemory]=useState<ProjectMemory>(()=>({
     version:1,
     projects:demoProjects.map((item,index)=>({id:item.key,name:item.projectName,product:item.product,market:item.market||"",platform:item.platform||"TikTok",workspaceLanguage:DEFAULT_WORKSPACE_LANGUAGE,targetLanguage:item.language||DEFAULT_WORKSPACE_LANGUAGE,language:item.language||"",stage:item.stage,createdAt:new Date(Date.parse(item.updatedAt||"")-index*86400000).toISOString(),updatedAt:item.updatedAt||new Date().toISOString(),status:item.status,progress:item.progress,owner:item.owner,assets:{scriptVersions:index===0?demoScriptVariations:[]}})),
@@ -224,6 +227,7 @@ export default function Home() {
       .then(data => { if (data.accounts) setMonitorAccounts(data.accounts); })
       .catch(() => undefined);
   }, []);
+  useEffect(()=>setProductionImageAssets(readImageAssets()),[active,projectMemory.workspace.currentProjectId]);
 
   function restoreProjectProjection(memory:ProjectMemory,projectId:string|null){
     const project=memory.projects.find(item=>item.id===projectId);
@@ -649,6 +653,25 @@ export default function Home() {
   activeDirectorIdentity.current=directorRequestIdentity(currentDirectorProject?.id,directorInput);
   const expectedDirectorContextId=activeDirectorIdentity.current?.contextId||"";
   const storedDirectorContextId=currentDirectorProject?.assets.currentDirectorContextId||"";
+  const groundedProductResolution=currentDirectorProject?resolveGroundedCanonicalProductContext({productName:currentDirectorProject.product,selectedProductId,projectProductProfileId:currentDirectorProject.productProfileId,profiles:productProfiles}):null;
+  const currentDirectorReady=Boolean(persistentDirectorWorkspace&&expectedDirectorContextId&&storedDirectorContextId===expectedDirectorContextId&&persistentDirectorWorkspace.shots?.length);
+  const currentImageReady=Boolean(currentDirectorReady&&currentDirectorProject&&productionImageAssets.some(asset=>asset.projectId===currentDirectorProject.id));
+  const productionAssets:ProductionStageAssets={
+    productContextCoherent:Boolean(groundedProductResolution?.context&&!groundedProductResolution.issues.length),
+    hasSelectedCreativeBrief:Boolean(currentCreativeBrief),
+    hasCurrentScriptRevision:Boolean(result&&scriptRevisionIdentity(result)),
+    hasCurrentDirectorContext:currentDirectorReady,
+    hasCurrentImageAssets:currentImageReady,
+  };
+  const productionStage=resolveProductionStage(active,productionAssets,active==="create"?requestedProductionStage:null);
+  const productionStatuses=productionStageStatuses(productionStage,productionAssets);
+  const navigateProductionStage=(stage:ProductionStage)=>{
+    setRequestedProductionStage(stage);
+    const view=PRODUCTION_STAGE_META[stage].view;
+    setActive(view);
+    saveWorkspaceSnapshot({activeView:view});
+    if(view==="create")window.setTimeout(()=>document.querySelector(stage==="creative"?".creative-direction-workspace":".os-studio-editor-head")?.scrollIntoView({behavior:"smooth",block:"start"}),0);
+  };
   useEffect(()=>{
     if(memoryHydrationState.current!=="ready"||!currentDirectorProject||!directorInput||!persistentDirectorWorkspace||storedDirectorContextId===expectedDirectorContextId)return;
     mutateMemory(current=>({...current,projects:current.projects.map(project=>project.id===currentDirectorProject.id?saveDirectorWorkspace(project,directorInput,persistentDirectorWorkspace,true):project)}));
@@ -680,16 +703,16 @@ export default function Home() {
   const dashboardRecent=persistentProjects.length?persistentProjects:(DATA_MODE==="demo"?demoRecent:[]);
   const openProject=(key:string)=>{setSelectedProjectKey(key);setActive("projects");saveWorkspaceSnapshot({activeView:"projects",currentProjectId:key});};
 
-  const projectMode=active==="brain"||active==="director"||active==="frames"||active==="create"||active==="breakdown"||active==="replicate"||active==="images"||active==="assets";
+  const projectMode=active==="brain"||active==="director"||active==="frames"||active==="create"||active==="images";
   return (<AppShell
     className={active === "frames" ? "vf-frame-mode" : ""}
     sidebar={<Sidebar active={active} onNavigate={view=>{if(view==="projects")setSelectedProjectKey(null);setActive(view);saveWorkspaceSnapshot({activeView:view});}} teamConnected={teamConnected} onTeamToggle={() => { if (teamConnected) { setTeamConnected(false); setTeamPassword(""); } else setShowTeamLogin(true); }} />}
     header={<TopHeader active={active} aiConnected={aiConnected} teamConnected={teamConnected} saveState={memorySaveState} searchItems={searchItems} project={projectMode?{name:currentDirectorProject?.name||result?.product||form.product,market:currentDirectorProject?.market||result?.country||form.country,platform:currentDirectorProject?.platform||"TikTok",language:currentDirectorProject?.language||result?.language||form.language}:null} />}
-    workflow={projectMode?<WorkflowStepBar active={active} onNavigate={view=>{setActive(view);saveWorkspaceSnapshot({activeView:view});}}/>:null}
+    workflow={projectMode&&currentDirectorProject?<WorkflowStepBar current={productionStage} statuses={productionStatuses} onNavigate={navigateProductionStage}/>:null}
   >
       {active === "dashboard" && <Dashboard metrics={dashboardMetrics} recent={dashboardRecent} dataMode={DATA_MODE} onNavigate={setActive} onOpenRecent={openRecent} onOpenProject={openProject} />}
-      {active === "brain" && <ProjectBrainWorkspace project={projectMemory.projects.find(item=>item.id===projectMemory.workspace.currentProjectId)} knowledge={currentProductContext(currentDirectorProject?.product||form.product).profile} reference={referenceScript} onEdit={()=>setActive("products")} />}
-      {active === "projects" && <ProjectWorkspace projects={persistentProjects} initialProjectKey={selectedProjectKey} saveState={memorySaveState} onCreate={createProject} onRename={renameProject} onDuplicate={duplicateProject} onDelete={deleteProject} onSelect={id=>saveWorkspaceSnapshot({currentProjectId:id,activeView:"projects"})} onNavigate={view=>{setActive(view);saveWorkspaceSnapshot({activeView:view});}} />}
+      {active === "brain" && <ProjectBrainWorkspace project={projectMemory.projects.find(item=>item.id===projectMemory.workspace.currentProjectId)} knowledge={currentProductContext(currentDirectorProject?.product||form.product).profile} reference={referenceScript} onEdit={()=>setActive("products")} onContinue={()=>navigateProductionStage("creative")} ready={productionAssets.productContextCoherent} />}
+      {active === "projects" && <ProjectWorkspace projects={persistentProjects} initialProjectKey={selectedProjectKey} saveState={memorySaveState} productionAssets={productionAssets} currentProductionStage={productionStage} onProductionStageNavigate={navigateProductionStage} onCreate={createProject} onRename={renameProject} onDuplicate={duplicateProject} onDelete={deleteProject} onSelect={id=>saveWorkspaceSnapshot({currentProjectId:id,activeView:"projects"})} onNavigate={view=>{setActive(view);saveWorkspaceSnapshot({activeView:view});}} />}
       {active === "images" && <ImageStudio projects={projectMemory.projects.map(project=>({id:project.id,name:project.name,product:project.product}))} currentProjectId={projectMemory.workspace.currentProjectId} onNavigate={view=>{setActive(view);saveWorkspaceSnapshot({activeView:view});}} onReturnToFrame={returnToFramePrompt} />}
       {active === "frames" && <FramePromptWorkspace project={currentDirectorProject||null} request={directorDisplayInput} workspace={currentDirectorWorkspace} scriptId={result?scriptRevisionIdentity(result):undefined} scriptVersion={result?.title||"当前脚本"} promptOverrides={currentDirectorProject?.assets.framePromptOverrides||[]} onPromptOverridesChange={records=>updateProjectMemory({framePromptOverrides:records})} onNavigate={view=>{setActive(view);saveWorkspaceSnapshot({activeView:view});}} onSelectShot={index=>{if(!currentDirectorProject||!directorInput)return;const shotId=currentDirectorWorkspace?.shots[index]?.shotId;if(!shotId)return;mutateMemory(current=>({...current,projects:current.projects.map(project=>project.id===currentDirectorProject.id?touchProject(selectDirectorShot(project,directorInput,shotId),{}):project),workspace:{...current.workspace,activeView:"frames"}}));}} />}
       {active === "assets" && <ProjectAssetWorkspace mode="assets" projects={projectMemory.projects.map(project=>({id:project.id,name:project.name,product:project.product}))} currentProjectId={projectMemory.workspace.currentProjectId} onNavigate={view=>{setActive(view);saveWorkspaceSnapshot({activeView:view});}} />}
@@ -702,6 +725,7 @@ export default function Home() {
       {active === "checker" && <section className="risk-grade-panel"><div className="checker-grid"><section className="checker-input"><span className="modal-kicker">风险分级检查</span><h2>粘贴需要检测的文案</h2><p>按高、中、低三级识别平台违规、广告夸大、医疗功效、促销合规和危险演示风险，并提供可直接替换的安全表达。</p><textarea value={checkText} onChange={e => { setCheckText(e.target.value); setHasChecked(false); setRiskFilter("全部"); }} rows={18} placeholder="把完整口播、字幕或商品文案粘贴到这里…" /><div><small>{checkText.length}字</small><button className="vf-button vf-button-primary" disabled={!checkText.trim()} onClick={() => setHasChecked(true)}>开始分级检测</button></div><aside className="risk-guide"><span><b>高风险</b> 建议发布前删除或重写</span><span><b>中风险</b> 需要证据、条件或免责声明</span><span><b>低风险</b> 可以使用，建议补充依据</span></aside></section><section className="checker-result risk-result">{!hasChecked ? <div className="checker-empty"><span>✓</span><h3>等待分级检测</h3><p>系统会逐项标出风险等级、风险类型、命中词和推荐替换表达。</p></div> : complianceHits.length === 0 ? <div className="checker-clear"><span>✓</span><h3>暂未命中已知风险词</h3><p>这不代表平台一定审核通过，请继续检查画面真实性、测试条件和促销信息。</p></div> : <><div className="risk-overview"><article className="risk-total"><span>综合判断</span><strong>{complianceHits.some(x => x.level === "高") ? "高风险" : complianceHits.some(x => x.level === "中") ? "中风险" : "低风险"}</strong><small>共命中 {complianceHits.length} 处</small></article><button className={riskFilter === "高" ? "selected" : ""} onClick={() => setRiskFilter(riskFilter === "高" ? "全部" : "高")}><span>高风险</span><strong>{complianceHits.filter(x => x.level === "高").length}</strong><small>删除或重写</small></button><button className={riskFilter === "中" ? "selected" : ""} onClick={() => setRiskFilter(riskFilter === "中" ? "全部" : "中")}><span>中风险</span><strong>{complianceHits.filter(x => x.level === "中").length}</strong><small>补充条件</small></button><button className={riskFilter === "低" ? "selected" : ""} onClick={() => setRiskFilter(riskFilter === "低" ? "全部" : "低")}><span>低风险</span><strong>{complianceHits.filter(x => x.level === "低").length}</strong><small>建议核实</small></button></div><div className="risk-type-row">{["平台违规","广告夸大","医疗功效","促销合规","危险演示"].map(type => <span key={type}>{type} {complianceHits.filter(x => x.riskType === type).length}</span>)}</div>{riskFilter !== "全部" && <button className="clear-risk-filter" onClick={() => setRiskFilter("全部")}>显示全部风险 ×</button>}<div className="risk-list graded-list">{visibleComplianceHits.map((hit,index) => <article key={`${hit.category}-${hit.term}-${index}`} className={`risk-${hit.level === "高" ? "high" : hit.level === "中" ? "medium" : "low"}`}><div><span>{hit.level}风险</span><em>{hit.riskType} · {hit.category}</em></div><h3>命中：{hit.term}</h3><p>{hit.suggestion}</p><aside><b>建议替换</b><span>{hit.replacement}</span></aside></article>)}</div></>}</section></div></section>}
       {active === "breakdown" ? <ViralAnalyzer projectId={projectMemory.workspace.currentProjectId} initialCase={currentAnalyzerCase} cases={viralCases} product={currentDirectorProject?.product||form.product} market={currentDirectorProject?.market||form.country} language={currentDirectorProject?.language||form.language} platform={currentDirectorProject?.platform||"TikTok"} onResult={item=>{updateProjectMemory({analyzerResult:item},{stage:"洞察",progress:20});saveWorkspaceSnapshot({activeView:"breakdown"});}} onSave={item=>saveViralCases([item,...viralCases.filter(x=>x.id!==item.id)])} onReplicate={replicateViralCase}/> : active === "replicate" ? <ViralReplication projectId={projectMemory.workspace.currentProjectId} initialAsset={currentReplicationWorkspace} cases={viralCases} initialCase={currentReplicationSource||replicationCase} products={productProfiles} form={{...form,platform:currentDirectorProject?.platform||"TikTok"}} onGenerated={value=>{updateProjectMemory({replicationResult:value},{stage:"复刻",progress:38});saveWorkspaceSnapshot({activeView:"replicate"});}} onAdopt={(script,reference,setup,candidate,workspace)=>adoptReplication(script,reference,setup,candidate,workspace,"create")} onDirector={(script,reference,setup,candidate,workspace)=>adoptReplication(script,reference,setup,candidate,workspace,"director")} onAnalyze={()=>{setActive("breakdown");saveWorkspaceSnapshot({activeView:"breakdown"})}}/> : active === "create" ? <ScriptStudio
         mode={active}
+        productionStage={productionStage === "creative" ? "creative" : "script"}
         form={form}
         products={productProfiles}
         languages={languages}

@@ -31,9 +31,21 @@ body { margin: 0; background: var(--vf-bg); color: var(--vf-text); }
 .os-vf-search-results button { display: flex; width: 100%; gap: 12px; text-align: left; }
 .os-vf-workflow-bar { display: flex; align-items: center; gap: 12px; padding: 8px 24px; border-bottom: 1px solid var(--vf-border); background: var(--vf-surface-muted); overflow-x: auto; }
 .os-vf-workflow-bar > div { display: flex; gap: 4px; }
-.os-vf-workflow-bar button { white-space: nowrap; display: flex; gap: 8px; font-size: 14px; border: 0; }
+.os-vf-workflow-bar > div { flex: 1; justify-content: center; min-width: 560px; }
+.os-vf-workflow-bar button { white-space: nowrap; display: flex; align-items: center; justify-content: center; gap: 8px; min-width: 104px; font-size: 14px; border: 1px solid transparent; background: transparent; }
 .os-vf-workflow-bar i { font-style: normal; color: var(--vf-text-secondary); }
 .os-vf-workflow-label { font-size: 14px; white-space: nowrap; color: var(--vf-text-secondary); }
+.os-vf-workflow-bar button.is-current { background: var(--vf-brand); color: #fff; box-shadow: 0 5px 14px rgba(99,91,255,.2); }
+.os-vf-workflow-bar button.is-current i { color: #fff; }
+.os-vf-workflow-bar button.is-completed { color: #16855d; background: #eef9f4; }
+.os-vf-workflow-bar button.is-completed i { color: #16855d; }
+.os-vf-workflow-bar button.is-available { color: var(--vf-text); background: #fff; border-color: var(--vf-border); }
+.os-vf-workflow-bar button.is-locked { color: #98a2b3; opacity: .65; }
+@media (max-width: 760px) {
+  .os-vf-workflow-bar { align-items: flex-start; padding-inline: 14px; }
+  .os-vf-workflow-bar > div { justify-content: flex-start; min-width: max-content; }
+  .os-vf-workflow-bar button { min-width: 88px; }
+}
 .os-app-shell :where(button, input, select, textarea) { font: inherit; }
 .os-app-shell :where(button) { color: var(--vf-text); background: var(--vf-surface); border: 1px solid var(--vf-border); border-radius: var(--vf-radius-sm); padding: 8px 12px; cursor: pointer; transition: background 180ms, border-color 180ms; }
 .os-app-shell :where(button:hover) { background: var(--vf-surface-muted); border-color: #c9c9ef; }
@@ -1228,6 +1240,8 @@ body { margin: 0; background: var(--vf-bg); color: var(--vf-text); }
 }
 .os-app-shell .vf-global-sidebar .vf-global-nav-item:disabled svg { color: #707b90; }
 .vf-global-tools { margin-top: 27px; }
+.vf-global-nav-item > b { margin-left: auto; color: #7a8499; font-size: 12px; }
+.vf-global-tools { margin: 6px 0 0 18px; padding-left: 8px; border-left: 1px solid #e5e7ef; }
 .os-app-shell .vf-global-tools h2 {
   margin: 0 0 9px 9px;
   color: #7a8499;

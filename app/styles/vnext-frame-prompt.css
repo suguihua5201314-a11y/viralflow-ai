@@ -940,8 +940,7 @@
 .vf-frame-mode .os-vf-global-search,
 .vf-frame-mode .os-vf-service-state,
 .vf-frame-mode .os-vf-team-state,
-.vf-frame-mode .os-vf-user,
-.vf-frame-mode .os-vf-workflow-bar { display: none; }
+.vf-frame-mode .os-vf-user { display: none; }
 .vf-frame-mode .os-vf-breadcrumb { margin: 0; font-size: 11px; }
 .vf-frame-mode .os-vf-global-save { white-space: nowrap; font-size: 11px; }
 .vf-frame-mode .os-vf-workspace { padding: 0; }

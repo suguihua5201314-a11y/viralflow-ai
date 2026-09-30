@@ -115,6 +115,7 @@ export type GenerationControls = {
 };
 
 type Props = {
+  productionStage?: "creative" | "script";
   mode: "create" | "replicate";
   form: StudioForm;
   products: StudioProduct[];
@@ -605,7 +606,7 @@ export default function ScriptStudio(props: Props) {
   };
 
   return (
-    <section className="os-script-studio">
+    <section className={`os-script-studio production-focus-${props.productionStage || "script"}`} data-production-stage={props.productionStage || "script"}>
       <VNextScriptHeader
         product={props.form.product}
         country={props.form.country}

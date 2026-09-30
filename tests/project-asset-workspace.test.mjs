@@ -21,10 +21,11 @@ test("Step 7.0-C 1: Assets 与 Script History 使用独立 routing", () => {
   assert.doesNotMatch(sidebar, /id: "history"/);
 });
 
-test("Step 7.0-C 2/3: Images 与 Assets 均使用 Project Workspace", () => {
+test("Step 7.0-C 2/3: Images 属于项目阶段，Assets 保持全局资产入口", () => {
   assert.match(studio, /ProjectAssetWorkspace mode="images"/);
   assert.match(page, /ProjectAssetWorkspace mode="assets"/);
-  assert.match(page, /active==="images"\|\|active==="assets"/);
+  assert.match(page, /const projectMode=[^;]*active==="images"/);
+  assert.doesNotMatch(page, /const projectMode=[^;]*active==="assets"/);
   assert.match(sidebar, /id: "assets", label: "资产库"/);
   assert.doesNotMatch(sidebar, /id: "images"/);
 });

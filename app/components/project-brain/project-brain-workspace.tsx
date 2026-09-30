@@ -2,7 +2,7 @@ import type { ProductKnowledge } from "../../knowledge-context";
 import type { PersistentProject } from "../../project-memory";
 import { EmptyState, WorkspaceHeader, WorkspaceShell } from "../workspace/workspace";
 
-export default function ProjectBrainWorkspace({ project, knowledge, reference, onEdit }: { project?: PersistentProject; knowledge?: ProductKnowledge; reference?: string; onEdit: () => void }) {
+export default function ProjectBrainWorkspace({ project, knowledge, reference, onEdit, onContinue, ready }: { project?: PersistentProject; knowledge?: ProductKnowledge; reference?: string; onEdit: () => void; onContinue: () => void; ready: boolean }) {
   const sections = [
     ["Product Knowledge · 产品知识", knowledge?.parameters],
     ["Selling Points · 核心卖点", knowledge?.sellingPoints],
@@ -12,5 +12,5 @@ export default function ProjectBrainWorkspace({ project, knowledge, reference, o
     ["Brand Voice · 品牌语气", ""],
     ["Reference Scripts · 参考脚本", reference],
   ];
-  return <WorkspaceShell kind="brain"><WorkspaceHeader title="项目大脑" context={project?.name || "请选择项目"} actions={<button onClick={onEdit}>编辑产品知识</button>} /><div className="creative-knowledge">{sections.map(([title, value]) => <section key={title}><h3>{title}</h3>{value ? <p>{value}</p> : <EmptyState title="尚无这类知识">仅展示当前项目已有资料。</EmptyState>}</section>)}</div></WorkspaceShell>;
+  return <WorkspaceShell kind="brain"><WorkspaceHeader title="商品" context={project?.name || "请选择项目"} actions={<><button onClick={onEdit}>编辑产品知识</button><button className="vf-button vf-button-primary" disabled={!ready} onClick={onContinue}>{ready ? "生成创意" : "产品资料未就绪"}</button></>} /><div className="creative-knowledge">{sections.map(([title, value]) => <section key={title}><h3>{title}</h3>{value ? <p>{value}</p> : <EmptyState title="尚无这类知识">仅展示当前项目已有资料。</EmptyState>}</section>)}</div></WorkspaceShell>;
 }
