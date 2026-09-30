@@ -68,6 +68,30 @@ test("scope, numeric, and compliance validators remain separate", () => {
   assert.ok(grounding.validateCreativeDirectionProductGrounding(direction("S"), context).every(item => item.path !== "riskBoundaries"));
 });
 
+test("claim scope separates scenario time from unsupported product duration", () => {
+  assert.equal(grounding.classifyCreativeClaimScope("今天使用这个产品去上班"), "scenario");
+  assert.deepEqual(grounding.validateCreativeDirectionProductGrounding(direction("S", { useMoment: "今天使用这个产品去上班" }), context), []);
+  const duration = grounding.validateCreativeDirectionProductGrounding(direction("D", { hookLine: "产品效果保持一整天" }), context);
+  assert.ok(duration.some(item => item.code === "unsupported_duration_claim" && item.path === "hookLine"));
+});
+
+test("supported capability does not authorize amplified observable results", () => {
+  assert.deepEqual(grounding.validateCreativeDirectionProductGrounding(direction("W", {
+    contentMechanism: "并排展示水滴接触表面的过程并观察变化",
+    openingVisual: { subject: "产品表面与水滴", setup: "固定光线下的近景", action: "让水滴接触表面", visibleChangeOrQuestion: "观察水滴在表面的行为" },
+  }), context), []);
+  const amplified = grounding.validateCreativeDirectionProductGrounding(direction("R", { hookLine: "使用后表面不留任何痕迹" }), context);
+  assert.ok(amplified.some(item => item.code === "unsupported_product_result"));
+});
+
+test("creative comparison mechanism passes but unsupported comparative facts fail", () => {
+  assert.deepEqual(grounding.validateCreativeDirectionProductGrounding(direction("M", { contentMechanism: "把两个画面并排做 A/B 观察演示" }), context), []);
+  const unsupported = grounding.validateCreativeDirectionProductGrounding(direction("C", { creativeAngle: "普通产品的水滴散开，而本产品的水滴快速滑落" }), context);
+  assert.ok(unsupported.some(item => item.code === "unsupported_comparative_claim" && item.path === "creativeAngle"));
+  const comparativeContext = productApi.resolveCanonicalProductContext({ productName: profile.name, selectedProductId: profile.id, profiles: [{ ...profile, sellingPoints: `${profile.sellingPoints}；相比普通产品，水滴更容易滑落` }] });
+  assert.equal(grounding.validateCreativeDirectionProductGrounding(direction("T", { creativeAngle: "相比普通产品，本产品水滴更容易滑落" }), comparativeContext).some(item => item.code === "unsupported_comparative_claim"), false);
+});
+
 test("grounding repair preserves candidate ID and receives safe issue coordinates", async () => {
   const input = { projectId: "p", productContext: context, productContextFingerprint: fixture.CREATIVE_BRAIN_ACCEPTANCE_FINGERPRINT, productBinding: { projectProductName: profile.name, projectProductProfileId: profile.id }, market: "Spain", language: "Spanish", platform: "TikTok" };
   const validB = direction("B", { targetAudience: "首次贴膜用户", useMoment: "在家安装", creativeAngle: "一次对位", contentMechanism: "安装步骤", hookLine: "安装器如何帮助贴齐？", openingVisual: { subject: "安装器", setup: "桌面", action: "辅助对准屏幕", visibleChangeOrQuestion: "边缘对齐" } });

@@ -4,6 +4,8 @@ import type { CanonicalProductContext } from "./product-context";
 export type ProductClaimGroundingCode =
   | "unsupported_product_capability"
   | "unsupported_product_result"
+  | "unsupported_duration_claim"
+  | "unsupported_comparative_claim"
   | "claim_exceeds_supported_scope";
 
 export type ProductClaimGroundingIssue = {
@@ -36,6 +38,24 @@ const CAPABILITY_FAMILIES: CapabilityFamily[] = [
 const PRODUCT_CAUSALITY = /(?:产品|这款|这层|使用|贴(?:上|后)|涂(?:上|后)|刷(?:完|后)|用了|能|可以|能够|让|使|带来|证明|展示结果)/iu;
 const RESULT_LANGUAGE = /(?:结果|效果|变得|保持|减少|消失|完好|无损|不碎|保护|防止|避免|改善|提升|增强|修复|治愈|有效)/iu;
 const EXCESS_SCOPE = /(?:任何|所有|完全|永久|永远|保证|绝对|无论|百分之百|100%|all|any|always|guarantee)/iu;
+const DURATION_SCOPE = /(?:整(?:整)?(?:天|晚|周|月|年)|全天|长期|持续(?:一段时间|数小时|数天|数周|数月|数年)|一整(?:天|晚|周|月|年)|all\s+day|all\s+night|for\s+(?:hours|days|weeks|months|years)|long[- ]lasting)/iu;
+const DURABLE_OUTCOME = /(?:效果|结果|状态|表面|外观|屏幕|皮肤|睫毛|牙齿|口腔).{0,18}(?:保持|维持|依然|仍然|持续)|(?:保持|维持|依然|仍然|持续).{0,18}(?:干净|清洁|顺滑|滋润|浓密|卷翘|清新|可见|有效|无痕|无残留)/iu;
+const COMPARISON_SUBJECT = /(?:普通|一般|其他|同类|传统|竞品|对照组|常规|generic|ordinary|other|competing|competitor|conventional)/iu;
+const COMPARISON_CONCLUSION = /(?:一定|必然|明显|显著|更(?:好|差|强|弱|快|慢|干净|顺滑|持久|有效)|不如|优于|胜过|超越|表现为|(?:散开|滑落|残留|消失|保持|清除|减少|增加).{0,16}(?:而|但|相比|本产品|本品|这款)|(?:而|但|相比|本产品|本品|这款).{0,16}(?:散开|滑落|残留|消失|保持|清除|减少|增加)|always|definitely|clearly|better|worse|outperform)/iu;
+const COMPARISON_MECHANISM_ONLY = /(?:A\s*\/\s*B|并排|对照|对比).{0,16}(?:画面|镜头|演示|观察|测试|展示)/iu;
+const STRONG_OBSERVABLE_OUTCOME = /(?:不|无|零).{0,3}(?:痕|残留|污渍|指纹|问题|损伤)|(?:全部|彻底|始终|必然|一定).{0,10}(?:消失|滑落|清除|保持|有效)/iu;
+
+export type CreativeClaimScope = "scenario" | "visual_metaphor" | "product_capability" | "product_result" | "duration_claim" | "comparative_claim" | "numeric_claim";
+
+export function classifyCreativeClaimScope(text: string): CreativeClaimScope {
+  if (/\d+(?:[.,]\d+)?\s*(?:%|秒|分钟|小时|天|周|月|年|mm|cm|mah|w)\b/iu.test(text)) return "numeric_claim";
+  if (COMPARISON_SUBJECT.test(text) && COMPARISON_CONCLUSION.test(text) && !COMPARISON_MECHANISM_ONLY.test(text)) return "comparative_claim";
+  if (DURATION_SCOPE.test(text) && DURABLE_OUTCOME.test(text)) return "duration_claim";
+  if (RESULT_LANGUAGE.test(text) || STRONG_OBSERVABLE_OUTCOME.test(text)) return "product_result";
+  if (CAPABILITY_FAMILIES.some((family) => family.assertion.test(text)) && PRODUCT_CAUSALITY.test(text)) return "product_capability";
+  if (/(?:像|仿佛|如同|转场|隐喻|metaphor|like\s+a)/iu.test(text) && !PRODUCT_CAUSALITY.test(text)) return "visual_metaphor";
+  return "scenario";
+}
 
 export function collectCreativeDirectionAssertionSurface(direction: CreativeDirectionCandidate): AssertionSurface[] {
   return [
@@ -64,6 +84,18 @@ export function validateCreativeDirectionProductGrounding(
   const truth = canonicalTruth(context);
   const issues: ProductClaimGroundingIssue[] = [];
   for (const surface of collectCreativeDirectionAssertionSurface(direction)) {
+    const scope = classifyCreativeClaimScope(surface.text);
+    const matchingFamily = CAPABILITY_FAMILIES.find((family) => family.assertion.test(surface.text));
+    const familyId = matchingFamily?.id || "cross_category_claim_scope";
+    if (scope === "duration_claim" && !DURATION_SCOPE.test(truth)) {
+      issues.push({ code: "unsupported_duration_claim", path: surface.path, capabilityFamily: familyId });
+    }
+    if (scope === "comparative_claim" && !(COMPARISON_SUBJECT.test(truth) && COMPARISON_CONCLUSION.test(truth))) {
+      issues.push({ code: "unsupported_comparative_claim", path: surface.path, capabilityFamily: familyId });
+    }
+    if (scope === "product_result" && STRONG_OBSERVABLE_OUTCOME.test(surface.text) && !STRONG_OBSERVABLE_OUTCOME.test(truth)) {
+      issues.push({ code: "unsupported_product_result", path: surface.path, capabilityFamily: familyId });
+    }
     for (const family of CAPABILITY_FAMILIES) {
       if (!family.assertion.test(surface.text)) continue;
       // A scene such as “手机从手中滑落” has no capability/result assertion.

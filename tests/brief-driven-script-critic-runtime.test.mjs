@@ -198,6 +198,71 @@ test("canonical target schema accepts and resolves every legal address to one re
   }
 });
 
+test("every canonical Critic issue code is accepted from one shared contract", () => {
+  for (const code of runtime.CRITIC_ISSUE_CODE_VALUES) {
+    const parsed = runtime.parseScriptCriticResult(JSON.stringify(critique(issue(code, "HOOK_LINE"))), draft());
+    assert.equal(parsed.issues.length, 0, code);
+  }
+  for (const code of ["arbitrary_code", "brief_hook_fidelity"]) {
+    const parsed = runtime.parseScriptCriticResult(JSON.stringify(critique(issue(code, "HOOK_LINE"))), draft());
+    assert.equal(parsed.value, null);
+    assert.ok(parsed.issues.some(item => item.code === "invalid_issue_code"));
+  }
+});
+
+test("invalid issue code repair receives safe canonical context and changes only that code", async () => {
+  const requests = [];
+  const invalid = critique(issue("hook_quality", "HOOK_LINE", { briefField: "opening.hookLine" }));
+  const repaired = critique(issue("weak_hook_execution", "HOOK_LINE", { briefField: "opening.hookLine" }));
+  const result = await runtime.generateScriptCritique(input(), async request => {
+    requests.push(request);
+    return response(requests.length === 1 ? invalid : repaired);
+  });
+  assert.equal(result.status, "success");
+  assert.equal(result.critique.issues[0].code, "weak_hook_execution");
+  assert.equal(requests.length, 2);
+  const repair = JSON.parse(requests[1].messages[1].content).repair;
+  assert.deepEqual(repair.allowedIssueCodes, runtime.CRITIC_ISSUE_CODE_VALUES);
+  assert.deepEqual(repair.issues[0], { code: "invalid_issue_code", path: "issues.0.code", stage: "critic_schema", rejectedIssueCode: "hook_quality" });
+  assert.match(repair.instruction, /only the code at that exact path/i);
+});
+
+test("issue code repair cannot mutate valid codes or critique semantics", async () => {
+  const initial = critique(
+    issue("hook_quality", "HOOK_LINE", { briefField: "opening.hookLine" }),
+    issue("scene_filler", { scope: "scene", sceneId: "context", field: "dialogue" }),
+  );
+  const mutations = [
+    critique(issue("weak_hook_execution", "HOOK_LINE", { briefField: "opening.hookLine" })),
+    critique(
+      issue("weak_hook_execution", "HOOK_LINE", { briefField: "opening.hookLine", message: "改变后的判断。" }),
+      issue("scene_filler", { scope: "scene", sceneId: "context", field: "dialogue" }),
+    ),
+    critique(
+      issue("weak_hook_execution", "HOOK_LINE", { briefField: "opening.hookLine" }),
+      issue("scene_redundancy", { scope: "scene", sceneId: "context", field: "dialogue" }),
+    ),
+  ];
+  for (const changed of mutations) {
+    let calls = 0;
+    const result = await runtime.generateScriptCritique(input(), async () => response(++calls === 1 ? initial : changed));
+    assert.equal(result.status, "failure");
+    assert.equal(result.metadata.errorType, "repair_failed");
+    assert.ok(result.validationIssues.some(item => item.code === "repair_changed_critique"));
+  }
+});
+
+test("invalid issue code is repaired at most once and unsafe rejected values are not echoed", async () => {
+  const unsafe = critique(issue("not safe value with user content", "HOOK_LINE"));
+  const parsed = runtime.parseScriptCriticResult(JSON.stringify(unsafe), draft());
+  assert.equal(parsed.issues[0].rejectedIssueCode, undefined);
+  let calls = 0;
+  const result = await runtime.generateScriptCritique(input(), async () => response((++calls, unsafe)));
+  assert.equal(calls, 2);
+  assert.equal(result.status, "failure");
+  assert.equal(result.metadata.errorType, "repair_failed");
+});
+
 test("wrong Critic review language repairs once without changing critique semantics", async () => {
   const english = critique({ ...issue("weak_hook_execution", "HOOK_LINE", { briefField: "opening.hookLine" }), message: "The hook is weak.", rewriteInstruction: "Strengthen only the hook." });
   const chinese = critique(issue("weak_hook_execution", "HOOK_LINE", { briefField: "opening.hookLine" }));

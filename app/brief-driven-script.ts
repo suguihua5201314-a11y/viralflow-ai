@@ -111,28 +111,15 @@ export type CriticIssueCode =
   | "feasibility"
   | "schema";
 
-export type BriefAwareCriticIssueCode =
-  | "brief_angle_drift"
-  | "hook_intent_drift"
-  | "opening_visual_mismatch"
-  | "evidence_strategy_drift"
-  | "cta_direction_drift"
-  | "ugc_advertising_tone"
-  | "ugc_unnatural_dialogue"
-  | "ugc_overwritten"
-  | "ugc_repetitive"
-  | "unsupported_causal_claim"
-  | "evidence_dialogue_mismatch"
-  | "unobservable_claim"
-  | "visual_action_mismatch"
-  | "weak_hook_execution"
-  | "hook_visual_disconnect"
-  | "scene_redundancy"
-  | "scene_filler"
-  | "scene_not_filmmable"
-  | "scene_pacing_issue"
-  | "cta_too_hard"
-  | "cta_unsupported_claim";
+export const CRITIC_ISSUE_CODE_VALUES = [
+  "brief_angle_drift", "hook_intent_drift", "opening_visual_mismatch", "evidence_strategy_drift", "cta_direction_drift",
+  "ugc_advertising_tone", "ugc_unnatural_dialogue", "ugc_overwritten", "ugc_repetitive",
+  "unsupported_causal_claim", "evidence_dialogue_mismatch", "unobservable_claim", "visual_action_mismatch",
+  "weak_hook_execution", "hook_visual_disconnect", "scene_redundancy", "scene_filler", "scene_not_filmmable", "scene_pacing_issue",
+  "cta_too_hard", "cta_unsupported_claim",
+] as const;
+
+export type BriefAwareCriticIssueCode = typeof CRITIC_ISSUE_CODE_VALUES[number];
 
 export const CRITIC_TARGET_SCHEMA = {
   title: ["title"],
