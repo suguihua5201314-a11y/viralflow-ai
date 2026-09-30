@@ -169,6 +169,7 @@ export type CriticIssue = {
 
 export type TargetedRewrite = {
   changes: Array<{
+    patchId?: string;
     target: CriticIssueTarget;
     replacement: string;
   }>;
@@ -360,11 +361,12 @@ export function validateTargetedRewrite(rewrite: TargetedRewrite, draft: ScriptD
     const path = `changes.${index}`;
     if (!record(change) || !record(change.target) || !text(change.replacement)) { issues.push(issue("invalid_patch", "targeted_rewrite", validator, path)); return; }
     const target = change.target as CriticIssueTarget;
-    if (!new Set(["hook", "scene", "cta", "narration"]).has(target.scope)) { issues.push(issue("invalid_patch_scope", "targeted_rewrite", validator, `${path}.target.scope`)); return; }
+    if (!new Set(Object.keys(CRITIC_TARGET_SCHEMA)).has(target.scope)) { issues.push(issue("invalid_patch_scope", "targeted_rewrite", validator, `${path}.target.scope`)); return; }
     if (target.scope === "scene") {
       if (!target.sceneId || !sceneIds.has(target.sceneId)) issues.push(issue("unknown_scene", "targeted_rewrite", validator, `${path}.target.sceneId`));
       if (!target.field || !new Set(["visual", "action", "dialogue", "evidenceRole"]).has(target.field)) issues.push(issue("invalid_patch_field", "targeted_rewrite", validator, `${path}.target.field`));
     } else if (target.scope === "hook" && target.field && !new Set(["line", "openingVisualExecution"]).has(target.field)) issues.push(issue("invalid_patch_field", "targeted_rewrite", validator, `${path}.target.field`));
+    else if (target.scope === "title" && target.field !== "title") issues.push(issue("invalid_patch_field", "targeted_rewrite", validator, `${path}.target.field`));
     else if (target.scope === "cta" && target.field && target.field !== "cta") issues.push(issue("invalid_patch_field", "targeted_rewrite", validator, `${path}.target.field`));
     else if (target.scope === "narration" && target.field && target.field !== "fullNarration") issues.push(issue("invalid_patch_field", "targeted_rewrite", validator, `${path}.target.field`));
   });
