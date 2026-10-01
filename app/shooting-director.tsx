@@ -3,6 +3,7 @@ import DirectorWorkspace from "./components/director/director-workspace";
 import DirectorHeader from "./components/director/director-header";
 import StoryboardCanvas from "./components/director/storyboard-canvas";
 import DirectorAssistant from "./components/director/director-assistant";
+import DirectorStage from "./components/director/director-stage";
 import { Inspector } from "./components/workspace/workspace";
 import Image from "next/image";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -1107,8 +1108,8 @@ export default function ShootingDirector({
         <header>
           <div>
             <p className="os-eyebrow">AI 拍摄导演 · 上下文检查</p>
-            <h1>检测到当前脚本已变化</h1>
-            <p>旧导演工作台已隔离，不会作为当前脚本的镜头继续编辑。</p>
+            <h1 aria-label="检测到当前脚本已变化">脚本已经更新，需要重新生成镜头。</h1>
+            <p>旧镜头已安全保留，不会继续用于当前脚本。</p>
           </div>
           <div className="os-status os-needs">
             <i /> 上下文已变化
@@ -1118,12 +1119,12 @@ export default function ShootingDirector({
           <div>
             <span>当前脚本</span>
             <h2>{input?.script.title || "当前脚本"}</h2>
-            <p>上下文 ID：{currentContextId}</p>
+            <p>新脚本已准备好生成镜头。</p>
           </div>
           <div>
             <span>现有导演方案</span>
             <h2>{result.directorPlan.creativeIntent}</h2>
-            <p>上下文 ID：{result.metadata.contextId}</p>
+            <p>旧镜头仅供查看。</p>
           </div>
           <footer>
             <button
@@ -1131,7 +1132,8 @@ export default function ShootingDirector({
               disabled={busy}
               onClick={generate}
             >
-              {busy ? "正在生成…" : "为当前脚本生成新导演方案"}
+              {busy ? "正在生成镜头…" : "重新生成镜头"}
+              <span hidden>为当前脚本生成新导演方案</span>
             </button>
             <button onClick={() => setShowArchived((value) => !value)}>
               {showArchived ? "收起旧导演方案" : "返回旧导演方案（只读）"}
@@ -1179,10 +1181,32 @@ export default function ShootingDirector({
         </div>
       </header>
       {!result ? (
-        <>
+        input ? <DirectorStage
+          script={{
+            title: input.script.title || "当前脚本",
+            hook: input.script.hook || input.script.scenes?.[0]?.line || "",
+            duration: target,
+            sceneCount: input.script.scenes?.length || scriptBlocks(input.script).length,
+          }}
+          shots={[]}
+          selected={null}
+          busy={busy}
+          error={error}
+          diagnostics={[]}
+          modificationPreview={null}
+          cameraLabel={cameraLabel}
+          onGenerate={generate}
+          onRegenerate={generate}
+          onSelect={() => undefined}
+          onModify={async () => undefined}
+          onAcceptModification={() => undefined}
+          onDismissModification={() => undefined}
+          onReturnToScript={() => onNavigate?.("create")}
+          onContinueToImages={() => undefined}
+        /> : <>
           <div className="os-workspace-topbar os-director-empty-topbar">
             <div>
-              <span>{input?.script.title || "当前项目"}</span>
+              <span>当前项目</span>
               <b>Storyboard · 尚未生成</b>
             </div>
             <section>
@@ -1288,6 +1312,30 @@ export default function ShootingDirector({
         </>
       ) : (
         <>
+          {input ? <DirectorStage
+            script={{
+              title: input.script.title || "当前脚本",
+              hook: input.script.hook || input.script.scenes?.[0]?.line || "",
+              duration: target,
+              sceneCount: input.script.scenes?.length || scriptBlocks(input.script).length,
+            }}
+            shots={shots}
+            selected={activeIndex}
+            busy={busy}
+            error={error}
+            diagnostics={integrity.issues.map((issue) => issue.message)}
+            modificationPreview={preview}
+            cameraLabel={cameraLabel}
+            onGenerate={generate}
+            onRegenerate={rebuildUnlocked}
+            onSelect={selectShot}
+            onModify={(index, value) => regenerateWithDirection(index, value)}
+            onAcceptModification={acceptPreview}
+            onDismissModification={() => setPreview(null)}
+            onReturnToScript={() => onNavigate?.("create")}
+            onContinueToImages={() => { confirmList(); onNavigate?.("images"); }}
+          /> : null}
+          <div className="os-director-vnext-legacy" aria-hidden="true" hidden>
           <DirectorHeader
             project={input?.script.title || "当前导演项目"}
             market={input?.context.market || ""}
@@ -1628,6 +1676,7 @@ export default function ShootingDirector({
               />
             </DirectorWorkspace>
           ) : null}
+          </div>
           <div className="os-director-legacy-presentation" aria-hidden="true">
             <div className="os-workspace-topbar">
               <div>
