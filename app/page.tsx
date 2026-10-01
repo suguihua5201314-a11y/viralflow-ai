@@ -56,6 +56,7 @@ import {orchestrateFinalScript} from "./final-script-orchestration";
 import type {ScriptWriterInput} from "./brief-driven-script";
 import type {ScriptCriticInput} from "./brief-driven-script-critic";
 import type {TargetedRewriteInput} from "./brief-driven-script-rewriter";
+import {finalScriptRequestAuthority,shouldReleaseFinalScriptLoading} from "./final-script-request-guard";
 
 type Scene = { time: string; visual: string; line: string; edit: string };
 type Script = { revisionId?: string; sourceCreativeBriefId?: string; sourceCreativeBriefRevisionId?: string; id?: number; title: string; product: string; language: string; country: string; style: string; hook: string; alternateHooks: string[]; narration: string; scenes: Scene[]; createdAt?: string; aiGenerated?: boolean; creativeAngle?:string; hookType?:string; framework?:string; conflict?:string; productReveal?:string; proof?:string; sellingPoints?:string; cta?:string; shootingSuggestion?:string; scenario?:string; proofMechanism?:string; ctaStyle?:string };
@@ -613,21 +614,37 @@ export default function Home() {
     const writerInput:ScriptWriterInput={projectId,requestId,creativeBriefReference:{id:brief.id,revisionId:brief.revisionId},creativeBrief:brief,productContext,productContextFingerprint:fingerprint,languageContext,workspaceLanguage:languageContext.workspaceLanguage,targetLanguage:languageContext.targetLanguage,platform:creativeStageControls.platform,market:form.country,language:form.language,preferences:{durationSeconds:Number(form.duration)||30,creatorStyle:creativeStageControls.creationMode,spokenDensity:"balanced",toneSteering:form.style,variantCount:1},recentScriptHistory:(project.assets.scriptVersions as StructuredScript[]).slice(-6)};
     const criticInput:Omit<ScriptCriticInput,"requestId"|"scriptDraft">={projectId,creativeBriefReference:{briefId:brief.id,briefRevisionId:brief.revisionId},creativeBrief:brief,canonicalProductContext:productContext,productContextFingerprint:fingerprint,languageContext,workspaceLanguage:languageContext.workspaceLanguage,targetLanguage:languageContext.targetLanguage,platform:creativeStageControls.platform,market:form.country,language:form.language,preferences:{creatorStyle:creativeStageControls.creationMode,durationPreference:Number(form.duration)||30,spokenDensity:"balanced",tone:form.style}};
     const readRewrite=async(response:Response)=>{const data=response.headers.get("content-type")?.includes("application/json")?await response.json().catch(()=>null):null;if(!response.ok||data?.status!=="success"||!data.script||!data.draft){const issue=Array.isArray(data?.issues)?data.issues[0]:null;const err=new Error(data?.error?.message||"AI 检查发现脚本仍有无法安全自动修改的问题。");(err as Error&{validationIssue?:{stage?:string;code?:string;path?:string}}).validationIssue=issue||undefined;throw err;}return data;};
-    const result=await orchestrateFinalScript({writerInput,criticInput,provider:selectedProvider},{
-      write:async input=>{const response=await fetch("/api/script-writer",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify(input)});const data=await parseScriptWriterAcceptanceResponse(response);if(!data.script.revisionId)throw new Error("missing_script_revision");return {...data,script:data.script as StructuredScript&{revisionId:string}};},
-      critique:async input=>{const response=await fetch("/api/script-critic",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify(input)});return parseScriptCriticAcceptanceResponse(response);},
-      rewrite:async input=>readRewrite(await fetch("/api/script-rewriter",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify(input satisfies TargetedRewriteInput&{provider?:string})})),
-    },progress=>setFinalScriptStatus(progress));
-    if(activeScriptGenerationIdentity.current!==requestId||activeProjectId.current!==projectId||activeCreativeBriefRevision.current!==brief.revisionId||activeProductFingerprints.current[projectId]!==fingerprint)return;
-    if(result.status==="failure"){
+    const authority=()=>finalScriptRequestAuthority({requestId,activeRequestId:activeScriptGenerationIdentity.current,projectId,activeProjectId:activeProjectId.current,briefRevisionId:brief.revisionId,activeBriefRevisionId:activeCreativeBriefRevision.current,productContextFingerprint:fingerprint,activeProductContextFingerprint:activeProductFingerprints.current[projectId]});
+    try{
+      const result=await orchestrateFinalScript({writerInput,criticInput,provider:selectedProvider},{
+        write:async input=>{const response=await fetch("/api/script-writer",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify(input)});const data=await parseScriptWriterAcceptanceResponse(response);if(!data.script.revisionId)throw new Error("missing_script_revision");return {...data,script:data.script as StructuredScript&{revisionId:string}};},
+        critique:async input=>{const response=await fetch("/api/script-critic",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify(input)});return parseScriptCriticAcceptanceResponse(response);},
+        rewrite:async input=>readRewrite(await fetch("/api/script-rewriter",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify(input satisfies TargetedRewriteInput&{provider?:string})})),
+      },progress=>{if(authority()==="current")setFinalScriptStatus(progress);});
+      const settledAuthority=authority();
+      if(settledAuthority!=="current"){
+        if(shouldReleaseFinalScriptLoading(settledAuthority)){activeScriptGenerationIdentity.current="";setFinalScriptStatus("idle");}
+        return;
+      }
+      if(result.status==="failure"){
+        setFinalScriptStatus("error");
+        const first=result.issues[0];setFinalScriptDiagnostic([result.stage,first?.code||result.code,first?.path].filter(Boolean).join(" · "));
+        return;
+      }
+      const accepted=result.script as Script;
+      adoptCurrentScript(accepted,{duration:Number(form.duration)||30,offer:form.offer});
+      setFinalScriptSummary(result.critique.summary||"已检查创意一致性、产品事实、自然表达、合规与可拍摄性。");
+      setFinalScriptRewritten(result.rewritten);setFinalScriptStatus("complete");
+    }catch(value){
+      const failedAuthority=authority();
+      if(failedAuthority!=="current"){
+        if(shouldReleaseFinalScriptLoading(failedAuthority)){activeScriptGenerationIdentity.current="";setFinalScriptStatus("idle");}
+        return;
+      }
       setFinalScriptStatus("error");
-      const first=result.issues[0];setFinalScriptDiagnostic([result.stage,first?.code||result.code,first?.path].filter(Boolean).join(" · "));
-      return;
+      const issue=(value as Error&{validationIssue?:{code?:string;path?:string}}).validationIssue;
+      setFinalScriptDiagnostic([issue?.code||"unexpected_error",issue?.path].filter(Boolean).join(" · "));
     }
-    const accepted=result.script as Script;
-    adoptCurrentScript(accepted,{duration:Number(form.duration)||30,offer:form.offer});
-    setFinalScriptSummary(result.critique.summary||"已检查创意一致性、产品事实、自然表达、合规与可拍摄性。");
-    setFinalScriptRewritten(result.rewritten);setFinalScriptStatus("complete");
   }
   function saveScriptVersion(script: Script) {
     const {id:_legacyId,revisionId:_previousRevision,...revisionSource}=script;
@@ -778,7 +795,7 @@ export default function Home() {
         brief={currentCreativeBrief}
         script={acceptedCurrentScript}
         status={finalScriptStatus}
-        error={finalScriptStatus==="error"?(finalScriptDiagnostic.includes("critic_issues_not_safely_targetable")?"AI 检查发现脚本仍有无法安全自动修改的问题。":"脚本没有成功生成，请重试。"):undefined}
+        error={finalScriptStatus==="error"?(finalScriptDiagnostic.includes("market_mismatch")?"当前商品市场信息不一致，请返回商品信息检查后重试。":finalScriptDiagnostic.includes("critic_issues_not_safely_targetable")?"AI 检查发现脚本仍有无法安全自动修改的问题。":"脚本没有成功生成，请重试。"):undefined}
         diagnostic={finalScriptDiagnostic}
         aiSummary={finalScriptSummary}
         rewritten={finalScriptRewritten}

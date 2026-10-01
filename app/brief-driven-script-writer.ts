@@ -11,6 +11,7 @@ import {
 } from "./brief-driven-script";
 import type { StructuredScript } from "./script-generation";
 import type { ProviderErrorType, ProviderId } from "./provider-types";
+import { marketsAreEquivalent } from "./market-identity";
 
 export type BriefDrivenWriterProviderRequest = {
   messages: Array<{ role: "system" | "user"; content: string }>;
@@ -92,7 +93,6 @@ const transportTypes = new Set<ProviderErrorType>([
   "timeout", "provider_http_error", "unauthorized", "invalid_model_or_endpoint", "rate_limit", "missing_field",
 ]);
 const split = (value?: string) => String(value || "").split(/[；;\n,]+/).map((item) => item.trim()).filter(Boolean);
-const normalized = (value: string) => value.trim().normalize("NFKC").toLowerCase();
 const safeIssue = (code: string, path?: string): ScriptWriterValidationIssue => ({ code, ...(path ? { path } : {}), stage: "input_identity", validator: "validateBriefDrivenWriterInput" });
 
 export function validateBriefDrivenWriterInput(input: ScriptWriterInput): ScriptWriterValidationIssue[] {
@@ -103,7 +103,7 @@ export function validateBriefDrivenWriterInput(input: ScriptWriterInput): Script
   if (!languageContext.market) issues.push(safeIssue("missing_market", "languageContext.market"));
   if (!languageContext.targetLanguage) issues.push(safeIssue("missing_target_language", "languageContext.targetLanguage"));
   const configuredMarkets = split(input.productContext.productKnowledge?.markets);
-  if (configuredMarkets.length && !configuredMarkets.some((market) => normalized(market) === normalized(input.market))) issues.push(safeIssue("market_mismatch", "market"));
+  if (configuredMarkets.length && !configuredMarkets.some((market) => marketsAreEquivalent(market, input.market))) issues.push(safeIssue("market_mismatch", "market"));
   const preferences = input.preferences;
   if (preferences?.durationSeconds !== undefined && (!Number.isFinite(preferences.durationSeconds) || preferences.durationSeconds < 5 || preferences.durationSeconds > 180)) issues.push(safeIssue("invalid_duration_preference", "preferences.durationSeconds"));
   if (preferences?.variantCount !== undefined && preferences.variantCount !== 1) issues.push(safeIssue("invalid_variant_count", "preferences.variantCount"));
