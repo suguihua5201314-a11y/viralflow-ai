@@ -9,7 +9,6 @@ const director = fs.readFileSync(new URL("../app/shooting-director.tsx", import.
 const route = fs.readFileSync(new URL("../app/api/images/generate/route.ts", import.meta.url), "utf8");
 const provider = fs.readFileSync(new URL("../app/image-provider-router.ts", import.meta.url), "utf8");
 const assets = fs.readFileSync(new URL("../app/image-assets.ts", import.meta.url), "utf8");
-const studio = fs.readFileSync(new URL("../app/image-studio.tsx", import.meta.url), "utf8");
 const workspace = fs.readFileSync(new URL("../app/project-asset-workspace.tsx", import.meta.url), "utf8");
 const page = fs.readFileSync(new URL("../app/page.tsx", import.meta.url), "utf8");
 const memory = fs.readFileSync(new URL("../app/project-memory.ts", import.meta.url), "utf8");
@@ -71,7 +70,8 @@ test("Step 6.3 I: Image Studio 联动携带项目、Prompt 与图片参数", () 
 });
 
 test("Step 6.3 Regression: 原 Director、各工作台和 Project Memory 保持原链路", () => {
-  for (const value of ["<ScriptStudio", "<ViralAnalyzer", "<ViralReplication", "<ShootingDirector", "<VoiceStudio", "<ImageStudio"]) assert.match(page, new RegExp(value));
+  for (const value of ["<ScriptStudio", "<ViralAnalyzer", "<ViralReplication", "<ShootingDirector", "<VoiceStudio", "<ImageProductionWorkspace"]) assert.match(page, new RegExp(value));
+  assert.match(workspace, /ImageStudioWorkspace/);
   for (const value of ["onToggleLock", "duplicateShot", "deleteShot", "reorderShots", "updateShot"]) assert.match(director, new RegExp(value));
   assert.match(memory, /PROJECT_MEMORY_VERSION = 1/);
 });

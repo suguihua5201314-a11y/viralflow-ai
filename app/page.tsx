@@ -36,15 +36,15 @@ import ProjectBrainWorkspace from "./components/project-brain/project-brain-work
 import ProjectWorkspace from "./project-workspace";
 import {cacheProjectMemory,cloneProjectWorkspace,getOrCreateProjectMemoryWriterId,mutateProjectMemory,normalizeProjectMemory,readProjectMemory,removeProjectWorkspace,resolveProjectMemoryState,resolveProjectWorkspace,shouldPersistProjectMemory,touchProject,updateProjectWorkspace,type PersistentProject,type ProjectMemory,type ProjectMemoryHydrationState,type ProjectMemoryResolution,type ProjectWorkspaceSnapshot,type ProjectWorkspaceState} from "./project-memory";
 import {DEFAULT_WORKSPACE_LANGUAGE,resolveCreationLanguageContext} from "./creation-language-context";
-import ImageStudio from "./image-studio";
-import { readImageAssets, type ImageReturnContext } from "./image-assets";
+import { readImageAssets } from "./image-assets";
 import ProjectAssetWorkspace from "./project-asset-workspace";
 import FramePromptWorkspace from "./frame-prompt-workspace";
+import ImageProductionWorkspace from "./image-production-workspace";
 import {mergeReplicationAdoption,restoreProjectAnalyzer,restoreProjectReplication,type ReplicationWorkspaceAsset} from "./analyzer-replication-workspace";
 import {createScriptRevisionId,ensureScriptRevision,scriptRevisionIdentity} from "./script-foundation";
 import {resolveCanonicalProductContext,resolveGroundedCanonicalProductContext} from "./product-context";
 import {CREATIVE_BRAIN_ACCEPTANCE_CONTEXT,CREATIVE_BRAIN_ACCEPTANCE_FINGERPRINT,CREATIVE_BRAIN_ACCEPTANCE_PROFILE,validateCreativeBrainAcceptanceBinding} from "./creative-brain-acceptance-fixture";
-import {activateDirectorContext,directorRequestIdentity,resolveDirectorWorkspace,sameDirectorRequestIdentity,saveDirectorWorkspace,selectDirectorShot,type DirectorRequestIdentity} from "./director-contexts";
+import {directorRequestIdentity,resolveDirectorWorkspace,sameDirectorRequestIdentity,saveDirectorWorkspace,selectDirectorShot,type DirectorRequestIdentity} from "./director-contexts";
 import {beginCreativeBriefRequest,beginCreativeDirectionRequest,completeCreativeBriefRequest,completeCreativeDirectionRequest,emptyCreativeDirectionSession,failCreativeBriefRequest,failCreativeDirectionRequest,type CreativeDirectionSessions} from "./creative-direction-state";
 import {type CreativeBrainInput,type RecentCreativeHistory} from "./creative-brain";
 import {parseCreativeDirectionApiResponse} from "./creative-directions";
@@ -351,21 +351,6 @@ export default function Home() {
       if("currentScript" in patch&&patch.currentScript&&typeof patch.currentScript==="object")scopedPatch.selectedScriptRevisionId=scriptRevisionIdentity(patch.currentScript as Script);
       return Object.keys(scopedPatch).length?updateProjectWorkspace(next,currentProjectId,scopedPatch):next;
     });
-  }
-  function returnToFramePrompt(context:ImageReturnContext){
-    mutateMemory(current=>{
-      const projects=current.projects.map(project=>{
-        if(project.id!==context.projectId)return project;
-        const contextId=context.scriptIdentity.startsWith("director:")?context.scriptIdentity.slice("director:".length):project.assets.currentDirectorContextId;
-        if(!contextId||!context.sourceScriptRevisionId)return project;
-        const identity:DirectorRequestIdentity={projectId:context.projectId,contextId,scriptRevisionId:context.sourceScriptRevisionId};
-        const activated=activateDirectorContext(project,identity,{shotId:context.shotId});
-        return activated===project?project:touchProject(activated,{});
-      });
-      return {...current,projects,workspace:{...current.workspace,currentProjectId:context.projectId,activeView:"frames"},updatedAt:new Date().toISOString()};
-    });
-    setSelectedProjectKey(context.projectId);
-    setActive("frames");
   }
   function createProject(input:{name:string;product:string;market:string;platform:string;language:string}){
     const now=new Date().toISOString();const id=`project-${Date.now()}`;
@@ -762,7 +747,7 @@ export default function Home() {
       {active === "dashboard" && <Dashboard metrics={dashboardMetrics} recent={dashboardRecent} dataMode={DATA_MODE} onNavigate={setActive} onOpenRecent={openRecent} onOpenProject={openProject} />}
       {active === "brain" && <ProjectBrainWorkspace project={projectMemory.projects.find(item=>item.id===projectMemory.workspace.currentProjectId)} knowledge={currentProductContext(currentDirectorProject?.product||form.product).profile} reference={referenceScript} onEdit={()=>setActive("products")} onContinue={()=>navigateProductionStage("creative")} ready={productionAssets.productContextCoherent} />}
       {active === "projects" && <ProjectWorkspace projects={persistentProjects} initialProjectKey={selectedProjectKey} saveState={memorySaveState} productionAssets={productionAssets} currentProductionStage={productionStage} onProductionStageNavigate={navigateProductionStage} onCreate={createProject} onRename={renameProject} onDuplicate={duplicateProject} onDelete={deleteProject} onSelect={id=>saveWorkspaceSnapshot({currentProjectId:id,activeView:"projects"})} onNavigate={view=>{setActive(view);saveWorkspaceSnapshot({activeView:view});}} />}
-      {active === "images" && <ImageStudio projects={projectMemory.projects.map(project=>({id:project.id,name:project.name,product:project.product}))} currentProjectId={projectMemory.workspace.currentProjectId} onNavigate={view=>{setActive(view);saveWorkspaceSnapshot({activeView:view});}} onReturnToFrame={returnToFramePrompt} />}
+      {active === "images" && <ImageProductionWorkspace project={currentDirectorProject||null} request={directorDisplayInput} workspace={currentDirectorWorkspace} scriptId={result?scriptRevisionIdentity(result):undefined} scriptVersion={result?.title||"当前脚本"} promptOverrides={currentDirectorProject?.assets.framePromptOverrides||[]} onPromptOverridesChange={records=>updateProjectMemory({framePromptOverrides:records})} onNavigate={view=>{setActive(view);saveWorkspaceSnapshot({activeView:view});}} onSelectShot={index=>{if(!currentDirectorProject||!directorInput)return;const shotId=currentDirectorWorkspace?.shots[index]?.shotId;if(!shotId)return;mutateMemory(current=>({...current,projects:current.projects.map(project=>project.id===currentDirectorProject.id?touchProject(selectDirectorShot(project,directorInput,shotId),{}):project),workspace:{...current.workspace,activeView:"images"}}));}} />}
       {active === "frames" && <FramePromptWorkspace project={currentDirectorProject||null} request={directorDisplayInput} workspace={currentDirectorWorkspace} scriptId={result?scriptRevisionIdentity(result):undefined} scriptVersion={result?.title||"当前脚本"} promptOverrides={currentDirectorProject?.assets.framePromptOverrides||[]} onPromptOverridesChange={records=>updateProjectMemory({framePromptOverrides:records})} onNavigate={view=>{setActive(view);saveWorkspaceSnapshot({activeView:view});}} onSelectShot={index=>{if(!currentDirectorProject||!directorInput)return;const shotId=currentDirectorWorkspace?.shots[index]?.shotId;if(!shotId)return;mutateMemory(current=>({...current,projects:current.projects.map(project=>project.id===currentDirectorProject.id?touchProject(selectDirectorShot(project,directorInput,shotId),{}):project),workspace:{...current.workspace,activeView:"frames"}}));}} />}
       {active === "assets" && <ProjectAssetWorkspace mode="assets" projects={projectMemory.projects.map(project=>({id:project.id,name:project.name,product:project.product}))} currentProjectId={projectMemory.workspace.currentProjectId} onNavigate={view=>{setActive(view);saveWorkspaceSnapshot({activeView:view});}} />}
       {active === "video" && <VideoAnalyzer products={productProfiles.map(x=>x.name)} />}
