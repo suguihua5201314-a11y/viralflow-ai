@@ -28,6 +28,22 @@ export type KnowledgeContext = {
   metadata:KnowledgeMetadata;
 };
 
+export const FACT_VIOLATION_RULES = {
+  productForbiddenExpression: { ruleFamily: "product_forbidden_expression", ruleCode: "enforced_banned_expression" },
+  commercialPrice: { ruleFamily: "commercial_claim", ruleCode: "unsupported_price" },
+  commercialPromotion: { ruleFamily: "commercial_claim", ruleCode: "unsupported_promotion" },
+  commercialInventory: { ruleFamily: "commercial_claim", ruleCode: "unsupported_inventory_or_ranking" },
+  commercialGift: { ruleFamily: "commercial_claim", ruleCode: "unsupported_gift_or_delivery" },
+  commercialWarranty: { ruleFamily: "commercial_claim", ruleCode: "unsupported_warranty" },
+  certificationEndorsement: { ruleFamily: "certification_or_endorsement", ruleCode: "unsupported_certification_or_endorsement" },
+  numericParameter: { ruleFamily: "numeric_parameter", ruleCode: "unsupported_numeric_parameter" },
+  viralReferenceCopy: { ruleFamily: "reference_copy", ruleCode: "copied_viral_reference" },
+  recentHookReuse: { ruleFamily: "history_repetition", ruleCode: "recent_hook_reuse" },
+} as const;
+
+type FactViolationRule = (typeof FACT_VIOLATION_RULES)[keyof typeof FACT_VIOLATION_RULES];
+export type FactViolationDiagnostic = FactViolationRule & { message: string };
+
 type KnowledgeInput = {
   product:string; sellingPoints:string; audience:string; country:string; language:string;
   platform?:string; offer:string; productKnowledge?:ProductKnowledge;
@@ -138,23 +154,24 @@ export function renderKnowledgeContext(context:KnowledgeContext) {
   return `KNOWLEDGE CONTEXT\n\n[FACT LAYER / KNOWN FACTS]\n${facts}\n- Allowed selling points: ${context.sellingPoints.join("；")||"仅使用Brief"}\n- 事实层是唯一产品事实来源；没有写出的参数、认证、材质、测试、价格、折扣、赠品或能力一律不得补充。\n\n[SELLING POINT PRIORITY]\n- Primary: ${priority.primary||"按Brief主卖点"}\n- Secondary: ${priority.secondary.join("；")||"无"}\n- Optional (只有剧情需要才使用): ${priority.optional.join("；")||"无"}\n- 本条只围绕1个主卖点和最多2个辅助卖点，不得把全部卖点逐项念完。\n\n[COMPLIANCE CONSTRAINTS]\n- 禁用表达: ${context.compliance.bannedExpressions.join("；")||"无产品专属禁用词"}\n- 平台约束: ${context.compliance.platformConstraints.join("；")}\n\n[MARKET CONTEXT]\n- ${context.market.country} / ${context.market.language} / ${context.market.platform}\n\n[REFERENCE LAYER]\n${reference}\n- 只学习机制、节奏和信息顺序，禁止复制原句；参考中的产品事实不得迁移。\n\n[HISTORY MEMORY / AVOID REPETITION]\n${memory}\n- 历史只用于避开Hook、开头句式、Creative Angle、Scenario、Proof Mechanism和CTA，不得强制模仿。`;
 }
 
-export function findFactViolations(text:string,context:KnowledgeContext,additionalGrounding="") {
+export function findFactViolationDiagnostics(text:string,context:KnowledgeContext,additionalGrounding=""):FactViolationDiagnostic[] {
   const normalized=text.toLowerCase();
-  const violations:string[]=[];
-  for(const expression of context.compliance.enforcedBannedExpressions)if(expression.length>=3&&normalized.includes(expression.toLowerCase()))violations.push(`命中产品禁用表达:${expression}`);
+  const violations:FactViolationDiagnostic[]=[];
+  const add=(rule:FactViolationRule,message:string)=>violations.push({...rule,message});
+  for(const expression of context.compliance.enforcedBannedExpressions)if(expression.length>=3&&normalized.includes(expression.toLowerCase()))add(FACT_VIOLATION_RULES.productForbiddenExpression,`命中产品禁用表达:${expression}`);
   const factText=Object.values(context.facts).join(" ")+" "+context.sellingPoints.join(" ")+" "+additionalGrounding;
-  const commercialClaims:Array<[string,RegExp]>=[
-    ["价格",/(?:[$€£]\s*\d|\d+(?:[.,]\d+)?\s*[$€£]|por\s+solo\s+\d|only\s+[$€£]?\d|仅需\s*\d|只要\s*\d)/iu],
-    ["折扣、优惠券或组合促销",/(?:\d+\s*[x×]\s*\d+|buy\s+\w+\s+get|compra\s+\w+\s+(?:y|lleva)|coupon|cup[oó]n|descuento|rebaja|discount|\d+%\s*off|half\s*price|折扣|优惠券?|半价|买\S*送)/iu],
-    ["库存、限时、销量或排名",/(?:quedan\s+poc[oa]s|[uú]ltimas?\s+unidades?|stock\s+limitado|limited\s+stock|only\s+\d+\s+left|last\s+day|limited\s+time|best\s*seller|top\s*\d+|\d+\s*(?:users?|customers?|ventas)|库存有限|仅剩|最后\d*件|限时|最后一天|销量\s*\d+|\d+\s*(?:位用户|人购买)|排名|全网第一)/iu],
-    ["赠品、免费或配送承诺",/(?:regalo|gratis|free\s*(?:gift|shipping|delivery)?|env[ií]o\s+gratis|赠送|赠品|免费|包邮|次日达|当日达)/iu],
-    ["保修或商业承诺",/(?:warranty|guarantee|garant[ií]a|money\s+back|保修|质保|无理由退款|退款保证)/iu]
+  const commercialClaims:Array<[FactViolationRule,boolean,RegExp]>=[
+    [FACT_VIOLATION_RULES.commercialPrice,true,/(?:[$€£]\s*\d|\d+(?:[.,]\d+)?\s*[$€£]|por\s+solo\s+\d|only\s+[$€£]?\d|仅需\s*\d|只要\s*\d)/iu],
+    [FACT_VIOLATION_RULES.commercialPromotion,false,/(?:\d+\s*[x×]\s*\d+|buy\s+\w+\s+get|compra\s+\w+\s+(?:y|lleva)|coupon|cup[oó]n|descuento|rebaja|discount|\d+%\s*off|half\s*price|折扣|优惠券?|半价|买\S*送)/iu],
+    [FACT_VIOLATION_RULES.commercialInventory,false,/(?:quedan\s+poc[oa]s|[uú]ltimas?\s+unidades?|stock\s+limitado|limited\s+stock|only\s+\d+\s+left|last\s+day|limited\s+time|best\s*seller|top\s*\d+|\d+\s*(?:users?|customers?|ventas)|库存有限|仅剩|最后\d*件|限时|最后一天|销量\s*\d+|\d+\s*(?:位用户|人购买)|排名|全网第一)/iu],
+    [FACT_VIOLATION_RULES.commercialGift,false,/(?:regalo|gratis|free\s*(?:gift|shipping|delivery)?|env[ií]o\s+gratis|赠送|赠品|免费|包邮|次日达|当日达)/iu],
+    [FACT_VIOLATION_RULES.commercialWarranty,false,/(?:warranty|guarantee|garant[ií]a|money\s+back|保修|质保|无理由退款|退款保证)/iu]
   ];
-  for(const [label,pattern] of commercialClaims)if(pattern.test(text)&&!pattern.test(factText))violations.push(label==="价格"?"使用了未提供的价格信息":"使用了未提供的促销、赠品或库存信息");
-  if(/platform certified|officially approved|doctor recommended|国家认证|平台认证|官方指定|aprobado oficialmente|recomendado por médicos/i.test(text)&&!/认证|certif|aprobado|recommended/i.test(factText))violations.push("使用了未提供的认证或背书");
+  for(const [rule,isPrice,pattern] of commercialClaims)if(pattern.test(text)&&!pattern.test(factText))add(rule,isPrice?"使用了未提供的价格信息":"使用了未提供的促销、赠品或库存信息");
+  if(/platform certified|officially approved|doctor recommended|国家认证|平台认证|官方指定|aprobado oficialmente|recomendado por médicos/i.test(text)&&!/认证|certif|aprobado|recommended/i.test(factText))add(FACT_VIOLATION_RULES.certificationEndorsement,"使用了未提供的认证或背书");
   const claims=[...text.matchAll(/(\d+(?:[.,]\d+)?)\s*(%|°|mm|cm|mah|w)/gi)].map(match=>`${match[1]}${match[2].toLowerCase()}`);
   const normalizedFacts=normalize(factText);
-  for(const claim of claims)if(!normalizedFacts.includes(normalize(claim)))violations.push(`使用了未提供的参数:${claim}`);
+  for(const claim of claims)if(!normalizedFacts.includes(normalize(claim)))add(FACT_VIOLATION_RULES.numericParameter,`使用了未提供的参数:${claim}`);
   const wordWindows=(value:string)=>{
     const words=value.toLowerCase().match(/[a-záéíóúüñ0-9]+/gi)||[];
     return words.length>=8?Array.from({length:words.length-7},(_,index)=>words.slice(index,index+8).join(" ")):[];
@@ -180,11 +197,16 @@ export function findFactViolations(text:string,context:KnowledgeContext,addition
     const copiedHook=Math.min(sourceHookTokens.length,targetHookTokens.length)>=7&&lengthRatio>=.72&&(orderedSimilarity>=.68||(Math.min(sourceContent.length,targetContent.length)>=4&&sharedContent>=3&&contentOverlap>=.5));
     const sourceCompact=normalize(source),targetCompact=normalize(text);
     const copiedChars=/[\u3400-\u9fff]/u.test(source)&&sourceCompact.length>=24&&Array.from({length:sourceCompact.length-23},(_,index)=>sourceCompact.slice(index,index+24)).some(window=>targetCompact.includes(window));
-    if(copiedWords||copiedHook||copiedChars)violations.push("直接复制了爆款参考表达");
+    if(copiedWords||copiedHook||copiedChars)add(FACT_VIOLATION_RULES.viralReferenceCopy,"直接复制了爆款参考表达");
   }
   for(const memory of context.recentMemory){
     const oldHook=normalize(memory.hook);
-    if(oldHook.length>=10&&normalize(text).includes(oldHook)){violations.push("复用了近期历史Hook");break;}
+    if(oldHook.length>=10&&normalize(text).includes(oldHook)){add(FACT_VIOLATION_RULES.recentHookReuse,"复用了近期历史Hook");break;}
   }
-  return unique(violations);
+  const seen=new Set<string>();
+  return violations.filter(item=>{const key=`${item.ruleFamily}:${item.ruleCode}:${normalize(item.message)}`;if(seen.has(key))return false;seen.add(key);return true;});
+}
+
+export function findFactViolations(text:string,context:KnowledgeContext,additionalGrounding="") {
+  return unique(findFactViolationDiagnostics(text,context,additionalGrounding).map(item=>item.message));
 }

@@ -2,7 +2,7 @@ import type { CreativeBriefV2, EvidenceStrategy, OpeningVisual } from "./creativ
 import { productContextFingerprint } from "./creative-opportunity-selection";
 import type { CanonicalProductContext } from "./product-context";
 import { checkCompliance } from "./compliance-rules";
-import { buildKnowledgeContext, findFactViolations } from "./knowledge-context";
+import { buildKnowledgeContext, findFactViolationDiagnostics } from "./knowledge-context";
 import type { StructuredScript } from "./script-generation";
 import { bindScriptToCreativeBrief, ensureScriptRevision } from "./script-foundation";
 import { normalizeLanguageIdentity } from "./language-guard";
@@ -93,6 +93,8 @@ export type ScriptWriterValidationIssue = {
   path?: string;
   stage: ScriptWriterValidationStage;
   validator: string;
+  ruleFamily?: string;
+  ruleCode?: string;
 };
 
 export type CriticIssueCode =
@@ -346,10 +348,13 @@ export function validateScriptDraftDeterministically(input: ScriptWriterInput, d
     for (const claim of assertion.text.match(/\d+(?:[.,]\d+)?\s*(?:%|°|mm\b|cm\b|mah\b|w\b)/gi) || []) {
       if (!factText.includes(claim.toLowerCase().replace(/\s/g, ""))) issues.push(issue("unsupported_numeric_claim", "numeric", validator, assertion.path));
     }
-    const factViolations = findFactViolations(assertion.text, knowledge);
-    if (factViolations.some((item) => !item.startsWith("命中产品禁用表达:") && !item.startsWith("使用了未提供的参数:"))) issues.push(issue("unsupported_product_truth", "truth", validator, assertion.path));
+    const factViolations = findFactViolationDiagnostics(assertion.text, knowledge);
+    for (const violation of factViolations) {
+      if (violation.ruleFamily === "product_forbidden_expression" || violation.ruleFamily === "numeric_parameter") continue;
+      issues.push({ ...issue("unsupported_product_truth", "truth", validator, assertion.path), ruleFamily: violation.ruleFamily, ruleCode: violation.ruleCode });
+    }
   }
-  return issues.filter((item, index, all) => index === all.findIndex((candidate) => candidate.code === item.code && candidate.stage === item.stage && candidate.path === item.path));
+  return issues.filter((item, index, all) => index === all.findIndex((candidate) => candidate.code === item.code && candidate.stage === item.stage && candidate.path === item.path && candidate.ruleFamily === item.ruleFamily && candidate.ruleCode === item.ruleCode));
 }
 
 export function validateTargetedRewrite(rewrite: TargetedRewrite, draft: ScriptDraftV2): ScriptWriterValidationIssue[] {

@@ -54,6 +54,16 @@ export type BriefDrivenWriterResult = {
   draft: ScriptDraftV2 | null;
   metadata: BriefDrivenWriterMetadata;
   issues: ScriptWriterValidationIssue[];
+  validationDiagnostics?: WriterProductTruthDiagnostic[];
+};
+
+export type WriterProductTruthDiagnostic = {
+  attempt: 0 | 1;
+  stage: "truth";
+  issueCode: "unsupported_product_truth";
+  path?: string;
+  ruleFamily: string;
+  ruleCode?: string;
 };
 
 export type BriefDrivenWriterObservation = {
@@ -184,6 +194,10 @@ export function buildBriefDrivenWriterMessages(input: ScriptWriterInput, repairI
   ];
 }
 
+function repairIssuesWithoutDiagnosticDuplicates(issues: ScriptWriterValidationIssue[]) {
+  return issues.filter((item, index, all) => index === all.findIndex((candidate) => candidate.code === item.code && candidate.path === item.path && candidate.stage === item.stage));
+}
+
 function providerErrorType(error: unknown): BriefDrivenWriterErrorType {
   if (error && typeof error === "object" && "category" in error) return (error as { category: ProviderErrorType }).category;
   return "invalid_output";
@@ -232,11 +246,12 @@ export async function generateBriefDrivenScript(
   }
 
   let issues: ScriptWriterValidationIssue[] = [];
+  const validationDiagnostics: WriterProductTruthDiagnostic[] = [];
   for (let attempt = 0; attempt < BRIEF_DRIVEN_WRITER_BUDGET.maximumProviderAttempts; attempt++) {
     let response: BriefDrivenWriterProviderResponse;
     try {
       response = await provider({
-        messages: buildBriefDrivenWriterMessages(input, issues),
+        messages: buildBriefDrivenWriterMessages(input, repairIssuesWithoutDiagnosticDuplicates(issues)),
         temperature: BRIEF_DRIVEN_WRITER_BUDGET.temperature,
         topP: BRIEF_DRIVEN_WRITER_BUDGET.topP,
         maxTokens: BRIEF_DRIVEN_WRITER_BUDGET.maxTokens,
@@ -257,8 +272,12 @@ export async function generateBriefDrivenScript(
     if (parsed.value && issues.length === 0) {
       const script = adaptScriptDraftToStructuredScript(input, parsed.value);
       options.observe?.({ correlationId, attempt: attempt + 1, stage: "completed", provider: response.providerUsed, model: response.model, latencyMs: resultMetadata.latencyMs, repairAttempted: resultMetadata.repairAttempted, issueCount: 0, errorType: null });
-      return { status: "success", script, draft: parsed.value, metadata: resultMetadata, issues: [] };
+      return { status: "success", script, draft: parsed.value, metadata: resultMetadata, issues: [], ...(validationDiagnostics.length ? { validationDiagnostics } : {}) };
     }
+
+    validationDiagnostics.push(...issues.flatMap((item): WriterProductTruthDiagnostic[] => item.code === "unsupported_product_truth" && item.stage === "truth" && item.ruleFamily
+      ? [{ attempt: attempt as 0 | 1, stage: "truth", issueCode: "unsupported_product_truth", ...(item.path ? { path: item.path } : {}), ruleFamily: item.ruleFamily, ...(item.ruleCode ? { ruleCode: item.ruleCode } : {}) }]
+      : []));
 
     options.observe?.({ correlationId, attempt: attempt + 1, stage: validationObservationStage(issues), provider: response.providerUsed, model: response.model, latencyMs: response.responseTimeMs, repairAttempted: resultMetadata.repairAttempted, issueCount: issues.length, issues });
     if (attempt === 0) {
@@ -267,7 +286,7 @@ export async function generateBriefDrivenScript(
     }
     resultMetadata.errorType = "repair_failed";
     options.observe?.({ correlationId, attempt: attempt + 1, stage: "repair_failed", provider: response.providerUsed, model: response.model, latencyMs: resultMetadata.latencyMs, repairAttempted: true, issueCount: issues.length, issues, errorType: resultMetadata.errorType });
-    return { status: "failure", script: null, draft: null, metadata: resultMetadata, issues };
+    return { status: "failure", script: null, draft: null, metadata: resultMetadata, issues, ...(validationDiagnostics.length ? { validationDiagnostics } : {}) };
   }
   resultMetadata.errorType = "validation_failed";
   return { status: "failure", script: null, draft: null, metadata: resultMetadata, issues };

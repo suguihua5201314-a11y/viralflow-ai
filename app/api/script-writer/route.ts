@@ -72,7 +72,7 @@ export async function POST(request: Request) {
     const result = await generateBriefDrivenScript(body, adapter, {
       correlationId,
       providerIdentity: { providerRequested: requested, providerUsed, model: providerStatus.model },
-      observe: ({ issues, ...event }) => console.warn(JSON.stringify({ event: "brief_driven_script_writer", ...event, ...(issues ? { issues: issues.map(({ code, path, stage, validator }) => ({ code, ...(path ? { path } : {}), stage, validator })) } : {}) })),
+      observe: ({ issues, ...event }) => console.warn(JSON.stringify({ event: "brief_driven_script_writer", ...event, validationAttempt: Math.max(0, event.attempt - 1), ...(issues ? { issues: issues.map(({ code, path, stage, validator, ruleFamily, ruleCode }) => ({ code, ...(path ? { path } : {}), stage, validator, ...(ruleFamily ? { ruleFamily } : {}), ...(ruleCode ? { ruleCode } : {}) })) } : {}) })),
     });
     if (result.status === "failure") return Response.json({ ...result, error: { type: result.metadata.errorType, message: safeMessage(result.metadata.errorType) } }, { status: failureStatus(result.metadata.errorType) });
     return Response.json(result, { status: 201 });

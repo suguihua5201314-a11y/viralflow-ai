@@ -319,6 +319,66 @@ test("safe observations expose identity, stages and issue metadata without conte
   assert.ok(events.some((event) => event.stage === "draft_json_parse" && event.issues[0].code === "invalid_json"));
 });
 
+test("Writer truth diagnostics compare initial and repair failures by safe rule family", async () => {
+  const unsafe = draft({ cta: "这是平台认证产品。" });
+  let calls = 0;
+  const events = [];
+  const result = await runtime.generateBriefDrivenScript(input(), async () => {
+    calls += 1;
+    return response(unsafe);
+  }, { correlationId: "writer-truth-correlation", observe: (event) => events.push(event) });
+
+  assert.equal(calls, 2);
+  assert.equal(result.status, "failure");
+  assert.equal(result.metadata.errorType, "repair_failed");
+  assert.deepEqual(result.validationDiagnostics?.map(({ attempt, stage, issueCode, path, ruleFamily, ruleCode }) => ({ attempt, stage, issueCode, path, ruleFamily, ruleCode })), [
+    { attempt: 0, stage: "truth", issueCode: "unsupported_product_truth", path: "cta", ruleFamily: "certification_or_endorsement", ruleCode: "unsupported_certification_or_endorsement" },
+    { attempt: 1, stage: "truth", issueCode: "unsupported_product_truth", path: "cta", ruleFamily: "certification_or_endorsement", ruleCode: "unsupported_certification_or_endorsement" },
+  ]);
+  assert.equal(events.every((event) => event.correlationId === "writer-truth-correlation"), true);
+  assert.equal(events.at(-1).stage, "repair_failed");
+});
+
+test("Writer truth diagnostics preserve multiple deterministic rules on one path", async () => {
+  const unsafe = draft({ cta: "这是平台认证产品，现在只要 €19，库存有限。" });
+  const result = await runtime.generateBriefDrivenScript(input(), async () => response(unsafe));
+  const initial = result.validationDiagnostics?.filter((item) => item.attempt === 0 && item.path === "cta") || [];
+  assert.deepEqual(initial.map((item) => item.ruleCode).sort(), [
+    "unsupported_certification_or_endorsement",
+    "unsupported_inventory_or_ranking",
+    "unsupported_price",
+  ]);
+  assert.equal(result.issues.filter((item) => item.code === "unsupported_product_truth" && item.path === "cta").length, 3);
+});
+
+test("Writer truth diagnostics do not alter success or bounded repair success", async () => {
+  let successCalls = 0;
+  const success = await runtime.generateBriefDrivenScript(input(), async () => { successCalls += 1; return response(draft()); });
+  assert.equal(success.status, "success");
+  assert.equal(successCalls, 1);
+  assert.equal(success.validationDiagnostics, undefined);
+
+  const unsafe = draft({ cta: "这是平台认证产品。" });
+  let repairCalls = 0;
+  const repaired = await runtime.generateBriefDrivenScript(input(), async () => response(++repairCalls === 1 ? unsafe : draft()));
+  assert.equal(repaired.status, "success");
+  assert.equal(repairCalls, 2);
+  assert.equal(repaired.metadata.repairAttempted, true);
+  assert.equal(repaired.validationDiagnostics?.length, 1);
+  assert.equal(repaired.validationDiagnostics?.[0].attempt, 0);
+});
+
+test("Writer truth diagnostic payload excludes generated and secret content", async () => {
+  const secretDialogue = "SENSITIVE-DIALOGUE-DO-NOT-LOG";
+  const secretNarration = "SENSITIVE-NARRATION-DO-NOT-LOG";
+  const secretCta = "SENSITIVE-CTA-DO-NOT-LOG 平台认证";
+  const unsafe = draft({ scenes: draft().scenes.map((scene, index) => index === 4 ? { ...scene, dialogue: secretDialogue } : scene), fullNarration: secretNarration, cta: secretCta });
+  const result = await runtime.generateBriefDrivenScript(input(), async () => response(unsafe));
+  const payload = JSON.stringify(result.validationDiagnostics);
+  assert.doesNotMatch(payload, /SENSITIVE-|CrystalArmor|alignment applicator|lockedCreativeBrief|canonicalProductTruth|Bearer|API[_-]?KEY/i);
+  assert.match(payload, /certification_or_endorsement/);
+});
+
 test("API route rejects incomplete input before any provider fetch", async () => {
   let fetchCalls = 0;
   const originalFetch = globalThis.fetch;
