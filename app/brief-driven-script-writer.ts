@@ -11,7 +11,7 @@ import {
 } from "./brief-driven-script";
 import type { StructuredScript } from "./script-generation";
 import type { ProviderErrorType, ProviderId } from "./provider-types";
-import { marketsAreEquivalent } from "./market-identity";
+import { normalizeMarketIdentity, parseMarketIdentities } from "./market-identity";
 
 export type BriefDrivenWriterProviderRequest = {
   messages: Array<{ role: "system" | "user"; content: string }>;
@@ -102,8 +102,9 @@ export function validateBriefDrivenWriterInput(input: ScriptWriterInput): Script
   if (!languageContext.platform) issues.push(safeIssue("missing_platform", "languageContext.platform"));
   if (!languageContext.market) issues.push(safeIssue("missing_market", "languageContext.market"));
   if (!languageContext.targetLanguage) issues.push(safeIssue("missing_target_language", "languageContext.targetLanguage"));
-  const configuredMarkets = split(input.productContext.productKnowledge?.markets);
-  if (configuredMarkets.length && !configuredMarkets.some((market) => marketsAreEquivalent(market, input.market))) issues.push(safeIssue("market_mismatch", "market"));
+  const configuredMarkets = parseMarketIdentities(input.productContext.productKnowledge?.markets);
+  const requestMarket = normalizeMarketIdentity(input.market);
+  if (configuredMarkets.length && !configuredMarkets.includes(requestMarket)) issues.push(safeIssue("market_mismatch", "market"));
   const preferences = input.preferences;
   if (preferences?.durationSeconds !== undefined && (!Number.isFinite(preferences.durationSeconds) || preferences.durationSeconds < 5 || preferences.durationSeconds > 180)) issues.push(safeIssue("invalid_duration_preference", "preferences.durationSeconds"));
   if (preferences?.variantCount !== undefined && preferences.variantCount !== 1) issues.push(safeIssue("invalid_variant_count", "preferences.variantCount"));

@@ -28,6 +28,15 @@ export function normalizeMarketIdentity(value: string): string {
   return `unknown:${normalized}`;
 }
 
+/** Parses the Product Knowledge multi-market string into unique canonical identities. */
+export function parseMarketIdentities(value: string | null | undefined): string[] {
+  const identities = String(value || "")
+    .split(/[、，,；;\n]+/)
+    .map((entry) => normalizeMarketIdentity(entry))
+    .filter(Boolean);
+  return [...new Set(identities)];
+}
+
 export function marketsAreEquivalent(left: string, right: string): boolean {
   const leftIdentity = normalizeMarketIdentity(left);
   return Boolean(leftIdentity) && leftIdentity === normalizeMarketIdentity(right);
