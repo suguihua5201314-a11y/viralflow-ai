@@ -5,6 +5,7 @@ import { createJiti } from "jiti";
 
 const jiti = createJiti(import.meta.url, { interopDefault: true });
 const runtime = await jiti.import("../app/brief-driven-script-writer.ts");
+const foundation = await jiti.import("../app/brief-driven-script.ts");
 const selection = await jiti.import("../app/creative-opportunity-selection.ts");
 const route = await jiti.import("../app/api/script-writer/route.ts");
 
@@ -377,6 +378,77 @@ test("Writer truth diagnostic payload excludes generated and secret content", as
   const payload = JSON.stringify(result.validationDiagnostics);
   assert.doesNotMatch(payload, /SENSITIVE-|CrystalArmor|alignment applicator|lockedCreativeBrief|canonicalProductTruth|Bearer|API[_-]?KEY/i);
   assert.match(payload, /certification_or_endorsement/);
+});
+
+test("truth-aware repair receives the canonical unsupported promotion rule and succeeds", async () => {
+  const unsafe = draft({ cta: "现在买一送一。" });
+  const requests = [];
+  const result = await runtime.generateBriefDrivenScript(input(), async (request) => {
+    requests.push(request);
+    return response(requests.length === 1 ? unsafe : draft());
+  });
+  assert.equal(result.status, "success");
+  assert.equal(requests.length, 2);
+  const repair = JSON.parse(requests[1].messages[1].content).repair;
+  assert.deepEqual(repair.issues, [{ code: "unsupported_product_truth", path: "cta", stage: "truth", ruleFamily: "commercial_claim", ruleCode: "unsupported_promotion" }]);
+  assert.match(repair.ruleGuidance.join(" "), /discount.*coupon.*bundle promotion.*buy-one-get-one/i);
+  assert.match(repair.instruction, /do not relocate, paraphrase, or reintroduce/i);
+});
+
+test("truth-aware repair receives the canonical gift and delivery rule and succeeds", async () => {
+  const unsafe = draft({ cta: "现在免费赠送礼品。" });
+  const requests = [];
+  const result = await runtime.generateBriefDrivenScript(input(), async (request) => {
+    requests.push(request);
+    return response(requests.length === 1 ? unsafe : draft());
+  });
+  assert.equal(result.status, "success");
+  const repair = JSON.parse(requests[1].messages[1].content).repair;
+  assert.deepEqual(repair.issues, [{ code: "unsupported_product_truth", path: "cta", stage: "truth", ruleFamily: "commercial_claim", ruleCode: "unsupported_gift_or_delivery" }]);
+  assert.match(repair.ruleGuidance.join(" "), /gift.*free offer.*free shipping.*delivery promise/i);
+});
+
+test("truth-aware repair preserves multiple commercial rule identities on one path", async () => {
+  const unsafe = draft({ cta: "现在买一送一，并免费赠送礼品。" });
+  const requests = [];
+  const result = await runtime.generateBriefDrivenScript(input(), async (request) => {
+    requests.push(request);
+    return response(requests.length === 1 ? unsafe : draft());
+  });
+  assert.equal(result.status, "success");
+  const repair = JSON.parse(requests[1].messages[1].content).repair;
+  assert.deepEqual(repair.issues.map((item) => item.ruleCode).sort(), ["unsupported_gift_or_delivery", "unsupported_promotion"]);
+  assert.equal(repair.ruleGuidance.length, 2);
+});
+
+test("relocating an unsupported promotion fails full validation without another repair", async () => {
+  const initial = draft();
+  initial.scenes[4].visual = "画面展示买一送一。";
+  const relocated = draft();
+  relocated.scenes[3].visual = "画面展示买一送一。";
+  let calls = 0;
+  const result = await runtime.generateBriefDrivenScript(input(), async () => response(++calls === 1 ? initial : relocated));
+  assert.equal(calls, 2);
+  assert.equal(result.status, "failure");
+  assert.equal(result.metadata.errorType, "repair_failed");
+  assert.ok(result.issues.some((item) => item.path === "scenes.3.visual" && item.ruleCode === "unsupported_promotion"));
+});
+
+test("generic repair issues retain the previous code, path and stage-only contract", () => {
+  const repair = JSON.parse(runtime.buildBriefDrivenWriterMessages(input(), [{ code: "missing_field", path: "hook.line", stage: "draft_schema", validator: "parseScriptDraftV2" }])[1].content).repair;
+  assert.deepEqual(repair.issues, [{ code: "missing_field", path: "hook.line", stage: "draft_schema" }]);
+  assert.equal(repair.ruleGuidance, undefined);
+  assert.doesNotMatch(repair.instruction, /do not relocate/i);
+});
+
+test("commercial validator characterization records current negation and production-instruction behavior", () => {
+  const negated = draft({ cta: "不要承诺买一送一。" });
+  const instruction = draft();
+  instruction.scenes[4].visual = "画面中不要出现优惠券。";
+  const negatedIssue = foundation.validateScriptDraftDeterministically(input(), negated).find((item) => item.path === "cta" && item.ruleCode === "unsupported_promotion");
+  const instructionIssue = foundation.validateScriptDraftDeterministically(input(), instruction).find((item) => item.path === "scenes.4.visual" && item.ruleCode === "unsupported_promotion");
+  assert.ok(negatedIssue, "current regex treats a negated promotion phrase as a violation");
+  assert.ok(instructionIssue, "current regex treats a production instruction as a violation");
 });
 
 test("API route rejects incomplete input before any provider fetch", async () => {

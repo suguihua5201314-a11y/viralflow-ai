@@ -173,12 +173,30 @@ export const BRIEF_DRIVEN_WRITER_SYSTEM_PROMPT = [
   "Set workspaceLanguage=zh-CN, copy targetLanguage from context, and set localizationStatus=source.",
 ].join(" ");
 
+const WRITER_TRUTH_REPAIR_GUIDANCE: Record<string, string> = {
+  unsupported_promotion: "Remove or rewrite the unsupported promotion assertion. Do not introduce a discount, coupon, bundle promotion, percentage discount, half-price offer, or buy-one-get-one claim unless it is explicitly supported by CANONICAL PRODUCT TRUTH.",
+  unsupported_gift_or_delivery: "Remove or rewrite the unsupported gift or delivery assertion. Do not introduce a gift, free offer, free shipping, or delivery promise unless it is explicitly supported by CANONICAL PRODUCT TRUTH.",
+};
+
+function truthRepairGuidance(issues: ScriptWriterValidationIssue[]) {
+  return [...new Set(issues.flatMap((item) => item.code === "unsupported_product_truth" && item.ruleCode && WRITER_TRUTH_REPAIR_GUIDANCE[item.ruleCode]
+    ? [WRITER_TRUTH_REPAIR_GUIDANCE[item.ruleCode]]
+    : []))];
+}
+
 export function buildBriefDrivenWriterMessages(input: ScriptWriterInput, repairIssues: ScriptWriterValidationIssue[] = []) {
   const languageContext = resolveScriptWriterLanguageContext(input);
+  const truthGuidance = truthRepairGuidance(repairIssues);
   const repair = repairIssues.length ? {
     mode: "repair",
-    instruction: "Return one corrected ScriptDraftV2. Fix only the listed output-contract, source-language, or claim-safety issues. For internal_language_mismatch or language_mismatch, preserve scene IDs, scene structure, Brief decisions, meaning, evidence strategy, CTA intent, Product Truth, and lineage; re-express only the affected field in Simplified Chinese. Keep the same locked Brief and do not select a new strategy.",
-    issues: repairIssues.map(({ code, path, stage }) => ({ code, ...(path ? { path } : {}), stage })),
+    instruction: [
+      "Return one corrected ScriptDraftV2. Fix only the listed output-contract, source-language, or claim-safety issues.",
+      "For internal_language_mismatch or language_mismatch, preserve scene IDs, scene structure, Brief decisions, meaning, evidence strategy, CTA intent, Product Truth, and lineage; re-express only the affected field in Simplified Chinese.",
+      ...(truthGuidance.length ? ["For Product Truth issues, do not relocate, paraphrase, or reintroduce the same unsupported rule anywhere else in the Draft. Preserve every unrelated valid field and all scene IDs."] : []),
+      "Keep the same locked Brief and do not select a new strategy.",
+    ].join(" "),
+    issues: repairIssues.map(({ code, path, stage, ruleFamily, ruleCode }) => ({ code, ...(path ? { path } : {}), stage, ...(ruleFamily ? { ruleFamily } : {}), ...(ruleCode ? { ruleCode } : {}) })),
+    ...(truthGuidance.length ? { ruleGuidance: truthGuidance } : {}),
   } : undefined;
   return [
     { role: "system" as const, content: BRIEF_DRIVEN_WRITER_SYSTEM_PROMPT },
@@ -195,7 +213,7 @@ export function buildBriefDrivenWriterMessages(input: ScriptWriterInput, repairI
 }
 
 function repairIssuesWithoutDiagnosticDuplicates(issues: ScriptWriterValidationIssue[]) {
-  return issues.filter((item, index, all) => index === all.findIndex((candidate) => candidate.code === item.code && candidate.path === item.path && candidate.stage === item.stage));
+  return issues.filter((item, index, all) => index === all.findIndex((candidate) => candidate.code === item.code && candidate.path === item.path && candidate.stage === item.stage && candidate.ruleFamily === item.ruleFamily && candidate.ruleCode === item.ruleCode));
 }
 
 function providerErrorType(error: unknown): BriefDrivenWriterErrorType {
