@@ -23,7 +23,39 @@ export type CreativeDirectionResult = {
   directions: CreativeDirectionCandidate[];
   metadata: CreativeBrainMetadata;
   validationSummary: { issues: OpportunityValidationIssue[]; diversityPassed: boolean };
+  validationDiagnostics?: CreativeDirectionValidationDiagnostics;
 };
+
+export type CreativeCandidateDiagnosticIssue = {
+  stage: OpportunityValidationIssue["type"] | "candidate_pool";
+  issueCode: string;
+  path?: string;
+};
+
+export type CreativeCandidateDiagnostic = {
+  candidateId: string;
+  source: "initial" | "repair" | "preserved";
+  outcome: "valid" | "rejected" | "deduplicated" | "preserved";
+  issues: CreativeCandidateDiagnosticIssue[];
+};
+
+export type CreativeDirectionAttemptDiagnostic = {
+  attempt: 0 | 1;
+  receivedCandidateCount: number;
+  parsedCandidateCount: number;
+  validCandidateCount: number;
+  rejectedCandidateCount: number;
+  preservedCandidateCount: number;
+  diversityPassed: boolean;
+  candidates: CreativeCandidateDiagnostic[];
+};
+
+export type CreativeDirectionValidationDiagnostics = {
+  attempts: CreativeDirectionAttemptDiagnostic[];
+  terminalReason: CreativeBrainMetadata["errorType"];
+};
+
+export type CreativeDirectionValidationObserver = (diagnostic: CreativeDirectionAttemptDiagnostic) => void;
 
 export function validateGroundedCreativeBrainInput(input: CreativeBrainInput): OpportunityValidationIssue[] {
   const issues: OpportunityValidationIssue[] = [];
@@ -40,15 +72,15 @@ const requiredText = (value: unknown, max = 500) => typeof value === "string" &&
 const optionalText = (value: unknown, max = 500) => value === undefined || requiredText(value, max);
 const normalize = (value: string) => value.toLowerCase().replace(/[\s\p{P}\p{S}]/gu, "");
 
-export function parseCreativeDirections(content: string): { directions: CreativeDirectionCandidate[]; issues: OpportunityValidationIssue[] } {
+export function parseCreativeDirections(content: string): { directions: CreativeDirectionCandidate[]; issues: OpportunityValidationIssue[]; receivedCandidateCount: number } {
   let value: unknown;
   try {
     value = JSON.parse(content.trim().replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/i, ""));
   } catch {
-    return { directions: [], issues: [{ type: "schema", message: "Creative Brain response is not valid JSON" }] };
+    return { directions: [], issues: [{ type: "schema", message: "Creative Brain response is not valid JSON" }], receivedCandidateCount: 0 };
   }
   const candidates = Array.isArray(value) ? value : (value as { directions?: unknown })?.directions;
-  if (!Array.isArray(candidates)) return { directions: [], issues: [{ type: "schema", message: "directions must be an array" }] };
+  if (!Array.isArray(candidates)) return { directions: [], issues: [{ type: "schema", message: "directions must be an array" }], receivedCandidateCount: 0 };
   const directions: CreativeDirectionCandidate[] = [];
   const issues: OpportunityValidationIssue[] = [];
   const ids = new Set<string>();
@@ -71,7 +103,7 @@ export function parseCreativeDirections(content: string): { directions: Creative
     ids.add(candidate.id!);
     directions.push(candidate as CreativeDirectionCandidate);
   }
-  return { directions, issues };
+  return { directions, issues, receivedCandidateCount: candidates.length };
 }
 
 function similarity(left: string, right: string) {
@@ -190,12 +222,47 @@ function emptyMetadata(): CreativeBrainMetadata {
   return { providerRequested: null, providerUsed: null, model: null, candidateCount: 0, validCandidateCount: 0, repairAttempted: false, fallbackUsed: false, errorType: null, responseTimeMs: null };
 }
 
-export async function generateCreativeDirections(input: CreativeBrainInput, provider: CreativeBrainProvider): Promise<CreativeDirectionResult> {
+function safeCandidateId(candidateId: string | undefined) {
+  return candidateId && /^[A-Za-z0-9_-]{1,40}$/.test(candidateId) ? candidateId : "unidentified";
+}
+
+function safeDiagnosticIssue(issue: OpportunityValidationIssue): CreativeCandidateDiagnosticIssue {
+  if (issue.code) return { stage: issue.type, issueCode: issue.code, ...(issue.path ? { path: issue.path } : {}) };
+  if (issue.type === "language") {
+    const separator = issue.message.indexOf(":");
+    return { stage: "language", issueCode: separator > 0 ? issue.message.slice(0, separator) : "invalid_workspace_language", ...(separator > 0 ? { path: issue.message.slice(separator + 1) } : {}) };
+  }
+  const issueCode = issue.type === "schema"
+    ? issue.message === "Creative Brain response is not valid JSON" ? "invalid_json"
+      : issue.message === "directions must be an array" ? "invalid_top_level"
+        : issue.message === "Direction IDs must be unique" ? "duplicate_candidate_id"
+          : issue.message === "Creative Brain must return exactly 3 directions" ? "candidate_count_mismatch"
+            : issue.message === "Repair candidate duplicates a preserved Direction ID" ? "duplicate_preserved_id"
+              : "invalid_candidate_contract"
+    : issue.type === "truth" ? issue.message.startsWith("Unsupported measured claim:") ? "unsupported_measured_claim" : "fact_violation"
+      : issue.type === "compliance" ? issue.message === "Unsupported medical capability" ? "unsupported_medical_capability" : "high_risk_compliance"
+        : issue.type === "history" ? issue.message === "Duplicates a recent hook" ? "duplicate_recent_hook" : issue.message === "Duplicates a recent creative angle" ? "duplicate_recent_angle" : "duplicate_recent_mechanism"
+          : issue.type === "feasibility" ? issue.message === "Requires an unavailable third party" ? "unavailable_third_party" : "unsafe_production_requirement"
+            : issue.type === "diversity" ? "insufficient_diversity" : `${issue.type}_validation_failed`;
+  return { stage: issue.type, issueCode, ...(issue.path ? { path: issue.path } : {}) };
+}
+
+function diagnosticCandidate(candidateId: string | undefined, source: CreativeCandidateDiagnostic["source"], outcome: CreativeCandidateDiagnostic["outcome"], issues: OpportunityValidationIssue[] = []): CreativeCandidateDiagnostic {
+  return { candidateId: safeCandidateId(candidateId), source, outcome, issues: issues.map(safeDiagnosticIssue) };
+}
+
+export async function generateCreativeDirections(
+  input: CreativeBrainInput,
+  provider: CreativeBrainProvider,
+  options: { observe?: CreativeDirectionValidationObserver } = {},
+): Promise<CreativeDirectionResult> {
   const metadata = emptyMetadata();
   const allIssues: OpportunityValidationIssue[] = [];
+  const attempts: CreativeDirectionAttemptDiagnostic[] = [];
+  const resultDiagnostics = (): CreativeDirectionValidationDiagnostics => ({ attempts, terminalReason: metadata.errorType });
   let preserved: CreativeDirectionCandidate[] = [];
   const inputIssues = validateGroundedCreativeBrainInput(input);
-  if (inputIssues.length) return { status: "failure", directions: [], metadata: { ...metadata, errorType: "invalid_output" }, validationSummary: { issues: inputIssues, diversityPassed: false } };
+  if (inputIssues.length) return { status: "failure", directions: [], metadata: { ...metadata, errorType: "invalid_output" }, validationSummary: { issues: inputIssues, diversityPassed: false }, validationDiagnostics: { attempts, terminalReason: "invalid_output" } };
   let correctionCandidates: CreativeDirectionCandidate[] = [];
   for (let attempt = 0; attempt < 2; attempt++) {
     try {
@@ -209,16 +276,27 @@ export async function generateCreativeDirections(input: CreativeBrainInput, prov
       metadata.model = response.model; metadata.responseTimeMs = (metadata.responseTimeMs || 0) + response.responseTimeMs;
       const parsed = parseCreativeDirections(response.content);
       allIssues.push(...parsed.issues);
-      if (!attempt && parsed.directions.length !== CREATIVE_DIRECTION_COUNT) allIssues.push({ type: "schema", message: "Creative Brain must return exactly 3 directions" });
+      const attemptCandidates: CreativeCandidateDiagnostic[] = preserved.map((item) => diagnosticCandidate(item.id, "preserved", "preserved"));
+      attemptCandidates.push(...parsed.issues.map((issue) => diagnosticCandidate(issue.candidateId, attempt ? "repair" : "initial", "rejected", [issue])));
+      if (!attempt && parsed.directions.length !== CREATIVE_DIRECTION_COUNT) {
+        const countIssue: OpportunityValidationIssue = { type: "schema", message: "Creative Brain must return exactly 3 directions" };
+        allIssues.push(countIssue);
+        attemptCandidates.push(diagnosticCandidate(undefined, "initial", "rejected", [countIssue]));
+      }
       let valid = parsed.directions.filter((item) => {
         const issues = validateCreativeDirection(item, input);
         allIssues.push(...issues);
+        attemptCandidates.push(diagnosticCandidate(item.id, attempt ? "repair" : "initial", issues.length ? "rejected" : "valid", issues));
         if (!attempt && issues.length > 0 && issues.every((entry) => entry.type === "language" || entry.type === "grounding")) correctionCandidates.push(item);
         return issues.length === 0;
       });
       if (attempt && correctionCandidates.length) {
         const returnedIds = new Set(valid.map((item) => item.id));
-        for (const candidate of correctionCandidates) if (!returnedIds.has(candidate.id)) allIssues.push({ candidateId: candidate.id, type: "grounding", code: "repair_identity_mismatch", path: "id", message: "Grounding repair must preserve Direction ID and strategy identity" });
+        for (const candidate of correctionCandidates) if (!returnedIds.has(candidate.id)) {
+          const issue: OpportunityValidationIssue = { candidateId: candidate.id, type: "grounding", code: "repair_identity_mismatch", path: "id", message: "Grounding repair must preserve Direction ID and strategy identity" };
+          allIssues.push(issue);
+          attemptCandidates.push(diagnosticCandidate(candidate.id, "repair", "rejected", [issue]));
+        }
         if (correctionCandidates.length === repair!.missingCount) {
           const expectedIds = new Set(correctionCandidates.map((item) => item.id));
           valid = valid.filter((item) => expectedIds.has(item.id));
@@ -227,28 +305,52 @@ export async function generateCreativeDirections(input: CreativeBrainInput, prov
       const combined = [...preserved];
       const ids = new Set(combined.map((item) => item.id));
       for (const item of valid) {
-        if (ids.has(item.id)) { allIssues.push({ candidateId: item.id, type: "schema", message: "Repair candidate duplicates a preserved Direction ID" }); continue; }
+        if (ids.has(item.id)) {
+          const issue: OpportunityValidationIssue = { candidateId: item.id, type: "schema", message: "Repair candidate duplicates a preserved Direction ID" };
+          allIssues.push(issue);
+          attemptCandidates.push(diagnosticCandidate(item.id, attempt ? "repair" : "initial", "deduplicated", [issue]));
+          continue;
+        }
         ids.add(item.id); combined.push(item);
       }
       const candidateDiversity = assessDirectionDiversity(combined.slice(0, CREATIVE_DIRECTION_COUNT));
       const duplicates = new Set(candidateDiversity.pairs.map((pair) => pair.right));
-      for (const pair of candidateDiversity.pairs) allIssues.push({ type: "diversity", message: `Directions ${pair.left + 1} and ${pair.right + 1} are too similar: ${pair.similarDimensions.join(", ")}` });
+      for (const pair of candidateDiversity.pairs) {
+        const duplicate = combined[pair.right];
+        const issue: OpportunityValidationIssue = { candidateId: duplicate?.id, type: "diversity", code: "insufficient_diversity", path: duplicate ? `directions.${safeCandidateId(duplicate.id)}` : "directions", message: `Directions ${pair.left + 1} and ${pair.right + 1} are too similar: ${pair.similarDimensions.join(", ")}` };
+        allIssues.push(issue);
+        attemptCandidates.push(diagnosticCandidate(duplicate?.id, attempt ? "repair" : "initial", "deduplicated", [issue]));
+      }
       preserved = combined.filter((_, index) => !duplicates.has(index)).slice(0, CREATIVE_DIRECTION_COUNT);
       const diversity = assessDirectionDiversity(preserved);
       metadata.candidateCount = combined.length; metadata.validCandidateCount = preserved.length;
-      if (preserved.length === CREATIVE_DIRECTION_COUNT && diversity.passed) return { status: "success", directions: preserved, metadata, validationSummary: { issues: allIssues, diversityPassed: true } };
+      const validReturnedIds = new Set(valid.map((item) => item.id));
+      const rejectedReturnedCount = parsed.directions.filter((item) => !validReturnedIds.has(item.id)).length + Math.max(0, parsed.receivedCandidateCount - parsed.directions.length);
+      const attemptDiagnostic: CreativeDirectionAttemptDiagnostic = {
+        attempt: attempt as 0 | 1,
+        receivedCandidateCount: parsed.receivedCandidateCount,
+        parsedCandidateCount: parsed.directions.length,
+        validCandidateCount: valid.length,
+        rejectedCandidateCount: rejectedReturnedCount,
+        preservedCandidateCount: preserved.length,
+        diversityPassed: diversity.passed,
+        candidates: attemptCandidates,
+      };
+      attempts.push(attemptDiagnostic);
+      options.observe?.(attemptDiagnostic);
+      if (preserved.length === CREATIVE_DIRECTION_COUNT && diversity.passed) return { status: "success", directions: preserved, metadata, validationSummary: { issues: allIssues, diversityPassed: true }, validationDiagnostics: resultDiagnostics() };
       if (!attempt) { metadata.repairAttempted = true; continue; }
       metadata.errorType = "insufficient_candidates";
-      return { status: preserved.length ? "partial" : "failure", directions: preserved, metadata, validationSummary: { issues: allIssues, diversityPassed: diversity.passed } };
+      return { status: preserved.length ? "partial" : "failure", directions: preserved, metadata, validationSummary: { issues: allIssues, diversityPassed: diversity.passed }, validationDiagnostics: resultDiagnostics() };
     } catch (error) {
       metadata.errorType = creativeBrainErrorType(error);
       if (!attempt && !isCreativeBrainTransportFailure(error)) { metadata.repairAttempted = true; continue; }
       metadata.candidateCount = preserved.length; metadata.validCandidateCount = preserved.length;
-      return { status: preserved.length ? "partial" : "failure", directions: preserved, metadata, validationSummary: { issues: allIssues, diversityPassed: preserved.length ? assessDirectionDiversity(preserved).passed : false } };
+      return { status: preserved.length ? "partial" : "failure", directions: preserved, metadata, validationSummary: { issues: allIssues, diversityPassed: preserved.length ? assessDirectionDiversity(preserved).passed : false }, validationDiagnostics: resultDiagnostics() };
     }
   }
   metadata.errorType = "insufficient_candidates";
-  return { status: "failure", directions: [], metadata, validationSummary: { issues: allIssues, diversityPassed: false } };
+  return { status: "failure", directions: [], metadata, validationSummary: { issues: allIssues, diversityPassed: false }, validationDiagnostics: resultDiagnostics() };
 }
 
 function safeErrorMessage(status: number, errorType?: string | null) {

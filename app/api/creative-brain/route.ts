@@ -35,6 +35,7 @@ export function creativeBrainFailurePayload(result: CreativeDirectionResult) {
   const type = result.metadata.errorType || "invalid_output";
   return {
     ...result,
+    validationSummary: { issues: [], diversityPassed: result.validationSummary.diversityPassed },
     error: {
       type,
       message: type === "timeout" ? "创意方向生成超时，请重试。" : "创意方向生成失败，请重试。",
@@ -44,6 +45,7 @@ export function creativeBrainFailurePayload(result: CreativeDirectionResult) {
 
 export async function POST(request: Request) {
   try {
+    const correlationId = globalThis.crypto.randomUUID();
     const body = await request.json() as CreativeBrainInput & { provider?: ProviderId };
     const languageContext = resolveCreativeBrainLanguageContext(body);
     if (!body.projectId?.trim() || !body.productContext?.productName?.trim() || !languageContext.market || !languageContext.targetLanguage || !languageContext.platform) {
@@ -60,9 +62,24 @@ export async function POST(request: Request) {
       const response: ProviderResponse = await callProvider({ provider: providerUsed, ...input, purpose: "creative-brain", candidateCount: 3 });
       return { ...response, providerRequested: requested, providerUsed, model: status.model };
     };
-    const result = await generateCreativeDirections(body, adapter);
+    const result = await generateCreativeDirections(body, adapter, {
+      observe(diagnostic) {
+        console.log(JSON.stringify({ scope: "creative_direction_validation", correlationId, event: "attempt_validated", ...diagnostic }));
+      },
+    });
+    console.log(JSON.stringify({
+      scope: "creative_direction_validation",
+      correlationId,
+      event: "terminal",
+      status: result.status,
+      errorType: result.metadata.errorType,
+      repairAttempted: result.metadata.repairAttempted,
+      attemptCount: result.validationDiagnostics?.attempts.length || 0,
+      finalValidCandidateCount: result.metadata.validCandidateCount,
+      diversityPassed: result.validationSummary.diversityPassed,
+    }));
     if (result.status === "failure") {
-      const failure = creativeBrainFailurePayload(result);
+      const failure = { ...creativeBrainFailurePayload(result), correlationId };
       return Response.json(failure, { status: failure.error.type === "timeout" ? 504 : 502 });
     }
     return Response.json(result, { status: result.status === "success" ? 201 : result.status === "partial" ? 206 : 502 });
