@@ -66,6 +66,9 @@ export async function POST(request: Request) {
       observe(diagnostic) {
         console.log(JSON.stringify({ scope: "creative_direction_validation", correlationId, event: "attempt_validated", ...diagnostic }));
       },
+      observeRepair(diagnostic) {
+        console.log(JSON.stringify({ scope: "creative_direction_validation", correlationId, event: "repair_issue_propagation", ...diagnostic }));
+      },
     });
     console.log(JSON.stringify({
       scope: "creative_direction_validation",

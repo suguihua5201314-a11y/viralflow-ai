@@ -10,7 +10,7 @@ import {
   type OpportunityValidationIssue,
 } from "./creative-brain";
 import { checkCompliance, getGenerationComplianceKnowledge } from "./compliance-rules";
-import { buildKnowledgeContext, findFactViolations } from "./knowledge-context";
+import { buildKnowledgeContext, findFactViolationDiagnostics, findFactViolations } from "./knowledge-context";
 import { validateInternalCreativeLanguage } from "./creation-language-context";
 import { productContextFingerprint } from "./creative-opportunity-selection";
 import { validateCreativeDirectionProductGrounding } from "./product-claim-grounding";
@@ -29,7 +29,15 @@ export type CreativeDirectionResult = {
 export type CreativeCandidateDiagnosticIssue = {
   stage: OpportunityValidationIssue["type"] | "candidate_pool";
   issueCode: string;
-  path?: string;
+  path: string | null;
+  ruleFamily?: string;
+  ruleCode?: string;
+};
+
+export type CreativeRepairPropagationDiagnostic = CreativeCandidateDiagnosticIssue & {
+  candidateId: string;
+  repairReceived: boolean;
+  receivedFields: Array<"stage" | "issueCode" | "ruleFamily" | "ruleCode" | "path">;
 };
 
 export type CreativeCandidateDiagnostic = {
@@ -56,6 +64,7 @@ export type CreativeDirectionValidationDiagnostics = {
 };
 
 export type CreativeDirectionValidationObserver = (diagnostic: CreativeDirectionAttemptDiagnostic) => void;
+export type CreativeDirectionRepairObserver = (diagnostic: { attempt: 1; issues: CreativeRepairPropagationDiagnostic[] }) => void;
 
 export function validateGroundedCreativeBrainInput(input: CreativeBrainInput): OpportunityValidationIssue[] {
   const issues: OpportunityValidationIssue[] = [];
@@ -167,6 +176,11 @@ function directionText(item: CreativeDirectionCandidate) {
   });
 }
 
+function uniqueDiagnosticPath(item: CreativeDirectionCandidate, matches: (text: string) => boolean) {
+  const paths = directionLanguageFields(item).filter((field) => field.text && matches(field.text)).map((field) => field.path);
+  return paths.length === 1 ? paths[0] : undefined;
+}
+
 export function validateCreativeDirection(item: CreativeDirectionCandidate, input: CreativeBrainInput): OpportunityValidationIssue[] {
   const text = directionText(item);
   const knowledge = input.productContext.productKnowledge;
@@ -182,35 +196,54 @@ export function validateCreativeDirection(item: CreativeDirectionCandidate, inpu
       issues.push({ candidateId: item.id, type: "language", message: `${mismatch.code}:${mismatch.path}` });
     }
   }
-  for (const violation of findFactViolations(text, context)) issues.push({ candidateId: item.id, type: "truth", message: violation });
-  for (const issue of validateCreativeDirectionProductGrounding(item, input.productContext)) {
-    issues.push({ candidateId: item.id, type: "grounding", ...issue, message: issue.code });
+  const factDiagnostics = findFactViolationDiagnostics(text, context);
+  for (const violation of findFactViolations(text, context)) {
+    const diagnostic = factDiagnostics.find((entry) => entry.message === violation);
+    const path = diagnostic ? uniqueDiagnosticPath(item, (fieldText) => findFactViolationDiagnostics(fieldText, context).some((entry) => entry.ruleFamily === diagnostic.ruleFamily && entry.ruleCode === diagnostic.ruleCode && entry.message === diagnostic.message)) : undefined;
+    issues.push({ candidateId: item.id, type: "truth", message: violation, ...(diagnostic ? { ruleFamily: diagnostic.ruleFamily, ruleCode: diagnostic.ruleCode } : {}), ...(path ? { diagnosticPath: path } : {}) });
   }
-  for (const hit of checkCompliance(text).filter((entry) => entry.level === "高")) issues.push({ candidateId: item.id, type: "compliance", message: `${hit.category}:${hit.term}` });
+  for (const issue of validateCreativeDirectionProductGrounding(item, input.productContext)) {
+    issues.push({ candidateId: item.id, type: "grounding", ...issue, ruleFamily: "product_claim_grounding", ruleCode: issue.code, message: issue.code });
+  }
+  for (const hit of checkCompliance(text).filter((entry) => entry.level === "高")) {
+    const path = uniqueDiagnosticPath(item, (fieldText) => checkCompliance(fieldText).some((entry) => entry.level === "高" && entry.ruleFamily === hit.ruleFamily && entry.ruleCode === hit.ruleCode && entry.term === hit.term));
+    issues.push({ candidateId: item.id, type: "compliance", message: `${hit.category}:${hit.term}`, ...(hit.ruleFamily ? { ruleFamily: hit.ruleFamily } : {}), ...(hit.ruleCode ? { ruleCode: hit.ruleCode } : {}), ...(path ? { diagnosticPath: path } : {}) });
+  }
   const truth = Object.values(knowledge || {}).join(" ");
   const unsupportedMedical = /(?:治愈|治疗|根治|修复疾病|杀菌|抗菌|cure|treat|heals?|kills? bacteria|medical(?:ly)? proven)/iu;
-  if (unsupportedMedical.test(text) && !unsupportedMedical.test(truth)) issues.push({ candidateId: item.id, type: "compliance", message: "Unsupported medical capability" });
+  if (unsupportedMedical.test(text) && !unsupportedMedical.test(truth)) issues.push({ candidateId: item.id, type: "compliance", ruleFamily: "medical_claim", ruleCode: "unsupported_medical_capability", diagnosticPath: uniqueDiagnosticPath(item, (fieldText) => unsupportedMedical.test(fieldText)), message: "Unsupported medical capability" });
   const normalizedTruth = normalize(truth);
   const measured = [...text.matchAll(/\b\d+(?:[.,]\d+)?\s*(?:seconds?|minutes?|hours?|secs?|mins?)\b|\d+(?:[.,]\d+)?\s*(?:秒|分钟|小时)/giu)].map((match) => match[0]);
-  for (const claim of measured) if (!normalizedTruth.includes(normalize(claim))) issues.push({ candidateId: item.id, type: "truth", message: `Unsupported measured claim:${claim}` });
+  for (const claim of measured) if (!normalizedTruth.includes(normalize(claim))) issues.push({ candidateId: item.id, type: "truth", ruleFamily: "measured_claim", ruleCode: "unsupported_duration_measurement", diagnosticPath: uniqueDiagnosticPath(item, (fieldText) => fieldText.includes(claim)), message: `Unsupported measured claim:${claim}` });
   if (/(?:真实?实验室|专业实验室认证|explos|爆炸|火烧|明火|高空抛|斧头|电钻|axe|drill|open flame)/iu.test(text)) issues.push({ candidateId: item.id, type: "feasibility", message: "Unsafe or unavailable production requirement" });
   if (/(?:名人|明星|医生出镜|专家出镜|celebrity|doctor appears|expert appears)/iu.test(text)) issues.push({ candidateId: item.id, type: "feasibility", message: "Requires an unavailable third party" });
   for (const recent of input.recentCreativeHistory || []) {
     const duplicateHook = recent.hook && similarity(item.hookLine, recent.hook) >= .72;
     const duplicateAngle = recent.creativeAngle && similarity(item.creativeAngle, recent.creativeAngle) >= .76;
     const duplicateMechanism = recent.proofMechanism && similarity(item.contentMechanism, recent.proofMechanism) >= .76;
-    if (duplicateHook || duplicateAngle || duplicateMechanism) issues.push({ candidateId: item.id, type: "history", message: duplicateHook ? "Duplicates a recent hook" : duplicateAngle ? "Duplicates a recent creative angle" : "Duplicates a recent mechanism" });
+    if (duplicateHook || duplicateAngle || duplicateMechanism) issues.push({ candidateId: item.id, type: "history", ruleFamily: "history_repetition", ruleCode: duplicateHook ? "duplicate_recent_hook" : duplicateAngle ? "duplicate_recent_angle" : "duplicate_recent_mechanism", diagnosticPath: duplicateHook ? "hookLine" : duplicateAngle ? "creativeAngle" : "contentMechanism", message: duplicateHook ? "Duplicates a recent hook" : duplicateAngle ? "Duplicates a recent creative angle" : "Duplicates a recent mechanism" });
   }
   return issues;
 }
 
 type RepairContext = { preserved: CreativeDirectionCandidate[]; correctionCandidates: CreativeDirectionCandidate[]; missingCount: number; issues: OpportunityValidationIssue[] };
 
+function existingRepairIssueShape(issue: OpportunityValidationIssue) {
+  return {
+    ...(issue.candidateId ? { candidateId: issue.candidateId } : {}),
+    type: issue.type,
+    ...(issue.code ? { code: issue.code } : {}),
+    ...(issue.path ? { path: issue.path } : {}),
+    ...(issue.capabilityFamily ? { capabilityFamily: issue.capabilityFamily } : {}),
+    message: issue.message,
+  };
+}
+
 export function creativeDirectionMessages(input: CreativeBrainInput, repair?: RepairContext) {
   const repairInstruction = repair
     ? repair.correctionCandidates.length
       ? ` One repair only. Return ${repair.missingCount} corrected directions only. Re-express these wrong-language directions in Simplified Chinese without changing their IDs. Keep these candidate IDs and their audience, moment, angle, mechanism, and strategy identity: ${JSON.stringify(repair.correctionCandidates)}. Correct only the listed language or Product Truth grounding issues. Delete or narrow unsupported assertions, or replace them only with facts present in productTruth. Do not invent facts. Do not repeat or rewrite preserved candidates: ${JSON.stringify(repair.preserved)}. Safe issues (candidateId, code, path, capabilityFamily): ${JSON.stringify(repair.issues.map(({candidateId,code,path,capabilityFamily,type})=>({candidateId,code,path,capabilityFamily,type})))}.`
-      : ` This is the only repair. Return ${repair.missingCount} replacement directions only. Do not repeat: ${JSON.stringify(repair.preserved)}. Fix: ${JSON.stringify(repair.issues)}.`
+      : ` This is the only repair. Return ${repair.missingCount} replacement directions only. Do not repeat: ${JSON.stringify(repair.preserved)}. Fix: ${JSON.stringify(repair.issues.map(existingRepairIssueShape))}.`
     : "";
   return [
     { role: "system" as const, content: `Generate exactly ${repair?.missingCount || CREATIVE_DIRECTION_COUNT} distinct directions, not scripts/briefs. All human-readable fields use Simplified Chinese; market/targetLanguage are future-localization constraints only. Cover audience, moment, motivation, tension, angle, mechanism, hook and first 1-3s visual. Keep hook/visual distinct. Product Truth is the strict fact boundary. Never invent facts, numbers, price/offer, certification, medical effects, reviews or third-party access. A capability does not authorize stronger results, duration guarantees, competitor facts or superiority. Scenario time and comparison mechanisms are allowed; product-effect duration/comparative conclusions require explicit Product Truth. Preferences guide but do not dictate. Avoid recent ideas. JSON only: {"directions":[{"id":"A","targetAudience":"","useMoment":"","coreMotivation":"","coreTension":"","creativeAngle":"","contentMechanism":"","hookLine":"","openingVisual":{"subject":"","setup":"","action":"","visibleChangeOrQuestion":""},"rationale":""}]}.${repairInstruction}` },
@@ -227,10 +260,12 @@ function safeCandidateId(candidateId: string | undefined) {
 }
 
 function safeDiagnosticIssue(issue: OpportunityValidationIssue): CreativeCandidateDiagnosticIssue {
-  if (issue.code) return { stage: issue.type, issueCode: issue.code, ...(issue.path ? { path: issue.path } : {}) };
+  const diagnosticPath = issue.path || issue.diagnosticPath;
+  const metadata = { path: diagnosticPath || null, ...(issue.ruleFamily ? { ruleFamily: issue.ruleFamily } : {}), ...(issue.ruleCode ? { ruleCode: issue.ruleCode } : {}) };
+  if (issue.code) return { stage: issue.type, issueCode: issue.code, ...metadata };
   if (issue.type === "language") {
     const separator = issue.message.indexOf(":");
-    return { stage: "language", issueCode: separator > 0 ? issue.message.slice(0, separator) : "invalid_workspace_language", ...(separator > 0 ? { path: issue.message.slice(separator + 1) } : {}) };
+    return { stage: "language", issueCode: separator > 0 ? issue.message.slice(0, separator) : "invalid_workspace_language", path: separator > 0 ? issue.message.slice(separator + 1) : null };
   }
   const issueCode = issue.type === "schema"
     ? issue.message === "Creative Brain response is not valid JSON" ? "invalid_json"
@@ -244,7 +279,17 @@ function safeDiagnosticIssue(issue: OpportunityValidationIssue): CreativeCandida
         : issue.type === "history" ? issue.message === "Duplicates a recent hook" ? "duplicate_recent_hook" : issue.message === "Duplicates a recent creative angle" ? "duplicate_recent_angle" : "duplicate_recent_mechanism"
           : issue.type === "feasibility" ? issue.message === "Requires an unavailable third party" ? "unavailable_third_party" : "unsafe_production_requirement"
             : issue.type === "diversity" ? "insufficient_diversity" : `${issue.type}_validation_failed`;
-  return { stage: issue.type, issueCode, ...(issue.path ? { path: issue.path } : {}) };
+  return { stage: issue.type, issueCode, ...metadata };
+}
+
+function repairPropagationDiagnostics(issues: OpportunityValidationIssue[]): CreativeRepairPropagationDiagnostic[] {
+  return issues.map((issue) => {
+    const safe = safeDiagnosticIssue(issue);
+    const receivedFields: CreativeRepairPropagationDiagnostic["receivedFields"] = ["stage"];
+    if (issue.code) receivedFields.push("issueCode");
+    if (issue.path) receivedFields.push("path");
+    return { candidateId: safeCandidateId(issue.candidateId), ...safe, repairReceived: Boolean(safe.ruleFamily ? receivedFields.includes("ruleFamily") : true) && Boolean(safe.ruleCode ? receivedFields.includes("ruleCode") : true) && Boolean(safe.path ? receivedFields.includes("path") : true), receivedFields };
+  });
 }
 
 function diagnosticCandidate(candidateId: string | undefined, source: CreativeCandidateDiagnostic["source"], outcome: CreativeCandidateDiagnostic["outcome"], issues: OpportunityValidationIssue[] = []): CreativeCandidateDiagnostic {
@@ -254,7 +299,7 @@ function diagnosticCandidate(candidateId: string | undefined, source: CreativeCa
 export async function generateCreativeDirections(
   input: CreativeBrainInput,
   provider: CreativeBrainProvider,
-  options: { observe?: CreativeDirectionValidationObserver } = {},
+  options: { observe?: CreativeDirectionValidationObserver; observeRepair?: CreativeDirectionRepairObserver } = {},
 ): Promise<CreativeDirectionResult> {
   const metadata = emptyMetadata();
   const allIssues: OpportunityValidationIssue[] = [];
@@ -267,6 +312,7 @@ export async function generateCreativeDirections(
   for (let attempt = 0; attempt < 2; attempt++) {
     try {
       const repair = attempt ? { preserved, correctionCandidates, missingCount: correctionCandidates.length || Math.max(1, CREATIVE_DIRECTION_COUNT - preserved.length), issues: [...allIssues] } : undefined;
+      if (repair) options.observeRepair?.({ attempt: 1, issues: repairPropagationDiagnostics(repair.issues) });
       const response = await provider({
         messages: creativeDirectionMessages(input, repair), temperature: attempt ? .65 : .82, topP: .9,
         maxTokens: CREATIVE_DIRECTION_MAX_TOKENS,

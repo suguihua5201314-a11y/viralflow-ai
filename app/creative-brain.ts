@@ -70,7 +70,10 @@ export type OpportunityValidationIssue = {
   type: "schema" | "truth" | "grounding" | "compliance" | "history" | "diversity" | "feasibility" | "language";
   code?: string;
   path?: string;
+  diagnosticPath?: string;
   capabilityFamily?: string;
+  ruleFamily?: string;
+  ruleCode?: string;
   message: string;
 };
 
