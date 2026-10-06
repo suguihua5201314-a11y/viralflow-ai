@@ -20,3 +20,10 @@ test("route is an independent thin adapter with one script-rewriter Provider pur
   assert.doesNotMatch(source, /mutateProjectMemory|scriptVersions|selectedScriptRevisionId|\/api\/scripts|\/api\/copilot|generateBriefDrivenScript|generateScriptCritique/);
   assert.match(source, /generateTargetedScriptRewrite/);
 });
+
+test("Preview script-rewriter uses the purpose override or shared working creative provider without changing production routing", () => {
+  assert.equal(route.resolveScriptRewriterProvider("doubao", "preview", "deepseek", "doubao"), "deepseek");
+  assert.equal(route.resolveScriptRewriterProvider("doubao", "preview", undefined, "deepseek"), "deepseek");
+  assert.equal(route.resolveScriptRewriterProvider("doubao", "preview", "invalid", "deepseek"), "doubao");
+  assert.equal(route.resolveScriptRewriterProvider("doubao", "production", "deepseek", "deepseek"), "doubao");
+});

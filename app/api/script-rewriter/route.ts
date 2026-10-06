@@ -5,6 +5,17 @@ import type { ProviderId } from "../../provider-types";
 export const runtime = "nodejs";
 export const maxDuration = 120;
 
+export function resolveScriptRewriterProvider(
+  requested: ProviderId,
+  environment = process.env.VERCEL_ENV,
+  previewOverride = process.env.SCRIPT_REWRITER_PROVIDER,
+  previewCreativeProvider = process.env.CREATIVE_BRAIN_PROVIDER,
+): ProviderId {
+  if (environment !== "preview") return requested;
+  const value = previewOverride?.trim() || previewCreativeProvider?.trim();
+  return value === "deepseek" || value === "doubao" || value === "openai" ? value : requested;
+}
+
 function requestShape(value: unknown): value is TargetedRewriteInput & { provider?: ProviderId } {
   if (!value || typeof value !== "object" || Array.isArray(value)) return false;
   const item = value as Partial<TargetedRewriteInput>;
@@ -38,13 +49,15 @@ export async function POST(request: Request) {
   const requested = body.provider || DEFAULT_PROVIDER;
   const statuses = getProviderStatuses();
   if (!(requested in statuses)) return Response.json({ status: "failure", draft: null, script: null, issues: [], error: { type: "invalid_provider", message: "Script Rewriter provider is unavailable." } }, { status: 400 });
-  const providerStatus = statuses[requested];
+  const providerUsed = resolveScriptRewriterProvider(requested);
+  if (!(providerUsed in statuses)) return Response.json({ status: "failure", draft: null, script: null, issues: [], error: { type: "invalid_provider", message: "Script Rewriter provider is unavailable." } }, { status: 400 });
+  const providerStatus = statuses[providerUsed];
   const provider = async (input: TargetedRewriteProviderRequest): Promise<TargetedRewriteProviderResponse> => {
-    const response: ProviderResponse = await callProvider({ ...input, provider: requested, purpose: "script-rewriter", candidateCount: body.issues.length });
-    return { ...response, providerRequested: requested, providerUsed: requested, model: providerStatus.model };
+    const response: ProviderResponse = await callProvider({ ...input, provider: providerUsed, purpose: "script-rewriter", candidateCount: body.issues.length });
+    return { ...response, providerRequested: requested, providerUsed, model: providerStatus.model };
   };
   try {
-    const result = await generateTargetedScriptRewrite(body, provider, { providerIdentity: { providerRequested: requested, providerUsed: requested, model: providerStatus.model } });
+    const result = await generateTargetedScriptRewrite(body, provider, { providerIdentity: { providerRequested: requested, providerUsed, model: providerStatus.model } });
     if (result.status === "failure") return Response.json({ ...result, error: { type: result.metadata.errorType, message: message(result.metadata.errorType) } }, { status: status(result.metadata.errorType) });
     return Response.json(result, { status: 201 });
   } catch {
