@@ -191,6 +191,7 @@ export default function Home() {
   const remoteSaveQueue=useRef<Promise<void>>(Promise.resolve());
   const activeDirectorIdentity=useRef<DirectorRequestIdentity|null>(null);
   const activeScriptGenerationIdentity=useRef("");
+  const activeFinalScriptRequestId=useRef("");
   const activeCreativeDirectionRequests=useRef<Record<string,string>>({});
   const activeCreativeBriefRequests=useRef<Record<string,CreativeBriefRequestIdentity>>({});
   const activeWriterAcceptance=useRef<ScriptWriterAcceptanceIdentity|null>(null);
@@ -625,13 +626,13 @@ export default function Home() {
     });
     if(!preflight.ok){
       emitFinalScriptClientEvent({event:"script_preflight_failed",correlationId:clientCorrelationId,reasonCode:preflight.reasonCode});
-      activeScriptGenerationIdentity.current="";setFinalScriptStatus("error");setFinalScriptDiagnostic(`client_preflight · ${preflight.reasonCode}`);setFinalScriptSummary("");setScriptEditorOpen(false);return;
+      activeFinalScriptRequestId.current="";setFinalScriptStatus("error");setFinalScriptDiagnostic(`client_preflight · ${preflight.reasonCode}`);setFinalScriptSummary("");setScriptEditorOpen(false);return;
     }
     const{projectId,brief,fingerprint,requestId,writerInput,criticInput}=preflight.value;
-    activeScriptGenerationIdentity.current=requestId;
+    activeFinalScriptRequestId.current=requestId;
     setFinalScriptStatus("writer");setFinalScriptDiagnostic("");setFinalScriptSummary("");setScriptEditorOpen(false);
     const readRewrite=async(response:Response)=>{const data=response.headers.get("content-type")?.includes("application/json")?await response.json().catch(()=>null):null;if(!response.ok||data?.status!=="success"||!data.script||!data.draft){const issue=Array.isArray(data?.issues)?data.issues[0]:null;const err=new Error(data?.error?.message||"AI 检查发现脚本仍有无法安全自动修改的问题。");(err as Error&{validationIssue?:{stage?:string;code?:string;path?:string}}).validationIssue=issue||undefined;throw err;}return data;};
-    const authority=()=>finalScriptRequestAuthority({requestId,activeRequestId:activeScriptGenerationIdentity.current,projectId,activeProjectId:activeProjectId.current,briefRevisionId:brief.revisionId,activeBriefRevisionId:activeCreativeBriefRevision.current,productContextFingerprint:fingerprint,activeProductContextFingerprint:activeProductFingerprints.current[projectId]});
+    const authority=()=>finalScriptRequestAuthority({requestId,activeRequestId:activeFinalScriptRequestId.current,projectId,activeProjectId:activeProjectId.current,briefRevisionId:brief.revisionId,activeBriefRevisionId:activeCreativeBriefRevision.current,productContextFingerprint:fingerprint,activeProductContextFingerprint:activeProductFingerprints.current[projectId]});
     try{
       const result=await orchestrateFinalScript({writerInput,criticInput,provider:selectedProvider},{
         write:async input=>{const response=await observedWriterFetch(clientCorrelationId,"/api/script-writer",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify(input)});const data=await parseScriptWriterAcceptanceResponse(response);if(!data.script.revisionId)throw new Error("missing_script_revision");return {...data,script:data.script as StructuredScript&{revisionId:string}};},
@@ -640,25 +641,27 @@ export default function Home() {
       },progress=>{if(authority()==="current")setFinalScriptStatus(progress);});
       const settledAuthority=authority();
       if(settledAuthority!=="current"){
-        if(shouldReleaseFinalScriptLoading(settledAuthority)){activeScriptGenerationIdentity.current="";setFinalScriptStatus("idle");}
+        if(shouldReleaseFinalScriptLoading(settledAuthority)){activeFinalScriptRequestId.current="";setFinalScriptStatus("idle");}
         return;
       }
       if(result.status==="failure"){
+        activeFinalScriptRequestId.current="";
         setFinalScriptStatus("error");
         const first=result.issues[0];setFinalScriptDiagnostic([result.stage,first?.code||result.code,first?.path].filter(Boolean).join(" · "));
         return;
       }
       const accepted=result.script as Script;
+      activeFinalScriptRequestId.current="";
       adoptCurrentScript(accepted,{duration:Number(form.duration)||30,offer:form.offer});
       setFinalScriptSummary(result.critique.summary||"已检查创意一致性、产品事实、自然表达、合规与可拍摄性。");
       setFinalScriptRewritten(result.rewritten);setFinalScriptStatus("complete");
     }catch(value){
       const failedAuthority=authority();
       if(failedAuthority!=="current"){
-        if(shouldReleaseFinalScriptLoading(failedAuthority)){activeScriptGenerationIdentity.current="";setFinalScriptStatus("idle");}
+        if(shouldReleaseFinalScriptLoading(failedAuthority)){activeFinalScriptRequestId.current="";setFinalScriptStatus("idle");}
         return;
       }
-      setFinalScriptStatus("error");
+      activeFinalScriptRequestId.current="";setFinalScriptStatus("error");
       const issue=(value as Error&{validationIssue?:{code?:string;path?:string}}).validationIssue;
       setFinalScriptDiagnostic([issue?.code||"unexpected_error",issue?.path].filter(Boolean).join(" · "));
     }

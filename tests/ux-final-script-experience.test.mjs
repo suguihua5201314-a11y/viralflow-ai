@@ -50,6 +50,24 @@ test("authorized Critic issues cause one atomic rewrite and preserve Revision A"
   assert.equal(rewriteInput.issues[0].targetRef, "HOOK_LINE"); assert.equal(rewriteInput.issues[0].expectedCurrentValue, input.value.hook.line);
 });
 
+test("multiple Critic issues for one canonical field become one atomic rewrite patch", async () => {
+  const input = setup(); let rewriteInput;
+  const second = issue({ code: "ugc_advertising_tone", severity: "critical", message: "开头像广告。", rewriteInstruction: "保持事实并改成自然口语。" });
+  const nextDraft = draft({ hook: { ...draft().hook, line: "先看这个安装步骤。" } });
+  const nextScript = foundation.adaptScriptDraftToStructuredScript(input.writerInput, nextDraft, "script-revision-b");
+  const result = await orchestration.orchestrateFinalScript(input, {
+    write: async () => ({ script: input.script, draft: input.value, metadata }),
+    critique: async () => ({ critique: { verdict: "needs_rewrite", issues: [issue({}), second], summary: "同一开头有两个问题。" }, metadata }),
+    rewrite: async value => { rewriteInput = value; return { script: nextScript, draft: nextDraft, metadata: { ...metadata, providerCalls: 1 } }; },
+  });
+  assert.equal(result.status, "success");
+  assert.equal(rewriteInput.issues.length, 1);
+  assert.equal(rewriteInput.issues[0].targetRef, "HOOK_LINE");
+  assert.equal(rewriteInput.issues[0].severity, "critical");
+  assert.match(rewriteInput.issues[0].message, /开头不够直接。\n开头像广告。/);
+  assert.match(rewriteInput.issues[0].rewriteInstruction, /只增强开头。\n保持事实并改成自然口语。/);
+});
+
 test("invalid Critic address fails safely before rewrite and cannot create a fake Final", async () => {
   const input = setup(); let rewrites = 0;
   const result = await orchestration.orchestrateFinalScript(input, {
@@ -83,4 +101,6 @@ test("default Script experience hides internal orchestration and legacy race", a
   assert.match(component, /生成高质量脚本/); assert.match(component, /确认脚本并进入导演/); assert.match(component, /AI 已检查/);
   assert.doesNotMatch(component, />Writer<|>Critic<|>C-4<|targetRef|patchId|fingerprint|Provider race/);
   assert.match(page, /<FinalScriptStage/); assert.match(page, /scriptEditorOpen&&acceptedCurrentScript&&<ScriptStudio/);
+  assert.match(page, /activeFinalScriptRequestId=useRef\(""\)/);
+  assert.doesNotMatch(page, /activeFinalScriptRequestId\.current=`\$\{projectMemory/);
 });

@@ -1,6 +1,6 @@
 import type { ScriptCriticInput, ScriptCriticResult } from "./brief-driven-script-critic";
 import { resolveCriticTarget, resolveCriticTargetRef } from "./brief-driven-script-critic";
-import type { ScriptDraftV2, ScriptWriterInput, ScriptWriterValidationIssue } from "./brief-driven-script";
+import { CRITIC_ISSUE_CODE_VALUES, type CriticIssue, type ScriptDraftV2, type ScriptWriterInput, type ScriptWriterValidationIssue } from "./brief-driven-script";
 import { validateScriptDraftDeterministically } from "./brief-driven-script";
 import type { TargetedRewriteInput, TargetedRewriteMetadata } from "./brief-driven-script-rewriter";
 import type { StructuredScript } from "./script-generation";
@@ -71,24 +71,44 @@ export function buildAuthorizedRewriteInput(
   critique: ScriptCriticResult,
 ): TargetedRewriteInput | null {
   if (critique.issues.length === 0) return null;
-  const authorized = critique.issues.map((item, index) => {
+  const severityRank = { minor: 1, major: 2, critical: 3 } as const;
+  const canonicalIssueCodes = new Set<string>(CRITIC_ISSUE_CODE_VALUES);
+  const canonicalSeverity = (value: CriticIssue["severity"]): keyof typeof severityRank =>
+    value === "critical" || value === "high" ? "critical" : value === "major" || value === "medium" ? "major" : "minor";
+  const authorizedByTarget = new Map<string, TargetedRewriteInput["issues"][number]>();
+  for (const item of critique.issues) {
     const resolved = resolveCriticTargetRef(writer.draft, item.targetRef);
     const current = resolved ? resolveCriticTarget(writer.draft, resolved) : null;
-    if (!resolved || !current || JSON.stringify(resolved) !== JSON.stringify(item.target)) return null;
-    return {
-      patchId: `rewrite-${input.writerInput.requestId}-${index + 1}`,
+    if (!resolved || !current || JSON.stringify(resolved) !== JSON.stringify(item.target) || !canonicalIssueCodes.has(item.code)) return null;
+    const severity = canonicalSeverity(item.severity);
+    const existing = authorizedByTarget.get(item.targetRef);
+    if (!existing) {
+      authorizedByTarget.set(item.targetRef, {
+      patchId: "",
       sourceScriptRevisionId: writer.script.revisionId,
       targetRef: item.targetRef,
       resolvedTarget: resolved,
       expectedCurrentValue: current.value,
-      issueCode: item.code,
-      severity: item.severity,
+      issueCode: item.code as TargetedRewriteInput["issues"][number]["issueCode"],
+      severity,
       message: item.message,
       rewriteInstruction: item.rewriteInstruction,
       ...(item.briefField ? { briefField: item.briefField } : {}),
-    };
-  });
-  if (authorized.some((item) => item === null)) return null;
+      });
+      continue;
+    }
+    if (severityRank[severity] > severityRank[canonicalSeverity(existing.severity)]) {
+      existing.severity = severity;
+      existing.issueCode = item.code as TargetedRewriteInput["issues"][number]["issueCode"];
+    }
+    if (!existing.message.split("\n").includes(item.message)) existing.message = `${existing.message}\n${item.message}`;
+    if (!existing.rewriteInstruction.split("\n").includes(item.rewriteInstruction)) existing.rewriteInstruction = `${existing.rewriteInstruction}\n${item.rewriteInstruction}`;
+    if (existing.briefField !== item.briefField) delete existing.briefField;
+  }
+  const authorized = [...authorizedByTarget.values()].map((item, index) => ({
+    ...item,
+    patchId: `rewrite-${input.writerInput.requestId}-${index + 1}`,
+  }));
   return {
     ...input.writerInput,
     languageContext: input.writerInput.languageContext!,
