@@ -296,11 +296,81 @@ const outputContract = {
   summary: "optional concise summary",
 };
 
-export function buildScriptCriticMessages(input: ScriptCriticInput, repairIssues: ScriptCriticValidationIssue[] = []) {
+const fieldOnlyRepairCodes = new Set(["invalid_issue_code", "invalid_target_ref", "invalid_brief_field", "internal_language_mismatch"]);
+
+function parseCriticJson(content: string): Record<string, unknown> | null {
+  try {
+    const parsed: unknown = JSON.parse(content.trim().replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/i, ""));
+    return isRecord(parsed) ? parsed : null;
+  } catch { return null; }
+}
+
+function safeCriticRepairCandidate(content: string, repairIssues: ScriptCriticValidationIssue[] = []) {
+  const parsed = parseCriticJson(content);
+  if (!parsed || !Array.isArray(parsed.issues) || parsed.issues.length > SCRIPT_CRITIC_BUDGET.maximumIssues) return null;
+  const candidate: Record<string, unknown> = {};
+  for (const key of topFields) {
+    if (key === "issues" || parsed[key] === undefined) continue;
+    if (typeof parsed[key] === "string") candidate[key] = parsed[key];
+  }
+  candidate.issues = parsed.issues.map((value) => {
+    if (!isRecord(value)) return null;
+    const issue: Record<string, unknown> = {};
+    for (const key of issueFields) {
+      if (typeof value[key] === "string" || typeof value[key] === "boolean") issue[key] = value[key];
+    }
+    return issue;
+  });
+  const candidateIssues = candidate.issues as Array<Record<string, unknown> | null>;
+  for (const issue of repairIssues) {
+    const match = issue.path?.match(/^issues\.(\d+)\.(code|targetRef|briefField)$/);
+    if (!match) continue;
+    const target = candidateIssues[Number(match[1])];
+    if (!target) continue;
+    if (match[2] === "code") target.code = issue.rejectedIssueCode || "invalid_issue_code_value";
+    if (match[2] === "targetRef") target.targetRef = issue.rejectedTargetRef || "INVALID_TARGET_REF";
+    if (match[2] === "briefField") delete target.briefField;
+  }
+  return candidate;
+}
+
+function applyFieldOnlyCriticRepair(initialContent: string, repairedContent: string, repairIssues: ScriptCriticValidationIssue[]) {
+  const initial = safeCriticRepairCandidate(initialContent);
+  const repaired = parseCriticJson(repairedContent);
+  if (!initial || !repaired || !Array.isArray(initial.issues) || !Array.isArray(repaired.issues)) return null;
+  const merged = structuredClone(initial);
+  const mergedIssues = merged.issues as Array<Record<string, unknown> | null>;
+  for (const issue of repairIssues) {
+    if (!issue.path) return null;
+    if (issue.code === "internal_language_mismatch" && issue.path === "summary") {
+      if (!isText(repaired.summary)) return null;
+      merged.summary = repaired.summary;
+      continue;
+    }
+    const match = issue.path.match(/^issues\.(\d+)\.(code|targetRef|briefField|message|rewriteInstruction)$/);
+    if (!match) return null;
+    const index = Number(match[1]);
+    const field = match[2];
+    const sourceIssue = repaired.issues[index];
+    const targetIssue = mergedIssues[index];
+    if (!isRecord(sourceIssue) || !targetIssue) return null;
+    if (issue.code === "invalid_brief_field" && field === "briefField" && sourceIssue.briefField === undefined) {
+      delete targetIssue.briefField;
+      continue;
+    }
+    if (!isText(sourceIssue[field])) return null;
+    targetIssue[field] = sourceIssue[field];
+  }
+  return JSON.stringify(merged);
+}
+
+export function buildScriptCriticMessages(input: ScriptCriticInput, repairIssues: ScriptCriticValidationIssue[] = [], initialCritiqueContent?: string) {
   const targetCatalog = buildCriticReviewTargetCatalog(input.scriptDraft).map(({ targetRef, path }) => ({ targetRef, path }));
+  const originalCritique = initialCritiqueContent ? safeCriticRepairCandidate(initialCritiqueContent, repairIssues) : null;
   const repair = repairIssues.length ? {
-    instruction: "Return only the corrected critique JSON object. For invalid_issue_code, replace only the code at that exact path with the semantically closest exact allowedIssueCodes value. For invalid_target_ref, replace only targetRef with one exact supplied targetCatalog value. For invalid_brief_field, use one exact allowedBriefFields value or omit it. For internal_language_mismatch, re-express only the indicated message, rewriteInstruction, or summary in Simplified Chinese. Preserve issue count, order, code, severity, critique meaning, message, rewriteInstruction, targetRef, briefField, deterministic flag, verdict, summary, Brief relationship, and every already-valid field, except the exact field explicitly marked invalid. Do not rewrite the Script, Brief, or Product Truth.",
+    instruction: "Copy originalCritique exactly, then correct only the exact fields listed in issues. For invalid_issue_code, replace only the code at that exact path with the semantically closest exact allowedIssueCodes value. For invalid_target_ref, replace only targetRef with one exact supplied targetCatalog value. For invalid_brief_field, use one exact allowedBriefFields value or omit it. For internal_language_mismatch, re-express only the indicated message, rewriteInstruction, or summary in Simplified Chinese. Preserve issue count, order, code, severity, critique meaning, message, rewriteInstruction, targetRef, briefField, deterministic flag, verdict, summary, Brief relationship, and every already-valid field, except the exact field explicitly marked invalid. Do not add, remove, merge, reinterpret, or re-evaluate issues. Do not rewrite the Script, Brief, or Product Truth.",
     issues: repairIssues.map(({ code, path, stage, rejectedTargetRef, rejectedIssueCode }) => ({ code, ...(path ? { path } : {}), stage, ...(rejectedTargetRef ? { rejectedTargetRef } : {}), ...(rejectedIssueCode ? { rejectedIssueCode } : {}) })),
+    ...(originalCritique ? { originalCritique } : {}),
     targetCatalog,
     allowedBriefFields: CRITIC_BRIEF_FIELD_VALUES,
     allowedIssueCodes: CRITIC_ISSUE_CODE_VALUES,
@@ -380,13 +450,15 @@ export async function generateScriptCritique(
 
   let parseIssues: ScriptCriticValidationIssue[] = [];
   let repairSignature: string | null = null;
+  let repairSourceContent: string | null = null;
+  let fieldOnlyRepair = false;
   let mutableAddresses = noMutableCriticAddresses();
   let languageRepair = false;
   for (let attempt = 0; attempt < SCRIPT_CRITIC_BUDGET.maximumProviderAttempts; attempt++) {
     let response: ScriptCriticProviderResponse;
     try {
       response = await provider({
-        messages: buildScriptCriticMessages(input, parseIssues),
+        messages: buildScriptCriticMessages(input, parseIssues, repairSourceContent || undefined),
         temperature: SCRIPT_CRITIC_BUDGET.temperature,
         topP: SCRIPT_CRITIC_BUDGET.topP,
         maxTokens: SCRIPT_CRITIC_BUDGET.maxTokens,
@@ -401,9 +473,13 @@ export async function generateScriptCritique(
     resultMetadata.providerUsed = response.providerUsed;
     resultMetadata.model = response.model;
     resultMetadata.latencyMs = (resultMetadata.latencyMs || 0) + response.responseTimeMs;
-    const parsed = parseScriptCriticResult(response.content, input.scriptDraft);
+    const projectedRepair = attempt > 0 && fieldOnlyRepair && repairSourceContent
+      ? applyFieldOnlyCriticRepair(repairSourceContent, response.content, parseIssues)
+      : null;
+    const parsedContent = projectedRepair || response.content;
+    const parsed = parseScriptCriticResult(parsedContent, input.scriptDraft);
     if (parsed.value) {
-      if (attempt > 0 && repairSignature && repairSemanticSignature(response.content, !languageRepair, mutableAddresses) !== repairSignature) {
+      if (attempt > 0 && !projectedRepair && repairSignature && repairSemanticSignature(response.content, !languageRepair, mutableAddresses) !== repairSignature) {
         parseIssues = [validationIssue("repair_changed_critique", "critic_schema", "issues")];
         options.observe?.({ correlationId, attempt: attempt + 1, stage: "critic_schema", provider: response.providerUsed, model: response.model, latencyMs: response.responseTimeMs, repairAttempted: resultMetadata.repairAttempted, issueCount: 1, issues: parseIssues });
         continue;
@@ -413,6 +489,8 @@ export async function generateScriptCritique(
     }
     parseIssues = parsed.issues;
     if (attempt === 0) {
+      repairSourceContent = response.content;
+      fieldOnlyRepair = parseIssues.length > 0 && parseIssues.every((item) => fieldOnlyRepairCodes.has(item.code));
       languageRepair = parseIssues.some((item) => item.stage === "critic_language");
       const indexesFor = (code: string, field: string) => new Set(parseIssues.filter((item) => item.code === code).map((item) => Number(item.path?.match(new RegExp(`^issues\\.(\\d+)\\.${field}$`))?.[1])).filter(Number.isInteger));
       mutableAddresses = {

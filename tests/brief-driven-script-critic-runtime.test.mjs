@@ -224,32 +224,72 @@ test("invalid issue code repair receives safe canonical context and changes only
   const repair = JSON.parse(requests[1].messages[1].content).repair;
   assert.deepEqual(repair.allowedIssueCodes, runtime.CRITIC_ISSUE_CODE_VALUES);
   assert.deepEqual(repair.issues[0], { code: "invalid_issue_code", path: "issues.0.code", stage: "critic_schema", rejectedIssueCode: "hook_quality" });
+  assert.deepEqual(repair.originalCritique, invalid);
   assert.match(repair.instruction, /only the code at that exact path/i);
 });
 
-test("issue code repair cannot mutate valid codes or critique semantics", async () => {
+test("issue code repair deterministically discards Provider changes to valid fields and critique semantics", async () => {
   const initial = critique(
     issue("hook_quality", "HOOK_LINE", { briefField: "opening.hookLine" }),
     issue("scene_filler", { scope: "scene", sceneId: "context", field: "dialogue" }),
   );
-  const mutations = [
-    critique(issue("weak_hook_execution", "HOOK_LINE", { briefField: "opening.hookLine" })),
-    critique(
-      issue("weak_hook_execution", "HOOK_LINE", { briefField: "opening.hookLine", message: "改变后的判断。" }),
-      issue("scene_filler", { scope: "scene", sceneId: "context", field: "dialogue" }),
-    ),
-    critique(
-      issue("weak_hook_execution", "HOOK_LINE", { briefField: "opening.hookLine" }),
-      issue("scene_redundancy", { scope: "scene", sceneId: "context", field: "dialogue" }),
-    ),
-  ];
-  for (const changed of mutations) {
-    let calls = 0;
-    const result = await runtime.generateScriptCritique(input(), async () => response(++calls === 1 ? initial : changed));
-    assert.equal(result.status, "failure");
-    assert.equal(result.metadata.errorType, "repair_failed");
-    assert.ok(result.validationIssues.some(item => item.code === "repair_changed_critique"));
-  }
+  const changed = critique(
+    issue("weak_hook_execution", "HOOK_LINE", { briefField: "opening.hookLine", message: "Provider试图改变原判断。" }),
+    issue("scene_redundancy", { scope: "scene", sceneId: "context", field: "dialogue" }),
+  );
+  let calls = 0;
+  const result = await runtime.generateScriptCritique(input(), async () => response(++calls === 1 ? initial : changed));
+  assert.equal(result.status, "success");
+  assert.equal(calls, 2);
+  assert.deepEqual(result.critique.issues.map((item) => item.code), ["weak_hook_execution", "scene_filler"]);
+  assert.equal(result.critique.issues[0].message, initial.issues[0].message);
+  assert.equal(result.critique.issues[1].message, initial.issues[1].message);
+});
+
+test("real eight-code failure repairs atomically without regenerating critique semantics", async () => {
+  const invalid = {
+    verdict: "needs_rewrite",
+    summary: "初次评审摘要。",
+    issues: Array.from({ length: 8 }, (_, index) => issue(`provider_alias_${index}`, index % 2 ? "FULL_NARRATION" : "HOOK_LINE")),
+  };
+  const repaired = {
+    verdict: "pass",
+    summary: "Provider试图改写摘要。",
+    issues: invalid.issues.map((item, index) => ({
+      ...item,
+      code: runtime.CRITIC_ISSUE_CODE_VALUES[index],
+      message: "Provider试图改写评审语义。",
+      rewriteInstruction: "Provider试图改写修复要求。",
+    })),
+  };
+  const requests = [];
+  const result = await runtime.generateScriptCritique(input(), async (request) => {
+    requests.push(request);
+    return response(requests.length === 1 ? invalid : repaired);
+  });
+  assert.equal(result.status, "success");
+  assert.equal(requests.length, 2);
+  assert.equal(result.critique.verdict, "needs_rewrite");
+  assert.equal(result.critique.summary, invalid.summary);
+  assert.deepEqual(result.critique.issues.map((item) => item.code), runtime.CRITIC_ISSUE_CODE_VALUES.slice(0, 8));
+  assert.ok(result.critique.issues.every((item) => item.message === invalid.issues[0].message));
+  const repair = JSON.parse(requests[1].messages[1].content).repair;
+  assert.equal(repair.originalCritique.issues.length, 8);
+  assert.equal(repair.issues.length, 8);
+  assert.deepEqual(repair.allowedIssueCodes, runtime.CRITIC_ISSUE_CODE_VALUES);
+});
+
+test("issue code repair cannot delete an existing issue", async () => {
+  const initial = critique(
+    issue("hook_quality", "HOOK_LINE", { briefField: "opening.hookLine" }),
+    issue("scene_filler", { scope: "scene", sceneId: "context", field: "dialogue" }),
+  );
+  const deleted = critique(issue("weak_hook_execution", "HOOK_LINE", { briefField: "opening.hookLine" }));
+  let calls = 0;
+  const result = await runtime.generateScriptCritique(input(), async () => response(++calls === 1 ? initial : deleted));
+  assert.equal(result.status, "success");
+  assert.deepEqual(result.critique.issues.map((item) => item.code), ["weak_hook_execution", "scene_filler"]);
+  assert.equal(result.critique.issues.length, 2);
 });
 
 test("invalid issue code is repaired at most once and unsafe rejected values are not echoed", async () => {
@@ -304,19 +344,24 @@ test("invalid target alias repairs to canonical address without changing critiqu
   assert.deepEqual(payload.repair.allowedBriefFields, runtime.CRITIC_BRIEF_FIELD_VALUES);
 });
 
-test("address repair cannot add, delete, or semantically alter Critic issues", async () => {
+test("address repair requires the replacement address and discards unrelated mutations", async () => {
+  const invalid = critique(issue("opening_visual_mismatch", { scope: "hook", field: "openingVisual" }, { briefField: "opening.visual" }));
+  let missingCalls = 0;
+  const missing = await runtime.generateScriptCritique(input(), async () => response(++missingCalls === 1 ? invalid : pass()));
+  assert.equal(missing.status, "failure");
+  assert.equal(missing.metadata.errorType, "repair_failed");
+
   for (const changed of [
-    pass(),
     critique(issue("opening_visual_mismatch", { scope: "hook", field: "openingVisualExecution" }, { briefField: "opening.visual", severity: "minor" })),
     critique(issue("weak_hook_execution", { scope: "hook", field: "openingVisualExecution" }, { briefField: "opening.visual" })),
   ]) {
     let calls = 0;
-    const invalid = critique(issue("opening_visual_mismatch", { scope: "hook", field: "openingVisual" }, { briefField: "opening.visual" }));
     const result = await runtime.generateScriptCritique(input(), async () => response(++calls === 1 ? invalid : changed));
     assert.equal(calls, 2);
-    assert.equal(result.status, "failure");
-    assert.equal(result.metadata.errorType, "repair_failed");
-    assert.ok(result.validationIssues.some((item) => item.code === "repair_changed_critique"));
+    assert.equal(result.status, "success");
+    assert.equal(result.critique.issues[0].targetRef, "HOOK_OPENING_VISUAL");
+    assert.equal(result.critique.issues[0].code, "opening_visual_mismatch");
+    assert.equal(result.critique.issues[0].severity, "major");
   }
 });
 
