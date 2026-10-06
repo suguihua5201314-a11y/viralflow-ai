@@ -58,6 +58,7 @@ import type {ScriptCriticInput} from "./brief-driven-script-critic";
 import type {TargetedRewriteInput} from "./brief-driven-script-rewriter";
 import {finalScriptRequestAuthority,shouldReleaseFinalScriptLoading} from "./final-script-request-guard";
 import {createFinalScriptClientCorrelationId,emitFinalScriptClientEvent,FinalScriptPreflightError,normalizeRecentScriptHistory,observedWriterFetch,runFinalScriptPreflight} from "./final-script-client-preflight";
+import {finalScriptPreflightUserMessage} from "./client-diagnostics";
 
 type Scene = { time: string; visual: string; line: string; edit: string };
 type Script = { revisionId?: string; sourceCreativeBriefId?: string; sourceCreativeBriefRevisionId?: string; id?: number; title: string; product: string; language: string; country: string; style: string; hook: string; alternateHooks: string[]; narration: string; scenes: Scene[]; createdAt?: string; aiGenerated?: boolean; creativeAngle?:string; hookType?:string; framework?:string; conflict?:string; productReveal?:string; proof?:string; sellingPoints?:string; cta?:string; shootingSuggestion?:string; scenario?:string; proofMechanism?:string; ctaStyle?:string };
@@ -811,7 +812,7 @@ export default function Home() {
         brief={currentCreativeBrief}
         script={acceptedCurrentScript}
         status={finalScriptStatus}
-        error={finalScriptStatus==="error"?(finalScriptDiagnostic.includes("client_preflight")?"脚本生成准备失败，请重试。":finalScriptDiagnostic.includes("market_mismatch")?"当前商品市场信息不一致，请返回商品信息检查后重试。":finalScriptDiagnostic.includes("critic_issues_not_safely_targetable")?"AI 检查发现脚本仍有无法安全自动修改的问题。":"脚本没有成功生成，请重试。"):undefined}
+        error={finalScriptStatus==="error"?(finalScriptDiagnostic.includes("client_preflight")?(finalScriptPreflightUserMessage(finalScriptDiagnostic.split(" · ")[1]||"")||"脚本生成准备失败，请重试。"):finalScriptDiagnostic.includes("market_mismatch")?"当前商品市场信息不一致，请返回商品信息检查后重试。":finalScriptDiagnostic.includes("critic_issues_not_safely_targetable")?"AI 检查发现脚本仍有无法安全自动修改的问题。":"脚本没有成功生成，请重试。"):undefined}
         diagnostic={finalScriptDiagnostic}
         aiSummary={finalScriptSummary}
         rewritten={finalScriptRewritten}
