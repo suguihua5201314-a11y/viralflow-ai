@@ -6,6 +6,7 @@ import {
 } from "../../brief-driven-script-critic";
 import { callProvider, DEFAULT_PROVIDER, getProviderStatuses, type ProviderResponse } from "../../provider-router";
 import type { ProviderId } from "../../provider-types";
+import { persistQualityTracePatch, validQualityTraceId } from "../../quality-trace";
 
 export const runtime = "nodejs";
 export const maxDuration = 120;
@@ -73,6 +74,7 @@ export async function POST(request: Request) {
       providerIdentity: { providerRequested: requested, providerUsed, model: providerStatus.model },
       observe: ({ issues, ...event }) => console.warn(JSON.stringify({ event: "brief_aware_script_critic", ...event, ...(issues ? { issues: issues.map(({ code, path, stage, validator }) => ({ code, ...(path ? { path } : {}), stage, validator })) } : {}) })),
     });
+    if (validQualityTraceId(body.qualityTraceId)) await persistQualityTracePatch({ qualityTraceId: body.qualityTraceId, critic: { input: body, output: result } });
     if (result.status === "failure") return Response.json({ ...result, error: { type: result.metadata.errorType, message: safeMessage(result.metadata.errorType) } }, { status: failureStatus(result.metadata.errorType) });
     return Response.json(result, { status: 200 });
   } catch {

@@ -1,6 +1,7 @@
 import { generateTargetedScriptRewrite, type TargetedRewriteInput, type TargetedRewriteProviderRequest, type TargetedRewriteProviderResponse } from "../../brief-driven-script-rewriter";
 import { callProvider, DEFAULT_PROVIDER, getProviderStatuses, type ProviderResponse } from "../../provider-router";
 import type { ProviderId } from "../../provider-types";
+import { persistQualityTracePatch, validQualityTraceId } from "../../quality-trace";
 
 export const runtime = "nodejs";
 export const maxDuration = 120;
@@ -58,6 +59,7 @@ export async function POST(request: Request) {
   };
   try {
     const result = await generateTargetedScriptRewrite(body, provider, { providerIdentity: { providerRequested: requested, providerUsed, model: providerStatus.model } });
+    if (validQualityTraceId(body.qualityTraceId)) await persistQualityTracePatch({ qualityTraceId: body.qualityTraceId, rewrite: { input: body, output: result } });
     if (result.status === "failure") {
       console.warn(JSON.stringify({
         event: "targeted_script_rewrite",

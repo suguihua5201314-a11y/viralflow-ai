@@ -244,6 +244,14 @@ function metadata(): BriefDrivenWriterMetadata {
   return { providerRequested: null, providerUsed: null, model: null, latencyMs: null, repairAttempted: false, fallbackUsed: false, errorType: null };
 }
 
+export type BriefDrivenWriterAttemptCapture = {
+  attempt: 0 | 1;
+  output: string;
+  parsedDraft: ScriptDraftV2 | null;
+  validation: ScriptWriterValidationIssue[];
+  accepted: boolean;
+};
+
 export async function generateBriefDrivenScript(
   input: ScriptWriterInput,
   provider: BriefDrivenWriterProvider,
@@ -251,6 +259,7 @@ export async function generateBriefDrivenScript(
     correlationId?: string;
     providerIdentity?: { providerRequested: ProviderId; providerUsed: ProviderId; model: string | null };
     observe?: (event: BriefDrivenWriterObservation) => void;
+    captureAttempt?: (capture: BriefDrivenWriterAttemptCapture) => void;
   } = {},
 ): Promise<BriefDrivenWriterResult> {
   const resultMetadata = metadata();
@@ -287,6 +296,7 @@ export async function generateBriefDrivenScript(
     resultMetadata.latencyMs = (resultMetadata.latencyMs || 0) + response.responseTimeMs;
     const parsed = parseScriptDraftV2(response.content, { requireCanonicalLanguage: true });
     issues = parsed.value ? validateScriptDraftDeterministically(input, parsed.value) : parsed.issues;
+    try { options.captureAttempt?.({ attempt: attempt as 0 | 1, output: response.content, parsedDraft: parsed.value, validation: issues, accepted: Boolean(parsed.value && issues.length === 0) }); } catch {}
     if (parsed.value && issues.length === 0) {
       const script = adaptScriptDraftToStructuredScript(input, parsed.value);
       options.observe?.({ correlationId, attempt: attempt + 1, stage: "completed", provider: response.providerUsed, model: response.model, latencyMs: resultMetadata.latencyMs, repairAttempted: resultMetadata.repairAttempted, issueCount: 0, errorType: null });
