@@ -45,6 +45,20 @@ test("multiple targets use exactly one Provider call and apply atomically", asyn
   assert.equal(result.draft.cta, "可以先确认适配型号。");
 });
 
+test("rewrite prompt treats Product Truth as a closed-world boundary without adding another Provider call", async () => {
+  const input = makeInput(api, selection);
+  const normalized = runtime.normalizeAuthorizedRewriteIssues(input);
+  assert.deepEqual(normalized.issues, []);
+  const messages = runtime.buildTargetedRewriteMessages(input, normalized.patches);
+  const payload = JSON.parse(messages[1].content);
+  assert.equal(payload.productTruthPolicy.boundary, "closed_world");
+  assert.match(payload.productTruthPolicy.rule, /explicitly supported by canonicalProductTruth/);
+  assert.deepEqual(payload.productTruthPolicy.prohibitedUnlessExplicitlySupported, ["price", "promotion", "coupon", "gift", "free shipping or delivery", "inventory or ranking", "warranty or guarantee", "certification or endorsement", "numeric parameter"]);
+  assert.match(payload.productTruthPolicy.safeRewriteBehavior, /Do not add, strengthen, or relocate an unsupported claim/);
+  assert.match(messages[0].content, /Never relocate an unsupported claim/);
+  assert.equal(runtime.TARGETED_REWRITE_BUDGET.maximumProviderAttempts, 1);
+});
+
 test("conflict and stale source fail before Provider and no second rewrite occurs", async () => {
   for (const input of [
     (() => { const value = makeInput(api, selection); value.issues.push({ ...value.issues[0], patchId: "patch-2", rewriteInstruction: "改变策略。" }); return value; })(),

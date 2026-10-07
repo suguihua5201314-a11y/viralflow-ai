@@ -58,7 +58,20 @@ export async function POST(request: Request) {
   };
   try {
     const result = await generateTargetedScriptRewrite(body, provider, { providerIdentity: { providerRequested: requested, providerUsed, model: providerStatus.model } });
-    if (result.status === "failure") return Response.json({ ...result, error: { type: result.metadata.errorType, message: message(result.metadata.errorType) } }, { status: status(result.metadata.errorType) });
+    if (result.status === "failure") {
+      console.warn(JSON.stringify({
+        event: "targeted_script_rewrite",
+        correlationId: body.requestId,
+        stage: result.issues[0]?.stage || "provider",
+        provider: result.metadata.providerUsed,
+        model: result.metadata.model,
+        providerCalls: result.metadata.providerCalls,
+        issueCount: result.issues.length,
+        issues: result.issues.map(({ code, path, stage, validator, ruleFamily, ruleCode }) => ({ code, ...(path ? { path } : {}), stage, validator, ...(ruleFamily ? { ruleFamily } : {}), ...(ruleCode ? { ruleCode } : {}) })),
+        errorType: result.metadata.errorType,
+      }));
+      return Response.json({ ...result, error: { type: result.metadata.errorType, message: message(result.metadata.errorType) } }, { status: status(result.metadata.errorType) });
+    }
     return Response.json(result, { status: 201 });
   } catch {
     return Response.json({ status: "failure", draft: null, script: null, issues: [], error: { type: "runtime_failure", message: "脚本局部改写失败，请重试。" } }, { status: 500 });

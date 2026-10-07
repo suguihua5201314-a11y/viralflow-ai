@@ -19,6 +19,11 @@ test("route is an independent thin adapter with one script-rewriter Provider pur
   assert.match(source, /purpose:\s*"script-rewriter"/);
   assert.doesNotMatch(source, /mutateProjectMemory|scriptVersions|selectedScriptRevisionId|\/api\/scripts|\/api\/copilot|generateBriefDrivenScript|generateScriptCritique/);
   assert.match(source, /generateTargetedScriptRewrite/);
+  assert.match(source, /targeted_script_rewrite/);
+  assert.match(source, /ruleFamily/);
+  assert.match(source, /ruleCode/);
+  const telemetry = source.slice(source.indexOf('event: "targeted_script_rewrite"'), source.indexOf('errorType: result.metadata.errorType'));
+  assert.doesNotMatch(telemetry, /response\.content|body\.currentDraft|body\.productContext|body\.creativeBrief/);
 });
 
 test("Preview script-rewriter uses the purpose override or shared working creative provider without changing production routing", () => {

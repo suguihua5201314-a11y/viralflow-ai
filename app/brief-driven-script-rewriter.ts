@@ -160,6 +160,9 @@ const productTruth = (input: TargetedRewriteInput) => ({
 export const TARGETED_REWRITE_SYSTEM_PROMPT = [
   "You perform a constrained local rewrite of a canonical Chinese source Script.",
   "The supplied patch IDs and targets are authorized by ViralFlow. Return replacement text only; never choose or return an address.",
+  "Treat Canonical Product Truth as a closed-world factual boundary: a product fact or commercial promise is allowed only when it is explicitly present there.",
+  "Never introduce or strengthen prices, promotions, coupons, gifts, delivery promises, inventory or ranking claims, warranties, guarantees, certifications, endorsements, or numeric parameters that Canonical Product Truth does not state.",
+  "When an instruction can be satisfied only by inventing a product fact, preserve the supported meaning and improve expression without adding that fact. Never relocate an unsupported claim to another replacement.",
   "Preserve the locked Creative Brief, Product Truth, meaning outside each instruction, and Simplified Chinese source language.",
   "Do not return targetRef, path, scope, sceneId, field, Script, ScriptDraftV2, identities, Product Truth, Creative Angle, explanations, or Markdown.",
   "Return exactly one JSON object with replacements; each item contains only patchId and replacementValue.",
@@ -172,6 +175,12 @@ export function buildTargetedRewriteMessages(input: TargetedRewriteInput, patche
       task: "Rewrite only the authorized Script fields",
       lockedCreativeBrief: deriveBriefLockedDecisions(input.creativeBrief),
       canonicalProductTruth: productTruth(input),
+      productTruthPolicy: {
+        boundary: "closed_world",
+        rule: "Every product capability, result, commercial promise, certification, endorsement, and numeric parameter in a replacement must be explicitly supported by canonicalProductTruth.",
+        prohibitedUnlessExplicitlySupported: ["price", "promotion", "coupon", "gift", "free shipping or delivery", "inventory or ranking", "warranty or guarantee", "certification or endorsement", "numeric parameter"],
+        safeRewriteBehavior: "Keep the existing supported fact and improve only the requested expression. Do not add, strengthen, or relocate an unsupported claim.",
+      },
       languageContext: input.languageContext,
       authorizedPatches: patches.map(({ patchId, targetRef, expectedCurrentValue, issueCode, severity, message, rewriteInstruction, briefField }) => ({ patchId, targetRef, currentValue: expectedCurrentValue, issueCode, severity, message, rewriteInstruction, ...(briefField ? { briefField } : {}) })),
       outputContract: { replacements: [{ patchId: "exact supplied patchId", replacementValue: "replacement string only" }] },
