@@ -11,6 +11,8 @@ import { resolveCreationLanguageContext, validateInternalCreativeLanguage, type 
 export type ScriptWriterInput = {
   projectId: string;
   requestId: string;
+  qualityTraceId?: string;
+  qualityTraceContext?: { selectedCreativeDirection?: unknown };
   creativeBriefReference: { id: string; revisionId: string };
   creativeBrief: CreativeBriefV2;
   productContext: CanonicalProductContext;

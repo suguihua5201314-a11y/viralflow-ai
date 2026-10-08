@@ -59,6 +59,7 @@ import type {TargetedRewriteInput} from "./brief-driven-script-rewriter";
 import {finalScriptRequestAuthority,shouldReleaseFinalScriptLoading} from "./final-script-request-guard";
 import {createFinalScriptClientCorrelationId,emitFinalScriptClientEvent,FinalScriptPreflightError,normalizeRecentScriptHistory,observedWriterFetch,runFinalScriptPreflight} from "./final-script-client-preflight";
 import {finalScriptPreflightUserMessage} from "./client-diagnostics";
+import {createQualityTraceId} from "./quality-trace";
 
 type Scene = { time: string; visual: string; line: string; edit: string };
 type Script = { revisionId?: string; sourceCreativeBriefId?: string; sourceCreativeBriefRevisionId?: string; id?: number; title: string; product: string; language: string; country: string; style: string; hook: string; alternateHooks: string[]; narration: string; scenes: Scene[]; createdAt?: string; aiGenerated?: boolean; creativeAngle?:string; hookType?:string; framework?:string; conflict?:string; productReveal?:string; proof?:string; sellingPoints?:string; cta?:string; shootingSuggestion?:string; scenario?:string; proofMechanism?:string; ctaStyle?:string };
@@ -605,6 +606,7 @@ export default function Home() {
   function update(key: keyof typeof form, value: string) { if(key==="product")updateProjectMemory({}, {product:value}); setForm(prev => {const next={...prev,[key]:value};saveWorkspaceSnapshot({form:next});return next;}); }
   async function generateFinalScript(){
     const clientCorrelationId=createFinalScriptClientCorrelationId();
+    const qualityTraceId=createQualityTraceId();
     emitFinalScriptClientEvent({event:"script_generation_clicked",correlationId:clientCorrelationId});
     emitFinalScriptClientEvent({event:"script_preflight_started",correlationId:clientCorrelationId});
     const preflight=runFinalScriptPreflight(()=>{
@@ -620,8 +622,10 @@ export default function Home() {
       const languageContext=resolveCreationLanguageContext({...project,targetLanguage:form.language,market:form.country,platform:creativeStageControls.platform});
       if(!form.country.trim()||!creativeStageControls.platform.trim())throw new FinalScriptPreflightError("missing_market_or_platform");
       const recentScriptHistory=normalizeRecentScriptHistory(project.assets?.scriptVersions);
-      const writerInput:ScriptWriterInput={projectId,requestId,creativeBriefReference:{id:brief.id,revisionId:brief.revisionId},creativeBrief:brief,productContext,productContextFingerprint:fingerprint,languageContext,workspaceLanguage:languageContext.workspaceLanguage,targetLanguage:languageContext.targetLanguage,platform:creativeStageControls.platform,market:form.country,language:form.language,preferences:{durationSeconds:Number(form.duration)||30,creatorStyle:creativeStageControls.creationMode,spokenDensity:"balanced",toneSteering:form.style,variantCount:1},recentScriptHistory};
-      const criticInput:Omit<ScriptCriticInput,"requestId"|"scriptDraft">={projectId,creativeBriefReference:{briefId:brief.id,briefRevisionId:brief.revisionId},creativeBrief:brief,canonicalProductContext:productContext,productContextFingerprint:fingerprint,languageContext,workspaceLanguage:languageContext.workspaceLanguage,targetLanguage:languageContext.targetLanguage,platform:creativeStageControls.platform,market:form.country,language:form.language,preferences:{creatorStyle:creativeStageControls.creationMode,durationPreference:Number(form.duration)||30,spokenDensity:"balanced",tone:form.style}};
+      const directionSession=creativeDirectionSessions[projectId];
+      const selectedCreativeDirection=directionSession?.directions.find(item=>item.id===directionSession.selectedOpportunityId);
+      const writerInput:ScriptWriterInput={projectId,requestId,qualityTraceId,qualityTraceContext:{selectedCreativeDirection},creativeBriefReference:{id:brief.id,revisionId:brief.revisionId},creativeBrief:brief,productContext,productContextFingerprint:fingerprint,languageContext,workspaceLanguage:languageContext.workspaceLanguage,targetLanguage:languageContext.targetLanguage,platform:creativeStageControls.platform,market:form.country,language:form.language,preferences:{durationSeconds:Number(form.duration)||30,creatorStyle:creativeStageControls.creationMode,spokenDensity:"balanced",toneSteering:form.style,variantCount:1},recentScriptHistory};
+      const criticInput:Omit<ScriptCriticInput,"requestId"|"scriptDraft">={projectId,qualityTraceId,creativeBriefReference:{briefId:brief.id,briefRevisionId:brief.revisionId},creativeBrief:brief,canonicalProductContext:productContext,productContextFingerprint:fingerprint,languageContext,workspaceLanguage:languageContext.workspaceLanguage,targetLanguage:languageContext.targetLanguage,platform:creativeStageControls.platform,market:form.country,language:form.language,preferences:{creatorStyle:creativeStageControls.creationMode,durationPreference:Number(form.duration)||30,spokenDensity:"balanced",tone:form.style}};
       return{projectId,project,brief,fingerprint,requestId,writerInput,criticInput};
     });
     if(!preflight.ok){
@@ -653,6 +657,7 @@ export default function Home() {
       const accepted=result.script as Script;
       activeFinalScriptRequestId.current="";
       adoptCurrentScript(accepted,{duration:Number(form.duration)||30,offer:form.offer});
+      await fetch(`/api/quality-trace/${encodeURIComponent(qualityTraceId)}`,{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({scriptRevisionId:accepted.revisionId,finalScript:accepted})}).catch(()=>undefined);
       setFinalScriptSummary(result.critique.summary||"已检查创意一致性、产品事实、自然表达、合规与可拍摄性。");
       setFinalScriptRewritten(result.rewritten);setFinalScriptStatus("complete");
     }catch(value){

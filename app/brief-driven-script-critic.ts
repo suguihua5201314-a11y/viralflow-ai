@@ -21,6 +21,7 @@ import { validateInternalCreativeLanguage, type CreationLanguageContext } from "
 export { CRITIC_BRIEF_FIELD_VALUES, CRITIC_ISSUE_CODE_VALUES, CRITIC_TARGET_SCHEMA } from "./brief-driven-script";
 
 export type ScriptCriticInput = {
+  qualityTraceId?: string;
   projectId: string;
   requestId: string;
   creativeBriefReference: { briefId: string; briefRevisionId: string };
