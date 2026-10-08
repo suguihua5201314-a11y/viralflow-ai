@@ -173,6 +173,17 @@ export const BRIEF_DRIVEN_WRITER_SYSTEM_PROMPT = [
   "Set workspaceLanguage=zh-CN, copy targetLanguage from context, and set localizationStatus=source.",
 ].join(" ");
 
+export const BRIEF_DRIVEN_WRITER_QUALITY_BAR = {
+  focus: "Build the script around one primary Product Truth and use at most two supporting truths when the locked Brief genuinely needs them. Do not recite a feature list.",
+  hook: "Open with the locked hook intent immediately. Use a concrete spoken observation, action, tension, or question; avoid brand slogans, generic hype, and empty rhetorical setup.",
+  progression: "Give every scene one distinct job and make each beat advance the same creative idea. Avoid repeated problem-product-demo-CTA beats or several scenes saying the same claim.",
+  spokenLanguage: "Write short, speakable Chinese clauses that sound like one real creator. Avoid brochure language, stacked adjectives, formal transitions, and explaining what the viewer can already see.",
+  evidence: "Turn the locked Evidence Strategy into a visible, shootable action. Dialogue may interpret visible evidence but must not upgrade it into a stronger result or unsupported product claim.",
+  coherence: "Keep visual, action, and dialogue causally consistent. fullNarration must read as one natural spoken arc rather than a disconnected list of scene lines.",
+  cta: "End with the locked CTA intent in a natural continuation of the scene. Avoid abrupt sales pressure or unsupported commercial promises.",
+  duration: "Respect the requested duration and spoken density. Prefer fewer purposeful lines over dense copy.",
+} as const;
+
 const WRITER_TRUTH_REPAIR_GUIDANCE: Record<string, string> = {
   unsupported_promotion: "Remove or rewrite the unsupported promotion assertion. Do not introduce a discount, coupon, bundle promotion, percentage discount, half-price offer, or buy-one-get-one claim unless it is explicitly supported by CANONICAL PRODUCT TRUTH.",
   unsupported_gift_or_delivery: "Remove or rewrite the unsupported gift or delivery assertion. Do not introduce a gift, free offer, free shipping, or delivery promise unless it is explicitly supported by CANONICAL PRODUCT TRUTH.",
@@ -206,6 +217,7 @@ export function buildBriefDrivenWriterMessages(input: ScriptWriterInput, repairI
       canonicalProductTruth: canonicalProductTruth(input),
       languageContext,
       expressionPreferences: input.preferences || {},
+      qualityBar: BRIEF_DRIVEN_WRITER_QUALITY_BAR,
       outputContract: requiredShape,
       ...(repair ? { repair } : {}),
     }) },

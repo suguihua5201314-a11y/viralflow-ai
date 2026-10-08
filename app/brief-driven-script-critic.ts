@@ -282,8 +282,42 @@ export const SCRIPT_CRITIC_SYSTEM_PROMPT = [
   "Write every issue message, rewriteInstruction, and summary in Simplified Chinese. Review the Chinese source Script; do not evaluate future target-language localization quality.",
   "For targetRef, select one exact value from the supplied targetCatalog. Do not invent aliases, semantic synonyms, field names, or scene IDs.",
   "For briefField, use one exact value from the supplied allowedBriefFields list, or omit briefField when the issue is not tied to one locked Brief decision. Never invent aliases or alternate naming.",
+  "A pass requires no critical or major quality issue. Structural validity alone is not a pass: reject generic, repetitive, brochure-like, incoherent, unshootable, or weakly evidenced execution.",
   "Return exactly one JSON object containing verdict, at most 8 actionable issues, and an optional summary. Use only the supplied stable issue codes, severities, targets, and existing scene IDs.",
 ].join(" ");
+
+export const SCRIPT_CRITIC_ISSUE_CODE_CATALOG: Record<BriefAwareCriticIssueCode, string> = {
+  brief_angle_drift: "The script executes a different creative angle from the locked Brief.",
+  hook_intent_drift: "The hook changes the locked hook intent or strategy.",
+  opening_visual_mismatch: "The opening visual does not execute the locked opening visual.",
+  evidence_strategy_drift: "The evidence scene uses a different proof strategy from the locked Brief.",
+  cta_direction_drift: "The CTA changes the locked CTA direction.",
+  ugc_advertising_tone: "The wording sounds like a brand advertisement, slogan, brochure, or sales pitch rather than a real creator.",
+  ugc_unnatural_dialogue: "The spoken Chinese is difficult to say naturally or uses formal, translated, or non-conversational phrasing.",
+  ugc_overwritten: "The copy is overexplained, adjective-heavy, or says what the viewer can already see.",
+  ugc_repetitive: "Multiple lines repeat the same point without advancing the script.",
+  unsupported_causal_claim: "The script states or implies an unsupported product-caused outcome.",
+  evidence_dialogue_mismatch: "The dialogue claims more or something different from the visible evidence.",
+  unobservable_claim: "The claimed proof cannot be observed in the described visual or action.",
+  visual_action_mismatch: "The visual, action, and dialogue do not describe one coherent beat.",
+  weak_hook_execution: "The first spoken beat is generic, delayed, vague, or lacks a concrete reason to keep watching.",
+  hook_visual_disconnect: "The hook line and opening visual do not reinforce the same immediate idea.",
+  scene_redundancy: "A scene repeats the job or information of another scene.",
+  scene_filler: "A scene adds no necessary story, evidence, product, or CTA function.",
+  scene_not_filmmable: "The scene depends on an abstract, unsafe, unavailable, or unspecified action that cannot be shot as written.",
+  scene_pacing_issue: "The scene order, duration, or information density makes the short-form script drag or rush.",
+  cta_too_hard: "The CTA is abrupt, pushy, or disconnected from the preceding experience.",
+  cta_unsupported_claim: "The CTA introduces a product or commercial claim not supported by canonical Product Truth.",
+};
+
+export const SCRIPT_CRITIC_QUALITY_RUBRIC = [
+  "Judge the first two seconds: hook line and opening visual must create one immediate, specific viewing reason.",
+  "Judge spoken Chinese aloud: concise, conversational, and creator-like; flag slogans, brochure phrases, stacked adjectives, and formal transitions.",
+  "Judge progression: each scene must perform a distinct job and advance one coherent creative idea without feature-listing or repetition.",
+  "Judge evidence: the viewer must be able to see the proof action, and dialogue cannot claim more than the visual demonstrates or Product Truth supports.",
+  "Judge filmability and coherence: visual, action, dialogue, duration, and scene order must be practically shootable and mutually consistent.",
+  "Judge CTA as the natural final beat of the locked direction, without abrupt pressure or new claims.",
+] as const;
 
 const outputContract = {
   verdict: "pass | needs_rewrite",
@@ -385,6 +419,8 @@ export function buildScriptCriticMessages(input: ScriptCriticInput, repairIssues
       scriptDraft: input.scriptDraft,
       targetCatalog,
       allowedBriefFields: CRITIC_BRIEF_FIELD_VALUES,
+      issueCodeCatalog: SCRIPT_CRITIC_ISSUE_CODE_CATALOG,
+      qualityRubric: SCRIPT_CRITIC_QUALITY_RUBRIC,
       outputContract,
       ...(repair ? { repair } : {}),
     }) },

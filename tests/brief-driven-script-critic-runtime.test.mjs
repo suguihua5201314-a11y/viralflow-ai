@@ -414,8 +414,16 @@ test("prompt is Brief-aware, category-neutral, bounded, and never asks for rewri
   assert.equal(payload.lockedCreativeBrief.creativeAngle, brief().direction.creativeAngle);
   assert.equal(payload.canonicalProductTruth.productName, "CrystalArmor");
   assert.equal(payload.scriptDraft.scenes[0].id, "hook");
+  assert.deepEqual(Object.keys(payload.issueCodeCatalog), runtime.CRITIC_ISSUE_CODE_VALUES);
+  assert.match(payload.issueCodeCatalog.weak_hook_execution, /first spoken beat/);
+  assert.match(payload.issueCodeCatalog.ugc_advertising_tone, /brochure/);
+  assert.match(payload.issueCodeCatalog.evidence_dialogue_mismatch, /visible evidence/);
+  assert.match(payload.issueCodeCatalog.scene_redundancy, /repeats/);
+  assert.match(payload.issueCodeCatalog.cta_too_hard, /abrupt/);
+  assert.equal(payload.qualityRubric.length, 6);
   assert.match(messages[0].content, /do not rewrite/i);
   assert.match(messages[0].content, /do not score/i);
+  assert.match(messages[0].content, /Structural validity alone is not a pass/);
   assert.doesNotMatch(messages.map((item) => item.content).join("\n"), /choose (?:a |the )?creative angle|replaceEntireScript|if category/i);
   assert.ok(messages.reduce((sum, item) => sum + item.content.length, 0) < 14_000);
 });
