@@ -68,15 +68,17 @@ test("attempt and repair propagation diagnostics retain distinct rules without c
   assert.ok(diagnosticIssues.some((issue) => issue.ruleCode === "exaggerated_protection_expression"));
   assert.ok(diagnosticIssues.some((issue) => issue.ruleCode === "unsupported_duration_measurement"));
   assert.equal(repairs.length, 1);
-  assert.ok(repairs[0].issues.some((issue) => issue.ruleCode === "absolute_claim_expression" && issue.path === "hookLine" && issue.repairReceived === false));
-  assert.ok(repairs[0].issues.every((issue) => !issue.receivedFields.includes("ruleFamily") && !issue.receivedFields.includes("ruleCode")));
+  assert.ok(repairs[0].issues.some((issue) => issue.ruleCode === "absolute_claim_expression" && issue.path === "hookLine" && issue.repairReceived === true));
+  assert.ok(repairs[0].issues.filter((issue) => issue.ruleFamily || issue.ruleCode).every((issue) => issue.receivedFields.includes("ruleFamily") && issue.receivedFields.includes("ruleCode")));
   const serialized = JSON.stringify({ attempts, repairs });
   for (const unsafe of [invalid.hookLine, profile.name, profile.sellingPoints, "绝对防摔产品"]) assert.doesNotMatch(serialized, new RegExp(unsafe));
 });
 
-test("new rule metadata is not injected into the existing repair prompt", () => {
+test("safe rule metadata is injected into repair without source content", () => {
   const repair = { preserved: [], correctionCandidates: [], missingCount: 3, issues: [{ candidateId: "A", type: "compliance", ruleFamily: "absolute_claim", ruleCode: "absolute_claim_expression", path: "hookLine", message: "绝对化承诺:绝对" }] };
   const prompt = directions.creativeDirectionMessages(input, repair)[0].content;
-  assert.doesNotMatch(prompt, /ruleFamily|ruleCode/);
-  assert.match(prompt, /"type":"compliance"/);
+  assert.match(prompt, /"ruleFamily":"absolute_claim"/);
+  assert.match(prompt, /"ruleCode":"absolute_claim_expression"/);
+  assert.match(prompt, /"stage":"compliance"/);
+  assert.doesNotMatch(prompt, /绝对化承诺|绝对/);
 });

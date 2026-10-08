@@ -75,7 +75,32 @@ test("one compact repair preserves valid first-pass directions", async () => {
   assert.equal(requests.length, 2);
   assert.equal(result.status, "success");
   assert.deepEqual(result.directions.map(item => item.id), ["A", "B", "C"]);
-  assert.match(requests[1].messages[0].content, /Return 1 replacement directions only/);
+  assert.match(requests[1].messages[0].content, /Return exactly 1 complete replacement direction object/);
+});
+
+test("mixed schema grounding and compliance failures request complete replacements without contradictory identity constraints", async () => {
+  const requests = [];
+  const initial = {
+    directions: [
+      direction("A", { hookLine: "贴膜后摔落，屏幕完好无损" }),
+      direction("B", { openingVisual: { ...direction("B").openingVisual, visibleChangeOrQuestion: "绝对防摔" } }),
+      { ...direction("C"), hookLine: undefined },
+    ],
+  };
+  const result = await runtime.generateCreativeDirections(input, async request => {
+    requests.push(request);
+    return response(requests.length === 1 ? JSON.stringify(initial) : payload([direction("A"), direction("B"), direction("C")]));
+  });
+  assert.equal(requests.length, 2);
+  assert.equal(result.status, "success");
+  const repairPrompt = requests[1].messages[0].content;
+  assert.match(repairPrompt, /Return exactly 3 complete replacement direction objects/);
+  assert.match(repairPrompt, /do not preserve rejected candidate identity/);
+  assert.match(repairPrompt, /claim_exceeds_supported_scope|unsupported_product_result/);
+  assert.match(repairPrompt, /absolute_claim_expression/);
+  assert.match(repairPrompt, /invalid_candidate_contract/);
+  assert.doesNotMatch(repairPrompt, /Keep these candidate IDs/);
+  assert.equal(result.validationSummary.issues.some(issue => issue.code === "repair_identity_mismatch"), false);
 });
 
 test("repair failure preserves partial candidates without deterministic fallback", async () => {

@@ -230,21 +230,23 @@ export function validateCreativeDirection(item: CreativeDirectionCandidate, inpu
 type RepairContext = { preserved: CreativeDirectionCandidate[]; correctionCandidates: CreativeDirectionCandidate[]; missingCount: number; issues: OpportunityValidationIssue[] };
 
 function existingRepairIssueShape(issue: OpportunityValidationIssue) {
+  const safe = safeDiagnosticIssue(issue);
   return {
     ...(issue.candidateId ? { candidateId: issue.candidateId } : {}),
-    type: issue.type,
-    ...(issue.code ? { code: issue.code } : {}),
-    ...(issue.path ? { path: issue.path } : {}),
+    stage: safe.stage,
+    issueCode: safe.issueCode,
+    ...(safe.path ? { path: safe.path } : {}),
+    ...(safe.ruleFamily ? { ruleFamily: safe.ruleFamily } : {}),
+    ...(safe.ruleCode ? { ruleCode: safe.ruleCode } : {}),
     ...(issue.capabilityFamily ? { capabilityFamily: issue.capabilityFamily } : {}),
-    message: issue.message,
   };
 }
 
 export function creativeDirectionMessages(input: CreativeBrainInput, repair?: RepairContext) {
   const repairInstruction = repair
     ? repair.correctionCandidates.length
-      ? ` One repair only. Return ${repair.missingCount} corrected directions only. Re-express these wrong-language directions in Simplified Chinese without changing their IDs. Keep these candidate IDs and their audience, moment, angle, mechanism, and strategy identity: ${JSON.stringify(repair.correctionCandidates)}. Correct only the listed language or Product Truth grounding issues. Delete or narrow unsupported assertions, or replace them only with facts present in productTruth. Do not invent facts. Do not repeat or rewrite preserved candidates: ${JSON.stringify(repair.preserved)}. Safe issues (candidateId, code, path, capabilityFamily): ${JSON.stringify(repair.issues.map(({candidateId,code,path,capabilityFamily,type})=>({candidateId,code,path,capabilityFamily,type})))}.`
-      : ` This is the only repair. Return ${repair.missingCount} replacement directions only. Do not repeat: ${JSON.stringify(repair.preserved)}. Fix: ${JSON.stringify(repair.issues.map(existingRepairIssueShape))}.`
+      ? ` One repair only. Return exactly ${repair.missingCount} corrected directions. Re-express these wrong-language directions in Simplified Chinese without changing their IDs. Keep these candidate IDs and their audience, moment, angle, mechanism, and strategy identity: ${JSON.stringify(repair.correctionCandidates)}. Correct only the listed language or Product Truth grounding issues. Delete or narrow unsupported assertions, or replace them only with facts present in productTruth. Do not invent facts. Do not repeat or rewrite preserved candidates: ${JSON.stringify(repair.preserved)}. Safe issues: ${JSON.stringify(repair.issues.map(existingRepairIssueShape))}.`
+      : ` This is the only repair. Return exactly ${repair.missingCount} complete replacement direction object${repair.missingCount === 1 ? "" : "s"}. These are new replacements for invalid or missing slots; do not preserve rejected candidate identity. Do not repeat or rewrite preserved candidates: ${JSON.stringify(repair.preserved)}. Address every safe issue: ${JSON.stringify(repair.issues.map(existingRepairIssueShape))}. Each replacement must satisfy the full canonical output contract.`
     : "";
   return [
     { role: "system" as const, content: `Generate exactly ${repair?.missingCount || CREATIVE_DIRECTION_COUNT} distinct directions, not scripts/briefs. All human-readable fields use Simplified Chinese; market/targetLanguage are future-localization constraints only. Cover audience, moment, motivation, tension, angle, mechanism, hook and first 1-3s visual. Keep hook/visual distinct. Product Truth is the strict fact boundary. Never invent facts, numbers, price/offer, certification, medical effects, reviews or third-party access. A capability does not authorize stronger results, duration guarantees, competitor facts or superiority. Scenario time and comparison mechanisms are allowed; product-effect duration/comparative conclusions require explicit Product Truth. Preferences guide but do not dictate. Avoid recent ideas. JSON only: {"directions":[{"id":"A","targetAudience":"","useMoment":"","coreMotivation":"","coreTension":"","creativeAngle":"","contentMechanism":"","hookLine":"","openingVisual":{"subject":"","setup":"","action":"","visibleChangeOrQuestion":""},"rationale":""}]}.${repairInstruction}` },
@@ -286,9 +288,10 @@ function safeDiagnosticIssue(issue: OpportunityValidationIssue): CreativeCandida
 function repairPropagationDiagnostics(issues: OpportunityValidationIssue[]): CreativeRepairPropagationDiagnostic[] {
   return issues.map((issue) => {
     const safe = safeDiagnosticIssue(issue);
-    const receivedFields: CreativeRepairPropagationDiagnostic["receivedFields"] = ["stage"];
-    if (issue.code) receivedFields.push("issueCode");
-    if (issue.path) receivedFields.push("path");
+    const receivedFields: CreativeRepairPropagationDiagnostic["receivedFields"] = ["stage", "issueCode"];
+    if (safe.path) receivedFields.push("path");
+    if (safe.ruleFamily) receivedFields.push("ruleFamily");
+    if (safe.ruleCode) receivedFields.push("ruleCode");
     return { candidateId: safeCandidateId(issue.candidateId), ...safe, repairReceived: Boolean(safe.ruleFamily ? receivedFields.includes("ruleFamily") : true) && Boolean(safe.ruleCode ? receivedFields.includes("ruleCode") : true) && Boolean(safe.path ? receivedFields.includes("path") : true), receivedFields };
   });
 }
@@ -312,7 +315,9 @@ export async function generateCreativeDirections(
   let correctionCandidates: CreativeDirectionCandidate[] = [];
   for (let attempt = 0; attempt < 2; attempt++) {
     try {
-      const repair = attempt ? { preserved, correctionCandidates, missingCount: correctionCandidates.length || Math.max(1, CREATIVE_DIRECTION_COUNT - preserved.length), issues: [...allIssues] } : undefined;
+      const canRepairInPlace = correctionCandidates.length > 0 && allIssues.every((issue) => issue.type === "language" || issue.type === "grounding");
+      const repairCandidates = canRepairInPlace ? correctionCandidates : [];
+      const repair = attempt ? { preserved, correctionCandidates: repairCandidates, missingCount: Math.max(1, CREATIVE_DIRECTION_COUNT - preserved.length), issues: [...allIssues] } : undefined;
       if (repair) options.observeRepair?.({ attempt: 1, issues: repairPropagationDiagnostics(repair.issues) });
       const response = await provider({
         messages: creativeDirectionMessages(input, repair), temperature: attempt ? .65 : .82, topP: .9,
@@ -337,15 +342,15 @@ export async function generateCreativeDirections(
         if (!attempt && issues.length > 0 && issues.every((entry) => entry.type === "language" || entry.type === "grounding")) correctionCandidates.push(item);
         return issues.length === 0;
       });
-      if (attempt && correctionCandidates.length) {
+      if (attempt && repairCandidates.length) {
         const returnedIds = new Set(valid.map((item) => item.id));
-        for (const candidate of correctionCandidates) if (!returnedIds.has(candidate.id)) {
+        for (const candidate of repairCandidates) if (!returnedIds.has(candidate.id)) {
           const issue: OpportunityValidationIssue = { candidateId: candidate.id, type: "grounding", code: "repair_identity_mismatch", path: "id", message: "Grounding repair must preserve Direction ID and strategy identity" };
           allIssues.push(issue);
           attemptCandidates.push(diagnosticCandidate(candidate.id, "repair", "rejected", [issue]));
         }
-        if (correctionCandidates.length === repair!.missingCount) {
-          const expectedIds = new Set(correctionCandidates.map((item) => item.id));
+        if (repairCandidates.length === repair!.missingCount) {
+          const expectedIds = new Set(repairCandidates.map((item) => item.id));
           valid = valid.filter((item) => expectedIds.has(item.id));
         }
       }
