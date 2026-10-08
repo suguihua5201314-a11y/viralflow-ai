@@ -47,6 +47,12 @@ test("scenario and non-literal metaphor remain creative freedom", () => {
   assert.deepEqual(grounding.validateCreativeDirectionProductGrounding(direction("A", { openingVisual: { subject: "手机", setup: "走路时", action: "手机从手中滑落", visibleChangeOrQuestion: "裂纹像闪电一样铺满转场画面" } }), context), []);
 });
 
+test("accidental scenarios remain valid while deliberate destructive proof is rejected", () => {
+  const input = { projectId: "p", productContext: context, productContextFingerprint: fixture.CREATIVE_BRAIN_ACCEPTANCE_FINGERPRINT, productBinding: { projectProductName: profile.name, projectProductProfileId: profile.id }, market: "Spain", language: "Spanish", platform: "TikTok" };
+  assert.equal(runtime.validateCreativeDirection(direction("A", { openingVisual: { subject: "手机", setup: "走路时", action: "手机意外从手中滑落", visibleChangeOrQuestion: "用户赶紧捡起手机" } }), input).some(item => item.type === "feasibility"), false);
+  assert.ok(runtime.validateCreativeDirection(direction("B", { contentMechanism: "故意让贴膜后的手机跌落，测试产品保护效果" }), input).some(item => item.type === "feasibility" && item.message === "Unsafe destructive product proof"));
+});
+
 test("unsupported product capability and result are independently rejected", () => {
   const result = grounding.validateCreativeDirectionProductGrounding(direction("A", { hookLine: "贴膜后手机摔落，屏幕完好无损" }), context);
   assert.ok(result.some(item => item.code === "unsupported_product_result" && item.capabilityFamily === "impact_protection"));

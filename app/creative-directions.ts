@@ -216,6 +216,7 @@ export function validateCreativeDirection(item: CreativeDirectionCandidate, inpu
   const measured = [...text.matchAll(/\b\d+(?:[.,]\d+)?\s*(?:seconds?|minutes?|hours?|secs?|mins?)\b|\d+(?:[.,]\d+)?\s*(?:秒|分钟|小时)/giu)].map((match) => match[0]);
   for (const claim of measured) if (!normalizedTruth.includes(normalize(claim))) issues.push({ candidateId: item.id, type: "truth", ruleFamily: "measured_claim", ruleCode: "unsupported_duration_measurement", diagnosticPath: uniqueDiagnosticPath(item, (fieldText) => fieldText.includes(claim)), message: `Unsupported measured claim:${claim}` });
   if (/(?:真实?实验室|专业实验室认证|explos|爆炸|火烧|明火|高空抛|斧头|电钻|axe|drill|open flame)/iu.test(text)) issues.push({ candidateId: item.id, type: "feasibility", message: "Unsafe or unavailable production requirement" });
+  if (/(?:故意|测试|试试|验证|证明|演示|模拟).{0,24}(?:摔落|跌落|砸|撞击|碾压)|(?:摔落|跌落|砸|撞击|碾压).{0,24}(?:测试|实验|验证|证明)/iu.test(text)) issues.push({ candidateId: item.id, type: "feasibility", message: "Unsafe destructive product proof" });
   if (/(?:名人|明星|医生出镜|专家出镜|celebrity|doctor appears|expert appears)/iu.test(text)) issues.push({ candidateId: item.id, type: "feasibility", message: "Requires an unavailable third party" });
   for (const recent of input.recentCreativeHistory || []) {
     const duplicateHook = recent.hook && similarity(item.hookLine, recent.hook) >= .72;

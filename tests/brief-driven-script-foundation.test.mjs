@@ -223,6 +223,18 @@ test("consumer-facing assertions reject prohibited, high-risk, unsupported truth
   assert.ok(issueCodes(api.validateScriptDraftDeterministically(input(), numeric)).includes("unsupported_numeric_claim"));
 });
 
+test("Script reuses category-neutral product result grounding across every consumer surface", () => {
+  const unsafe = draft({
+    hook: { line: "贴膜后手机摔落，屏幕完好无损", openingVisualExecution: "手机意外滑落。" },
+    scenes: draft().scenes.map((scene, index) => index === 3 ? { ...scene, dialogue: "看，膜没事，屏幕也没事。", visual: "捡起手机，屏幕没有碎裂。" } : scene),
+    fullNarration: "贴膜后手机摔落，屏幕完好无损。看，膜没事，屏幕也没事。",
+  });
+  const issues = api.validateScriptDraftDeterministically(input(), unsafe);
+  assert.ok(issues.some((item) => item.code === "unsupported_product_truth" && item.ruleFamily === "product_claim_grounding" && item.ruleCode === "unsupported_product_result" && item.path === "hook.line"));
+  assert.ok(issues.some((item) => item.path === "scenes.3.visual"));
+  assert.ok(issues.some((item) => item.path === "fullNarration"));
+});
+
 test("StructuredScript adapter preserves Director-compatible scenes and injects trusted Brief lineage", () => {
   const sourceDraft = draft();
   sourceDraft.creativeAngle = "provider override";

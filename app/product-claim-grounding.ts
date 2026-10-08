@@ -14,7 +14,7 @@ export type ProductClaimGroundingIssue = {
   capabilityFamily: string;
 };
 
-type AssertionSurface = { path: string; text: string };
+export type ProductClaimAssertionSurface = { path: string; text: string };
 type CapabilityFamily = { id: string; truth: RegExp; assertion: RegExp };
 
 // These are cross-category concepts, not category-to-creativity mappings. They
@@ -43,7 +43,7 @@ const DURABLE_OUTCOME = /(?:效果|结果|状态|表面|外观|屏幕|皮肤|睫
 const COMPARISON_SUBJECT = /(?:普通|一般|其他|同类|传统|竞品|对照组|常规|generic|ordinary|other|competing|competitor|conventional)/iu;
 const COMPARISON_CONCLUSION = /(?:一定|必然|明显|显著|更(?:好|差|强|弱|快|慢|干净|顺滑|持久|有效)|不如|优于|胜过|超越|表现为|(?:散开|滑落|残留|消失|保持|清除|减少|增加).{0,16}(?:而|但|相比|本产品|本品|这款)|(?:而|但|相比|本产品|本品|这款).{0,16}(?:散开|滑落|残留|消失|保持|清除|减少|增加)|always|definitely|clearly|better|worse|outperform)/iu;
 const COMPARISON_MECHANISM_ONLY = /(?:A\s*\/\s*B|并排|对照|对比).{0,16}(?:画面|镜头|演示|观察|测试|展示)/iu;
-const STRONG_OBSERVABLE_OUTCOME = /(?:不|无|零).{0,3}(?:痕|残留|污渍|指纹|问题|损伤)|(?:全部|彻底|始终|必然|一定).{0,10}(?:消失|滑落|清除|保持|有效)/iu;
+const STRONG_OBSERVABLE_OUTCOME = /(?:不|无|零|没有).{0,3}(?:痕|残留|污渍|指纹|问题|损伤|破损|碎裂|灰尘|气泡|歪斜|偏移)|(?:全部|彻底|始终|必然|一定).{0,10}(?:消失|滑落|清除|保持|有效)/iu;
 
 export type CreativeClaimScope = "scenario" | "visual_metaphor" | "product_capability" | "product_result" | "duration_claim" | "comparative_claim" | "numeric_claim";
 
@@ -57,7 +57,7 @@ export function classifyCreativeClaimScope(text: string): CreativeClaimScope {
   return "scenario";
 }
 
-export function collectCreativeDirectionAssertionSurface(direction: CreativeDirectionCandidate): AssertionSurface[] {
+export function collectCreativeDirectionAssertionSurface(direction: CreativeDirectionCandidate): ProductClaimAssertionSurface[] {
   return [
     { path: "creativeAngle", text: direction.creativeAngle },
     { path: "contentMechanism", text: direction.contentMechanism },
@@ -77,13 +77,13 @@ function canonicalTruth(context: CanonicalProductContext) {
     .filter(Boolean).join("；");
 }
 
-export function validateCreativeDirectionProductGrounding(
-  direction: CreativeDirectionCandidate,
+export function validateProductClaimSurfaces(
+  surfaces: ProductClaimAssertionSurface[],
   context: CanonicalProductContext,
 ): ProductClaimGroundingIssue[] {
   const truth = canonicalTruth(context);
   const issues: ProductClaimGroundingIssue[] = [];
-  for (const surface of collectCreativeDirectionAssertionSurface(direction)) {
+  for (const surface of surfaces.filter((item) => item.text.trim())) {
     const scope = classifyCreativeClaimScope(surface.text);
     const matchingFamily = CAPABILITY_FAMILIES.find((family) => family.assertion.test(surface.text));
     const familyId = matchingFamily?.id || "cross_category_claim_scope";
@@ -115,4 +115,11 @@ export function validateCreativeDirectionProductGrounding(
     }
   }
   return issues.filter((issue, index, all) => all.findIndex((item) => item.code === issue.code && item.path === issue.path && item.capabilityFamily === issue.capabilityFamily) === index);
+}
+
+export function validateCreativeDirectionProductGrounding(
+  direction: CreativeDirectionCandidate,
+  context: CanonicalProductContext,
+): ProductClaimGroundingIssue[] {
+  return validateProductClaimSurfaces(collectCreativeDirectionAssertionSurface(direction), context);
 }

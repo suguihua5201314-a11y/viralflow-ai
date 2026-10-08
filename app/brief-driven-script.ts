@@ -7,6 +7,7 @@ import type { StructuredScript } from "./script-generation";
 import { bindScriptToCreativeBrief, ensureScriptRevision } from "./script-foundation";
 import { normalizeLanguageIdentity } from "./language-guard";
 import { resolveCreationLanguageContext, validateInternalCreativeLanguage, type CreationLanguageContext } from "./creation-language-context";
+import { validateProductClaimSurfaces } from "./product-claim-grounding";
 
 export type ScriptWriterInput = {
   projectId: string;
@@ -344,7 +345,8 @@ export function validateScriptDraftDeterministically(input: ScriptWriterInput, d
   });
   const banned = split(input.productContext.productKnowledge?.bannedWords);
   const factText = JSON.stringify(input.productContext).toLowerCase().replace(/\s/g, "");
-  for (const assertion of collectScriptAssertionSurface(draft)) {
+  const assertionSurface = collectScriptAssertionSurface(draft);
+  for (const assertion of assertionSurface) {
     for (const term of banned) if (assertion.text.toLowerCase().includes(term.toLowerCase())) issues.push(issue("prohibited_claim", "truth", validator, assertion.path));
     for (const hit of checkCompliance(assertion.text)) if (hit.level === "高") issues.push(issue("high_risk_compliance", "compliance", validator, assertion.path));
     for (const claim of assertion.text.match(/\d+(?:[.,]\d+)?\s*(?:%|°|mm\b|cm\b|mah\b|w\b)/gi) || []) {
@@ -355,6 +357,13 @@ export function validateScriptDraftDeterministically(input: ScriptWriterInput, d
       if (violation.ruleFamily === "product_forbidden_expression" || violation.ruleFamily === "numeric_parameter") continue;
       issues.push({ ...issue("unsupported_product_truth", "truth", validator, assertion.path), ruleFamily: violation.ruleFamily, ruleCode: violation.ruleCode });
     }
+  }
+  for (const groundingIssue of validateProductClaimSurfaces(assertionSurface, input.productContext)) {
+    issues.push({
+      ...issue("unsupported_product_truth", "truth", validator, groundingIssue.path),
+      ruleFamily: "product_claim_grounding",
+      ruleCode: groundingIssue.code,
+    });
   }
   return issues.filter((item, index, all) => index === all.findIndex((candidate) => candidate.code === item.code && candidate.stage === item.stage && candidate.path === item.path && candidate.ruleFamily === item.ruleFamily && candidate.ruleCode === item.ruleCode));
 }

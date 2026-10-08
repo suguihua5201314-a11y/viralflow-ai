@@ -425,6 +425,18 @@ test("truth-aware repair preserves multiple commercial rule identities on one pa
   assert.equal(repair.ruleGuidance.length, 2);
 });
 
+test("unsupported product result repair receives category-neutral grounding guidance", () => {
+  const messages = runtime.buildBriefDrivenWriterMessages(input(), [{
+    code: "unsupported_product_truth", stage: "truth", validator: "validateScriptDraftDeterministically",
+    path: "scenes.3.dialogue", ruleFamily: "product_claim_grounding", ruleCode: "unsupported_product_result",
+  }]);
+  const payload = JSON.parse(messages[1].content);
+  assert.equal(payload.repair.issues[0].ruleFamily, "product_claim_grounding");
+  assert.equal(payload.repair.issues[0].ruleCode, "unsupported_product_result");
+  assert.match(payload.repair.ruleGuidance.join(" "), /Remove the unsupported outcome/);
+  assert.match(payload.repair.instruction, /do not relocate/);
+});
+
 test("relocating an unsupported promotion fails full validation without another repair", async () => {
   const initial = draft();
   initial.scenes[4].visual = "画面展示买一送一。";

@@ -187,6 +187,11 @@ export const BRIEF_DRIVEN_WRITER_QUALITY_BAR = {
 const WRITER_TRUTH_REPAIR_GUIDANCE: Record<string, string> = {
   unsupported_promotion: "Remove or rewrite the unsupported promotion assertion. Do not introduce a discount, coupon, bundle promotion, percentage discount, half-price offer, or buy-one-get-one claim unless it is explicitly supported by CANONICAL PRODUCT TRUTH.",
   unsupported_gift_or_delivery: "Remove or rewrite the unsupported gift or delivery assertion. Do not introduce a gift, free offer, free shipping, or delivery promise unless it is explicitly supported by CANONICAL PRODUCT TRUTH.",
+  unsupported_product_capability: "Remove the unsupported capability or replace it only with a capability explicitly stated in CANONICAL PRODUCT TRUTH. A scenario does not prove a product capability.",
+  unsupported_product_result: "Remove the unsupported outcome. Do not claim that the product caused damage prevention, a perfect result, or a visible change unless that exact result scope is supported by CANONICAL PRODUCT TRUTH.",
+  unsupported_duration_claim: "Remove the unsupported duration. Product Truth that describes a feature does not authorize an all-day, long-lasting, or fixed-duration result.",
+  unsupported_comparative_claim: "Remove the unsupported competitor fact or superiority conclusion. A visual comparison format does not authorize claims about another product's performance.",
+  claim_exceeds_supported_scope: "Narrow the assertion to the exact supported scope. Do not turn assistance, reduction, compatibility, or a surface property into an absolute or guaranteed result.",
 };
 
 function truthRepairGuidance(issues: ScriptWriterValidationIssue[]) {
