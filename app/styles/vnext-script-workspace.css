@@ -262,6 +262,7 @@
 .final-script-scenes p { margin: 3px 0 12px; }
 .final-script-actions { display: flex; justify-content: flex-end; flex-wrap: wrap; gap: 10px; }
 .final-script-actions .vf-button { margin-left: auto; }
+.final-script-actions button:disabled { cursor: wait; opacity: .58; }
 .final-script-error { padding: 20px; border-color: #f0b8b8; }
 .final-script-error h2 { margin: 0 0 14px; font-size: 16px; }
 .final-script-error>div { display: flex; gap: 8px; }

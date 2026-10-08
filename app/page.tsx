@@ -605,6 +605,7 @@ export default function Home() {
   }
   function update(key: keyof typeof form, value: string) { if(key==="product")updateProjectMemory({}, {product:value}); setForm(prev => {const next={...prev,[key]:value};saveWorkspaceSnapshot({form:next});return next;}); }
   async function generateFinalScript(){
+    if(activeFinalScriptRequestId.current)return;
     const clientCorrelationId=createFinalScriptClientCorrelationId();
     const qualityTraceId=createQualityTraceId();
     emitFinalScriptClientEvent({event:"script_generation_clicked",correlationId:clientCorrelationId});

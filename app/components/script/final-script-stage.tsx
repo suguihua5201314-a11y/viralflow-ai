@@ -27,10 +27,14 @@ const progressCopy: Partial<Record<FinalScriptStageStatus, string>> = {
   complete: "脚本已完成",
 };
 
+export function isFinalScriptStageBusy(status: FinalScriptStageStatus) {
+  return status === "writer" || status === "critic" || status === "rewrite";
+}
+
 export default function FinalScriptStage({ brief, script, status, error, diagnostic, aiSummary, rewritten, onGenerate, onReturnToCreative, onEdit, onAiModify, onDirector }: Props) {
-  const busy = status === "writer" || status === "critic" || status === "rewrite";
+  const busy = isFinalScriptStageBusy(status);
   if (!brief) return <section className="final-script-stage final-script-empty"><span>03 脚本</span><h1>请先确认创意方向</h1><p>脚本会基于已验证的创意方案生成，不需要重新填写商品或市场信息。</p><button className="vf-button vf-button-primary" type="button" onClick={onReturnToCreative}>返回创意</button></section>;
-  return <section className="final-script-stage" aria-label="最终脚本">
+  return <section className="final-script-stage" aria-label="最终脚本" aria-busy={busy}>
     <header className="final-script-hero">
       <div><span>03 脚本</span><h1>最终要拍什么、怎么说</h1><p>系统会基于已确认的创意生成、检查并在需要时自动优化一次。</p></div>
       <button type="button" onClick={onReturnToCreative}>返回修改创意</button>
@@ -52,7 +56,7 @@ export default function FinalScriptStage({ brief, script, status, error, diagnos
         <section><h3>完整口播</h3><p>{script.narration}</p></section>
         {script.cta && <section><h3>CTA</h3><p>{script.cta}</p></section>}
       </article>
-      <div className="final-script-actions"><button type="button" onClick={onEdit}>修改</button><button type="button" onClick={onAiModify}>AI 修改</button><button type="button" onClick={onGenerate}>重新生成</button><button className="vf-button vf-button-primary" type="button" onClick={onDirector}>确认脚本并进入导演</button></div>
+      <div className="final-script-actions"><button type="button" disabled={busy} onClick={onEdit}>修改</button><button type="button" disabled={busy} onClick={onAiModify}>AI 修改</button><button type="button" disabled={busy} onClick={onGenerate}>{busy ? progressCopy[status] : "重新生成"}</button><button className="vf-button vf-button-primary" type="button" disabled={busy} onClick={onDirector}>确认脚本并进入导演</button></div>
     </>}
   </section>;
 }
