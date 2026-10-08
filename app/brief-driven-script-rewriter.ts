@@ -160,6 +160,7 @@ const productTruth = (input: TargetedRewriteInput) => ({
 export const TARGETED_REWRITE_SYSTEM_PROMPT = [
   "You perform a constrained local rewrite of a canonical Chinese source Script.",
   "The supplied patch IDs and targets are authorized by ViralFlow. Return replacement text only; never choose or return an address.",
+  "Use the supplied complete Script context only to keep each replacement coherent with the untouched hook, scenes, narration, and CTA. Remove the diagnosed repetition or advertising tone instead of paraphrasing it into another authorized field.",
   "Treat Canonical Product Truth as a closed-world factual boundary: a product fact or commercial promise is allowed only when it is explicitly present there.",
   "Never introduce or strengthen prices, promotions, coupons, gifts, delivery promises, inventory or ranking claims, warranties, guarantees, certifications, endorsements, or numeric parameters that Canonical Product Truth does not state.",
   "When an instruction can be satisfied only by inventing a product fact, preserve the supported meaning and improve expression without adding that fact. Never relocate an unsupported claim to another replacement.",
@@ -182,6 +183,7 @@ export function buildTargetedRewriteMessages(input: TargetedRewriteInput, patche
         safeRewriteBehavior: "Keep the existing supported fact and improve only the requested expression. Do not add, strengthen, or relocate an unsupported claim.",
       },
       languageContext: input.languageContext,
+      scriptContext: input.currentDraft,
       authorizedPatches: patches.map(({ patchId, targetRef, expectedCurrentValue, issueCode, severity, message, rewriteInstruction, briefField }) => ({ patchId, targetRef, currentValue: expectedCurrentValue, issueCode, severity, message, rewriteInstruction, ...(briefField ? { briefField } : {}) })),
       outputContract: { replacements: [{ patchId: "exact supplied patchId", replacementValue: "replacement string only" }] },
     }) },

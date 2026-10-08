@@ -283,6 +283,7 @@ export const SCRIPT_CRITIC_SYSTEM_PROMPT = [
   "Write every issue message, rewriteInstruction, and summary in Simplified Chinese. Review the Chinese source Script; do not evaluate future target-language localization quality.",
   "For targetRef, select one exact value from the supplied targetCatalog. Do not invent aliases, semantic synonyms, field names, or scene IDs.",
   "For briefField, use one exact value from the supplied allowedBriefFields list, or omit briefField when the issue is not tied to one locked Brief decision. Never invent aliases or alternate naming.",
+  "Script fields are independent canonical fields. If the same defect remains in a scene or hook field and in fullNarration, report each affected supplied targetRef separately; never assume a local patch automatically updates fullNarration.",
   "A pass requires no critical or major quality issue. Structural validity alone is not a pass: reject generic, repetitive, brochure-like, incoherent, unshootable, or weakly evidenced execution.",
   "Return exactly one JSON object containing verdict, at most 8 actionable issues, and an optional summary. Use only the supplied stable issue codes, severities, targets, and existing scene IDs.",
 ].join(" ");

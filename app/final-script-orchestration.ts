@@ -45,8 +45,8 @@ export type FinalScriptOrchestrationResult =
       sourceDraft: ScriptDraftV2;
       critique: ScriptCriticResult;
       rewritten: boolean;
-      calls: { writer: 1; critic: 1; rewrite: 0 | 1 };
-      metadata: { writer: FinalScriptWriterResult["metadata"]; critic: FinalScriptCriticResult["metadata"]; rewrite?: TargetedRewriteMetadata };
+      calls: { writer: 1; critic: 1 | 2; rewrite: 0 | 1 };
+      metadata: { writer: FinalScriptWriterResult["metadata"]; critic: FinalScriptCriticResult["metadata"]; rewrite?: TargetedRewriteMetadata; verificationCritic?: FinalScriptCriticResult["metadata"] };
     }
   | {
       status: "failure";
@@ -156,6 +156,22 @@ export async function orchestrateFinalScript(
   }
   const issues: ScriptWriterValidationIssue[] = validateScriptDraftDeterministically(input.writerInput, rewritten.draft);
   if (issues.length) return failure("final_validation", "final_validation_failed", calls, issues);
+  let verification: FinalScriptCriticResult;
+  try {
+    onProgress?.("critic");
+    calls.critic = 2;
+    verification = await clients.critique({
+      ...input.criticInput,
+      requestId: `${input.writerInput.requestId}:critic:verification`,
+      scriptDraft: rewritten.draft,
+      ...(input.provider ? { provider: input.provider } : {}),
+    });
+  } catch (error) {
+    return failure("final_validation", error instanceof Error ? error.message : "final_critic_failed", calls, safeErrorIssues(error));
+  }
+  if (verification.critique.verdict !== "pass" || verification.critique.issues.length > 0) {
+    return failure("final_validation", "final_critic_rejected", calls, verification.critique.issues.map((item) => ({ code: item.code, path: item.targetRef, stage: "critic" })));
+  }
   onProgress?.("complete");
-  return { status: "success", script: rewritten.script, draft: rewritten.draft, sourceDraft: writer.draft, critique: critic.critique, rewritten: true, calls: { writer: 1, critic: 1, rewrite: 1 }, metadata: { writer: writer.metadata, critic: critic.metadata, rewrite: rewritten.metadata } };
+  return { status: "success", script: rewritten.script, draft: rewritten.draft, sourceDraft: writer.draft, critique: verification.critique, rewritten: true, calls: { writer: 1, critic: 2, rewrite: 1 }, metadata: { writer: writer.metadata, critic: critic.metadata, rewrite: rewritten.metadata, verificationCritic: verification.metadata } };
 }

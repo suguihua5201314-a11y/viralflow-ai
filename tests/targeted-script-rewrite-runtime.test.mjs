@@ -56,6 +56,9 @@ test("rewrite prompt treats Product Truth as a closed-world boundary without add
   assert.deepEqual(payload.productTruthPolicy.prohibitedUnlessExplicitlySupported, ["price", "promotion", "coupon", "gift", "free shipping or delivery", "inventory or ranking", "warranty or guarantee", "certification or endorsement", "numeric parameter"]);
   assert.match(payload.productTruthPolicy.safeRewriteBehavior, /Do not add, strengthen, or relocate an unsupported claim/);
   assert.match(messages[0].content, /Never relocate an unsupported claim/);
+  assert.deepEqual(payload.scriptContext, input.currentDraft);
+  assert.match(messages[0].content, /complete Script context/);
+  assert.match(messages[0].content, /repetition or advertising tone/);
   assert.equal(runtime.TARGETED_REWRITE_BUDGET.maximumProviderAttempts, 1);
 });
 

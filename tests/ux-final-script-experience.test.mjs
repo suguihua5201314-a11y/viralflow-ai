@@ -37,27 +37,27 @@ test("bounded flow calls Writer and Critic once, and skips rewrite when Critic a
 });
 
 test("authorized Critic issues cause one atomic rewrite and preserve Revision A", async () => {
-  const input = setup(); const source = structuredClone(input.script); let rewriteInput;
+  const input = setup(); const source = structuredClone(input.script); let rewriteInput; let criticCalls = 0;
   const nextDraft = draft({ hook: { ...draft().hook, line: "先看这个安装步骤。" } });
   const nextScript = foundation.adaptScriptDraftToStructuredScript(input.writerInput, nextDraft, "script-revision-b");
   const result = await orchestration.orchestrateFinalScript(input, {
     write: async () => ({ script: input.script, draft: input.value, metadata }),
-    critique: async () => ({ critique: { verdict: "needs_rewrite", issues: [issue({})], summary: "需要局部优化。" }, metadata }),
+    critique: async () => ({ critique: ++criticCalls === 1 ? { verdict: "needs_rewrite", issues: [issue({})], summary: "需要局部优化。" } : pass, metadata }),
     rewrite: async value => { rewriteInput = value; return { script: nextScript, draft: nextDraft, metadata: { ...metadata, providerCalls: 1 } }; },
   });
-  assert.equal(result.status, "success"); assert.equal(result.rewritten, true); assert.deepEqual(result.calls, { writer: 1, critic: 1, rewrite: 1 });
+  assert.equal(result.status, "success"); assert.equal(result.rewritten, true); assert.deepEqual(result.calls, { writer: 1, critic: 2, rewrite: 1 });
   assert.equal(result.script.revisionId, "script-revision-b"); assert.deepEqual(input.script, source);
   assert.equal(rewriteInput.issues[0].targetRef, "HOOK_LINE"); assert.equal(rewriteInput.issues[0].expectedCurrentValue, input.value.hook.line);
 });
 
 test("multiple Critic issues for one canonical field become one atomic rewrite patch", async () => {
-  const input = setup(); let rewriteInput;
+  const input = setup(); let rewriteInput; let criticCalls = 0;
   const second = issue({ code: "ugc_advertising_tone", severity: "critical", message: "开头像广告。", rewriteInstruction: "保持事实并改成自然口语。" });
   const nextDraft = draft({ hook: { ...draft().hook, line: "先看这个安装步骤。" } });
   const nextScript = foundation.adaptScriptDraftToStructuredScript(input.writerInput, nextDraft, "script-revision-b");
   const result = await orchestration.orchestrateFinalScript(input, {
     write: async () => ({ script: input.script, draft: input.value, metadata }),
-    critique: async () => ({ critique: { verdict: "needs_rewrite", issues: [issue({}), second], summary: "同一开头有两个问题。" }, metadata }),
+    critique: async () => ({ critique: ++criticCalls === 1 ? { verdict: "needs_rewrite", issues: [issue({}), second], summary: "同一开头有两个问题。" } : pass, metadata }),
     rewrite: async value => { rewriteInput = value; return { script: nextScript, draft: nextDraft, metadata: { ...metadata, providerCalls: 1 } }; },
   });
   assert.equal(result.status, "success");
@@ -66,6 +66,23 @@ test("multiple Critic issues for one canonical field become one atomic rewrite p
   assert.equal(rewriteInput.issues[0].severity, "critical");
   assert.match(rewriteInput.issues[0].message, /开头不够直接。\n开头像广告。/);
   assert.match(rewriteInput.issues[0].rewriteInstruction, /只增强开头。\n保持事实并改成自然口语。/);
+});
+
+test("post-rewrite Critic rejects a structurally valid script when major quality defects remain", async () => {
+  const input = setup(); let criticCalls = 0;
+  const unchangedQualityIssue = issue({ code: "ugc_repetitive", targetRef: "FULL_NARRATION", target: { scope: "narration", field: "fullNarration" }, message: "完整口播仍重复卖点。", rewriteInstruction: "删去重复表达。", briefField: undefined }, "FULL_NARRATION");
+  const nextDraft = draft({ hook: { ...draft().hook, line: "先看这个安装步骤。" } });
+  const nextScript = foundation.adaptScriptDraftToStructuredScript(input.writerInput, nextDraft, "script-revision-b");
+  const result = await orchestration.orchestrateFinalScript(input, {
+    write: async () => ({ script: input.script, draft: input.value, metadata }),
+    critique: async () => ({ critique: ++criticCalls === 1 ? { verdict: "needs_rewrite", issues: [issue({})] } : { verdict: "needs_rewrite", issues: [unchangedQualityIssue] }, metadata }),
+    rewrite: async () => ({ script: nextScript, draft: nextDraft, metadata: { ...metadata, providerCalls: 1 } }),
+  });
+  assert.equal(result.status, "failure");
+  assert.equal(result.stage, "final_validation");
+  assert.equal(result.code, "final_critic_rejected");
+  assert.deepEqual(result.calls, { writer: 1, critic: 2, rewrite: 1 });
+  assert.equal("script" in result, false);
 });
 
 test("invalid Critic address fails safely before rewrite and cannot create a fake Final", async () => {
