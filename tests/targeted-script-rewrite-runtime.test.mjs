@@ -59,6 +59,8 @@ test("rewrite prompt treats Product Truth as a closed-world boundary without add
   assert.deepEqual(payload.scriptContext, input.currentDraft);
   assert.match(messages[0].content, /complete Script context/);
   assert.match(messages[0].content, /repetition or advertising tone/);
+  assert.match(payload.editorialPolicy.singleIdea, /one primary visible proof/);
+  assert.match(payload.editorialPolicy.commerce, /locked CTA explicitly requires/);
   assert.equal(runtime.TARGETED_REWRITE_BUDGET.maximumProviderAttempts, 1);
 });
 

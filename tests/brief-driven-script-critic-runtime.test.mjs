@@ -420,7 +420,14 @@ test("prompt is Brief-aware, category-neutral, bounded, and never asks for rewri
   assert.match(payload.issueCodeCatalog.evidence_dialogue_mismatch, /visible evidence/);
   assert.match(payload.issueCodeCatalog.scene_redundancy, /repeats/);
   assert.match(payload.issueCodeCatalog.cta_too_hard, /abrupt/);
-  assert.equal(payload.qualityRubric.length, 6);
+  assert.match(payload.issueCodeCatalog.feature_dumping, /several supported facts or offers/);
+  assert.match(payload.issueCodeCatalog.scene_field_redundancy, /paraphrase one another/);
+  assert.match(payload.issueCodeCatalog.generic_hook_template, /interchangeable/);
+  assert.match(payload.issueCodeCatalog.proof_strategy_dilution, /adds or repeats demonstrations/);
+  assert.match(payload.issueCodeCatalog.cta_unmotivated_offer, /not required by the locked CTA Direction/);
+  assert.match(payload.editorialPolicy.factSelection, /permission, not a checklist/);
+  assert.match(payload.editorialPolicy.editorAcceptance, /an editor can hand the script/);
+  assert.equal(payload.qualityRubric.length, 9);
   assert.match(messages[0].content, /do not rewrite/i);
   assert.match(messages[0].content, /do not score/i);
   assert.match(messages[0].content, /Structural validity alone is not a pass/);

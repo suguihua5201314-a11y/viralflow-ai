@@ -12,6 +12,7 @@ import {
 import type { StructuredScript } from "./script-generation";
 import type { ProviderErrorType, ProviderId } from "./provider-types";
 import { normalizeMarketIdentity, parseMarketIdentities } from "./market-identity";
+import { SCRIPT_EDITORIAL_QUALITY_POLICY } from "./script-editorial-policy";
 
 export type BriefDrivenWriterProviderRequest = {
   messages: Array<{ role: "system" | "user"; content: string }>;
@@ -223,6 +224,7 @@ export function buildBriefDrivenWriterMessages(input: ScriptWriterInput, repairI
       languageContext,
       expressionPreferences: input.preferences || {},
       qualityBar: BRIEF_DRIVEN_WRITER_QUALITY_BAR,
+      editorialPolicy: SCRIPT_EDITORIAL_QUALITY_POLICY,
       outputContract: requiredShape,
       ...(repair ? { repair } : {}),
     }) },

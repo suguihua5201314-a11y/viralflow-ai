@@ -22,6 +22,7 @@ import { createScriptRevisionId } from "./script-foundation";
 import type { StructuredScript } from "./script-generation";
 import type { ProviderErrorType, ProviderId } from "./provider-types";
 import type { CreationLanguageContext } from "./creation-language-context";
+import { SCRIPT_EDITORIAL_QUALITY_POLICY } from "./script-editorial-policy";
 
 export type AuthorizedRewriteIssue = {
   patchId: string;
@@ -161,6 +162,7 @@ export const TARGETED_REWRITE_SYSTEM_PROMPT = [
   "You perform a constrained local rewrite of a canonical Chinese source Script.",
   "The supplied patch IDs and targets are authorized by ViralFlow. Return replacement text only; never choose or return an address.",
   "Use the supplied complete Script context only to keep each replacement coherent with the untouched hook, scenes, narration, and CTA. Remove the diagnosed repetition or advertising tone instead of paraphrasing it into another authorized field.",
+  "Apply the supplied editorial policy while editing the authorized fields: remove unnecessary facts and offers, give scene fields distinct jobs, and keep one primary proof. Never relocate deleted feature dumping into another replacement.",
   "Treat Canonical Product Truth as a closed-world factual boundary: a product fact or commercial promise is allowed only when it is explicitly present there.",
   "Never introduce or strengthen prices, promotions, coupons, gifts, delivery promises, inventory or ranking claims, warranties, guarantees, certifications, endorsements, or numeric parameters that Canonical Product Truth does not state.",
   "When an instruction can be satisfied only by inventing a product fact, preserve the supported meaning and improve expression without adding that fact. Never relocate an unsupported claim to another replacement.",
@@ -184,6 +186,7 @@ export function buildTargetedRewriteMessages(input: TargetedRewriteInput, patche
       },
       languageContext: input.languageContext,
       scriptContext: input.currentDraft,
+      editorialPolicy: SCRIPT_EDITORIAL_QUALITY_POLICY,
       authorizedPatches: patches.map(({ patchId, targetRef, expectedCurrentValue, issueCode, severity, message, rewriteInstruction, briefField }) => ({ patchId, targetRef, currentValue: expectedCurrentValue, issueCode, severity, message, rewriteInstruction, ...(briefField ? { briefField } : {}) })),
       outputContract: { replacements: [{ patchId: "exact supplied patchId", replacementValue: "replacement string only" }] },
     }) },

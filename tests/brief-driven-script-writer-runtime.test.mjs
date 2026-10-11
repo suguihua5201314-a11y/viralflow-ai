@@ -133,6 +133,10 @@ test("prompt has layered locked Brief, canonical truth, preferences and output c
   assert.match(payload.qualityBar.spokenLanguage, /brochure language/);
   assert.match(payload.qualityBar.evidence, /must not upgrade/);
   assert.match(payload.qualityBar.cta, /Avoid abrupt sales pressure/);
+  assert.match(payload.editorialPolicy.singleIdea, /one primary visible proof/);
+  assert.match(payload.editorialPolicy.factSelection, /permission, not a checklist/);
+  assert.match(payload.editorialPolicy.fieldRoles, /Do not paraphrase/);
+  assert.match(payload.editorialPolicy.commerce, /locked CTA explicitly requires/);
   assert.equal(payload.outputContract.scenes[0].purpose, "hook | context | product | evidence | cta");
   assert.match(messages[0].content, /creative strategy has already been decided/i);
   assert.doesNotMatch(messages.map((item) => item.content).join("\n"), /buildCreativeConcepts|QualityCreativeConcept|choose (?:a |the )?creative angle|choose (?:an |the )?evidence strategy|choose (?:a |the )?CTA strategy/i);

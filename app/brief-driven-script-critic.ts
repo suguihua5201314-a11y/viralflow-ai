@@ -17,6 +17,7 @@ import type { CreativeBriefV2 } from "./creative-contract";
 import type { CanonicalProductContext } from "./product-context";
 import type { ProviderErrorType, ProviderId } from "./provider-types";
 import { validateInternalCreativeLanguage, type CreationLanguageContext } from "./creation-language-context";
+import { SCRIPT_EDITORIAL_QUALITY_POLICY } from "./script-editorial-policy";
 
 export { CRITIC_BRIEF_FIELD_VALUES, CRITIC_ISSUE_CODE_VALUES, CRITIC_TARGET_SCHEMA } from "./brief-driven-script";
 
@@ -285,6 +286,9 @@ export const SCRIPT_CRITIC_SYSTEM_PROMPT = [
   "For briefField, use one exact value from the supplied allowedBriefFields list, or omit briefField when the issue is not tied to one locked Brief decision. Never invent aliases or alternate naming.",
   "Script fields are independent canonical fields. If the same defect remains in a scene or hook field and in fullNarration, report each affected supplied targetRef separately; never assume a local patch automatically updates fullNarration.",
   "A pass requires no critical or major quality issue. Structural validity alone is not a pass: reject generic, repetitive, brochure-like, incoherent, unshootable, or weakly evidenced execution.",
+  "Product Truth is permission to use a fact, not a requirement to mention it. Reject a script that dumps supported features, parameters, bundles, gifts, or offers instead of selecting the few facts needed by the locked direction.",
+  "Treat visual, action, dialogue, and evidenceRole as different jobs. If they restate the same beat, diagnose scene_field_redundancy at every field that needs a local correction.",
+  "Treat feature dumping, repeated scene jobs, generic hook templates, diluted proof, and an offer not motivated by the locked CTA as major issues, never as harmless polish.",
   "Return exactly one JSON object containing verdict, at most 8 actionable issues, and an optional summary. Use only the supplied stable issue codes, severities, targets, and existing scene IDs.",
 ].join(" ");
 
@@ -310,6 +314,11 @@ export const SCRIPT_CRITIC_ISSUE_CODE_CATALOG: Record<BriefAwareCriticIssueCode,
   scene_pacing_issue: "The scene order, duration, or information density makes the short-form script drag or rush.",
   cta_too_hard: "The CTA is abrupt, pushy, or disconnected from the preceding experience.",
   cta_unsupported_claim: "The CTA introduces a product or commercial claim not supported by canonical Product Truth.",
+  feature_dumping: "The script lists several supported facts or offers without a clear hierarchy around one primary proof.",
+  scene_field_redundancy: "Visual, action, dialogue, or evidenceRole paraphrase one another instead of contributing distinct information.",
+  generic_hook_template: "The hook uses an interchangeable problem, tutorial, or test template instead of the locked specific tension and opening visual.",
+  proof_strategy_dilution: "The script adds or repeats demonstrations that dilute the one locked Evidence Strategy.",
+  cta_unmotivated_offer: "The CTA adds a supported commercial detail that is not required by the locked CTA Direction or earned by the preceding proof.",
 };
 
 export const SCRIPT_CRITIC_QUALITY_RUBRIC = [
@@ -319,6 +328,9 @@ export const SCRIPT_CRITIC_QUALITY_RUBRIC = [
   "Judge evidence: the viewer must be able to see the proof action, and dialogue cannot claim more than the visual demonstrates or Product Truth supports.",
   "Judge filmability and coherence: visual, action, dialogue, duration, and scene order must be practically shootable and mutually consistent.",
   "Judge CTA as the natural final beat of the locked direction, without abrupt pressure or new claims.",
+  "Judge selection, not only factual support: fail feature dumping when the Script recites available truths instead of choosing one primary proof and only the supporting facts needed for it.",
+  "Judge field roles inside every scene: visual, action, dialogue, and evidenceRole must complement rather than paraphrase one another.",
+  "Judge commercial relevance: even a supported offer is a major issue when the locked CTA Direction does not call for it.",
 ] as const;
 
 const outputContract = {
@@ -423,6 +435,7 @@ export function buildScriptCriticMessages(input: ScriptCriticInput, repairIssues
       allowedBriefFields: CRITIC_BRIEF_FIELD_VALUES,
       issueCodeCatalog: SCRIPT_CRITIC_ISSUE_CODE_CATALOG,
       qualityRubric: SCRIPT_CRITIC_QUALITY_RUBRIC,
+      editorialPolicy: SCRIPT_EDITORIAL_QUALITY_POLICY,
       outputContract,
       ...(repair ? { repair } : {}),
     }) },

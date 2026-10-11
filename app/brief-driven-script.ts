@@ -122,6 +122,7 @@ export const CRITIC_ISSUE_CODE_VALUES = [
   "unsupported_causal_claim", "evidence_dialogue_mismatch", "unobservable_claim", "visual_action_mismatch",
   "weak_hook_execution", "hook_visual_disconnect", "scene_redundancy", "scene_filler", "scene_not_filmmable", "scene_pacing_issue",
   "cta_too_hard", "cta_unsupported_claim",
+  "feature_dumping", "scene_field_redundancy", "generic_hook_template", "proof_strategy_dilution", "cta_unmotivated_offer",
 ] as const;
 
 export type BriefAwareCriticIssueCode = typeof CRITIC_ISSUE_CODE_VALUES[number];
