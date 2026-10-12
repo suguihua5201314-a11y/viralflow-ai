@@ -81,6 +81,7 @@ export type BriefDrivenWriterObservation = {
     | "truth"
     | "compliance"
     | "numeric"
+    | "duration"
     | "repair_failed"
     | "completed";
   provider?: ProviderId | null;
@@ -150,7 +151,7 @@ const requiredShape = {
     visual: "what is visible",
     action: "shootable action, without camera or Director settings",
     dialogue: "spoken or on-screen expression",
-    durationHint: "optional positive number",
+    durationHint: "required positive number; the sum across all scenes must cover the requested runtime",
     evidenceRole: "Chinese description of this scene's evidence or narrative role",
     briefTrace: { executesOpeningVisual: "optional boolean", executesEvidence: "optional boolean", executesCTA: "optional boolean" },
   }],
@@ -159,7 +160,7 @@ const requiredShape = {
   workspaceLanguage: "zh-CN",
   targetLanguage: "future localization target copied from context",
   localizationStatus: "source",
-  totalDurationHint: "optional positive number",
+  totalDurationHint: "required positive number within durationRequirements.acceptableSeconds",
 };
 
 export const BRIEF_DRIVEN_WRITER_SYSTEM_PROMPT = [
@@ -175,15 +176,27 @@ export const BRIEF_DRIVEN_WRITER_SYSTEM_PROMPT = [
 ].join(" ");
 
 export const BRIEF_DRIVEN_WRITER_QUALITY_BAR = {
-  focus: "Build the script around one primary Product Truth and use at most two supporting truths when the locked Brief genuinely needs them. Do not recite a feature list.",
-  hook: "Open with the locked hook intent immediately. Use a concrete spoken observation, action, tension, or question; avoid brand slogans, generic hype, and empty rhetorical setup.",
+  focus: "Use one primary Product Truth and at most two supporting truths needed by the Brief. No feature list.",
+  hook: "Execute the locked hook with a concrete spoken observation, action or question; no slogans or hype.",
   progression: "Give every scene one distinct job and make each beat advance the same creative idea. Avoid repeated problem-product-demo-CTA beats or several scenes saying the same claim.",
   spokenLanguage: "Write short, speakable Chinese clauses that sound like one real creator. Avoid brochure language, stacked adjectives, formal transitions, and explaining what the viewer can already see.",
   evidence: "Turn the locked Evidence Strategy into a visible, shootable action. Dialogue may interpret visible evidence but must not upgrade it into a stronger result or unsupported product claim.",
-  coherence: "Keep visual, action, and dialogue causally consistent. fullNarration must read as one natural spoken arc rather than a disconnected list of scene lines.",
-  cta: "End with the locked CTA intent in a natural continuation of the scene. Avoid abrupt sales pressure or unsupported commercial promises.",
-  duration: "Respect the requested duration and spoken density. Prefer fewer purposeful lines over dense copy.",
+  coherence: "Keep fields causally consistent and narration one natural spoken arc.",
+  cta: "Continue the scene with the locked CTA. Avoid abrupt sales pressure.",
+  duration: "Fill the runtime with progression, explicit durations and natural speech.",
 } as const;
+
+export function scriptDurationRequirements(input: ScriptWriterInput) {
+  const targetSeconds = input.preferences?.durationSeconds || 30;
+  const densityRate = input.preferences?.spokenDensity === "dense" ? 3 : input.preferences?.spokenDensity === "light" ? 1.7 : 2.2;
+  return {
+    targetSeconds,
+    acceptableSeconds: { minimum: Math.max(5, Math.floor(targetSeconds * 0.8)), maximum: Math.ceil(targetSeconds * 1.2) },
+    minimumScenes: Math.max(3, Math.ceil(targetSeconds / 8)),
+    minimumSpokenUnits: Math.floor(targetSeconds * densityRate),
+    instruction: `>=${Math.max(3, Math.ceil(targetSeconds / 8))} scenes; each durationHint required; scene-duration sum and totalDurationHint each ${Math.max(5, Math.floor(targetSeconds * 0.8))}-${Math.ceil(targetSeconds * 1.2)}s; spoken units >=${Math.floor(targetSeconds * densityRate)}.`,
+  };
+}
 
 const WRITER_TRUTH_REPAIR_GUIDANCE: Record<string, string> = {
   unsupported_promotion: "Remove or rewrite the unsupported promotion assertion. Do not introduce a discount, coupon, bundle promotion, percentage discount, half-price offer, or buy-one-get-one claim unless it is explicitly supported by CANONICAL PRODUCT TRUTH.",
@@ -204,12 +217,16 @@ function truthRepairGuidance(issues: ScriptWriterValidationIssue[]) {
 export function buildBriefDrivenWriterMessages(input: ScriptWriterInput, repairIssues: ScriptWriterValidationIssue[] = []) {
   const languageContext = resolveScriptWriterLanguageContext(input);
   const truthGuidance = truthRepairGuidance(repairIssues);
+  const needsDurationRepair = repairIssues.some((item) => item.stage === "duration");
   const repair = repairIssues.length ? {
     mode: "repair",
     instruction: [
       "Return one corrected ScriptDraftV2. Fix only the listed output-contract, source-language, or claim-safety issues.",
+      "The corrected Draft must still satisfy the complete outputContract, durationRequirements, qualityBar, editorialPolicy, locked Creative Brief, and canonical Product Truth from this request, even when a requirement is not repeated in the issue list.",
+      "Keep all valid structural decisions stable: use the required scene coverage, provide every scene durationHint, keep totalDurationHint inside the acceptable range, and provide enough natural spoken content for the requested runtime.",
       "For internal_language_mismatch or language_mismatch, preserve scene IDs, scene structure, Brief decisions, meaning, evidence strategy, CTA intent, Product Truth, and lineage; re-express only the affected field in Simplified Chinese.",
       ...(truthGuidance.length ? ["For Product Truth issues, do not relocate, paraphrase, or reintroduce the same unsupported rule anywhere else in the Draft. Preserve every unrelated valid field and all scene IDs."] : []),
+      ...(needsDurationRepair ? ["For duration issues, expand purposeful scene progression and natural dialogue until durationRequirements are met. Do not pad with repetition, invent Product Truth, or change the locked creative direction."] : []),
       "Keep the same locked Brief and do not select a new strategy.",
     ].join(" "),
     issues: repairIssues.map(({ code, path, stage, ruleFamily, ruleCode }) => ({ code, ...(path ? { path } : {}), stage, ...(ruleFamily ? { ruleFamily } : {}), ...(ruleCode ? { ruleCode } : {}) })),
@@ -223,6 +240,10 @@ export function buildBriefDrivenWriterMessages(input: ScriptWriterInput, repairI
       canonicalProductTruth: canonicalProductTruth(input),
       languageContext,
       expressionPreferences: input.preferences || {},
+      durationRequirements: scriptDurationRequirements(input),
+      offerRule: input.productContext.productKnowledge?.offer?.trim()
+        ? "Use only the exact canonical offer."
+        : "No offer/promotion/gift/stock/delivery claims.",
       qualityBar: BRIEF_DRIVEN_WRITER_QUALITY_BAR,
       editorialPolicy: SCRIPT_EDITORIAL_QUALITY_POLICY,
       outputContract: requiredShape,
@@ -255,7 +276,7 @@ function validationObservationStage(issues: ScriptWriterValidationIssue[]): Brie
   if (stage === "draft_parse") return "draft_json_parse";
   if (stage === "draft_schema") return "draft_schema";
   if (stage === "structural_fidelity") return "draft_fidelity";
-  if (stage === "truth" || stage === "compliance" || stage === "numeric") return stage;
+  if (stage === "truth" || stage === "compliance" || stage === "numeric" || stage === "duration") return stage;
   return "draft_schema";
 }
 
@@ -292,13 +313,14 @@ export async function generateBriefDrivenScript(
   }
 
   let issues: ScriptWriterValidationIssue[] = [];
+  let timingBase:ScriptDraftV2|null=null;
   const validationDiagnostics: WriterProductTruthDiagnostic[] = [];
   for (let attempt = 0; attempt < BRIEF_DRIVEN_WRITER_BUDGET.maximumProviderAttempts; attempt++) {
     let response: BriefDrivenWriterProviderResponse;
     try {
       response = await provider({
         messages: buildBriefDrivenWriterMessages(input, repairIssuesWithoutDiagnosticDuplicates(issues)),
-        temperature: BRIEF_DRIVEN_WRITER_BUDGET.temperature,
+        temperature: attempt === 0 ? BRIEF_DRIVEN_WRITER_BUDGET.temperature : 0.2,
         topP: BRIEF_DRIVEN_WRITER_BUDGET.topP,
         maxTokens: BRIEF_DRIVEN_WRITER_BUDGET.maxTokens,
         timeoutMs: BRIEF_DRIVEN_WRITER_BUDGET.providerTimeoutMs,
@@ -314,6 +336,12 @@ export async function generateBriefDrivenScript(
     resultMetadata.model = response.model;
     resultMetadata.latencyMs = (resultMetadata.latencyMs || 0) + response.responseTimeMs;
     const parsed = parseScriptDraftV2(response.content, { requireCanonicalLanguage: true });
+    if(attempt===1&&parsed.value&&timingBase&&parsed.value.scenes.length===timingBase.scenes.length&&parsed.value.scenes.every((scene,index)=>scene.id===timingBase!.scenes[index].id)){
+      // Timing already validated on attempt 0 is owned by the original plan.
+      // Restore only timing, then validate all repaired content normally.
+      parsed.value.totalDurationHint=timingBase.totalDurationHint;
+      parsed.value.scenes.forEach((scene,index)=>{scene.durationHint=timingBase!.scenes[index].durationHint;});
+    }
     issues = parsed.value ? validateScriptDraftDeterministically(input, parsed.value) : parsed.issues;
     try { options.captureAttempt?.({ attempt: attempt as 0 | 1, output: response.content, parsedDraft: parsed.value, validation: issues, accepted: Boolean(parsed.value && issues.length === 0) }); } catch {}
     if (parsed.value && issues.length === 0) {
@@ -329,6 +357,7 @@ export async function generateBriefDrivenScript(
     options.observe?.({ correlationId, attempt: attempt + 1, stage: validationObservationStage(issues), provider: response.providerUsed, model: response.model, latencyMs: response.responseTimeMs, repairAttempted: resultMetadata.repairAttempted, issueCount: issues.length, issues });
     if (attempt === 0) {
       resultMetadata.repairAttempted = true;
+      if(parsed.value&&!issues.some(item=>item.stage==="duration"))timingBase=structuredClone(parsed.value);
       continue;
     }
     resultMetadata.errorType = "repair_failed";

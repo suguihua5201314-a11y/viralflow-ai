@@ -54,9 +54,10 @@ export type FinalScriptOrchestrationResult =
       code: string;
       issues: Array<{ code: string; path?: string; stage?: string }>;
       calls: { writer: number; critic: number; rewrite: number };
+      message?: string;
     };
 
-const failure = (stage: FinalScriptFailureStage, code: string, calls: { writer: number; critic: number; rewrite: number }, issues: Array<{ code: string; path?: string; stage?: string }> = []): FinalScriptOrchestrationResult => ({ status: "failure", stage, code, issues, calls });
+const failure = (stage: FinalScriptFailureStage, code: string, calls: { writer: number; critic: number; rewrite: number }, issues: Array<{ code: string; path?: string; stage?: string }> = []): Extract<FinalScriptOrchestrationResult,{status:"failure"}> => ({ status: "failure", stage, code, issues, calls });
 const safeErrorIssues = (error: unknown) => {
   if (!error || typeof error !== "object" || !("validationIssue" in error)) return [];
   const value = (error as { validationIssue?: unknown }).validationIssue;
@@ -64,6 +65,10 @@ const safeErrorIssues = (error: unknown) => {
   const item = value as { code: string; path?: unknown; stage?: unknown };
   return [{ code: item.code, ...(typeof item.path === "string" ? { path: item.path } : {}), ...(typeof item.stage === "string" ? { stage: item.stage } : {}) }];
 };
+
+function criticAccepts(critique:ScriptCriticResult) {
+  return critique.verdict === "pass" && critique.issues.every(item=>item.severity === "minor" || item.severity === "low");
+}
 
 export function buildAuthorizedRewriteInput(
   input: FinalScriptOrchestrationInput,
@@ -130,16 +135,16 @@ export async function orchestrateFinalScript(
     onProgress?.("writer"); calls.writer = 1;
     writer = await clients.write({ ...input.writerInput, ...(input.provider ? { provider: input.provider } : {}) });
   } catch (error) {
-    return failure("writer", error instanceof Error ? error.message : "writer_failed", calls, safeErrorIssues(error));
+    return {...failure("writer", error instanceof Error ? error.message : "writer_failed", calls, safeErrorIssues(error)),message:error instanceof Error?error.message:"脚本生成失败。"};
   }
   let critic: FinalScriptCriticResult;
   try {
     onProgress?.("critic"); calls.critic = 1;
     critic = await clients.critique({ ...input.criticInput, requestId: `${input.writerInput.requestId}:critic`, scriptDraft: writer.draft, ...(input.provider ? { provider: input.provider } : {}) });
   } catch (error) {
-    return failure("critic", error instanceof Error ? error.message : "critic_failed", calls, safeErrorIssues(error));
+    return {...failure("critic", error instanceof Error ? error.message : "critic_failed", calls, safeErrorIssues(error)),message:error instanceof Error?error.message:"脚本已生成，但内容审核失败。"};
   }
-  if (critic.critique.verdict === "pass" && critic.critique.issues.length === 0) {
+  if (criticAccepts(critic.critique)) {
     const issues = validateScriptDraftDeterministically(input.writerInput, writer.draft);
     if (issues.length) return failure("final_validation", "final_validation_failed", calls, issues);
     onProgress?.("complete");
@@ -167,10 +172,10 @@ export async function orchestrateFinalScript(
       ...(input.provider ? { provider: input.provider } : {}),
     });
   } catch (error) {
-    return failure("final_validation", error instanceof Error ? error.message : "final_critic_failed", calls, safeErrorIssues(error));
+    return {...failure("final_validation", error instanceof Error ? error.message : "final_critic_failed", calls, safeErrorIssues(error)),message:error instanceof Error?error.message:"脚本已优化，但最终内容审核失败。"};
   }
-  if (verification.critique.verdict !== "pass" || verification.critique.issues.length > 0) {
-    return failure("final_validation", "final_critic_rejected", calls, verification.critique.issues.map((item) => ({ code: item.code, path: item.targetRef, stage: "critic" })));
+  if (!criticAccepts(verification.critique)) {
+    return {...failure("final_validation", "final_critic_rejected", calls, verification.critique.issues.map((item) => ({ code: item.code, path: item.targetRef, stage: "critic" }))), message: "脚本已生成并完成一次优化，但最终内容检查仍未通过：" + verification.critique.issues.slice(0,3).map(item=>item.message).join("；")};
   }
   onProgress?.("complete");
   return { status: "success", script: rewritten.script, draft: rewritten.draft, sourceDraft: writer.draft, critique: verification.critique, rewritten: true, calls: { writer: 1, critic: 2, rewrite: 1 }, metadata: { writer: writer.metadata, critic: critic.metadata, rewrite: rewritten.metadata, verificationCritic: verification.metadata } };

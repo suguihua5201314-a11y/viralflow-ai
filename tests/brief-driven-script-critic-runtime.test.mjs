@@ -421,11 +421,17 @@ test("prompt is Brief-aware, category-neutral, bounded, and never asks for rewri
   assert.match(payload.issueCodeCatalog.scene_redundancy, /repeats/);
   assert.match(payload.issueCodeCatalog.cta_too_hard, /abrupt/);
   assert.match(payload.issueCodeCatalog.feature_dumping, /several supported facts or offers/);
-  assert.match(payload.issueCodeCatalog.scene_field_redundancy, /paraphrase one another/);
+  assert.match(payload.issueCodeCatalog.scene_field_redundancy, /materially obscure execution/);
   assert.match(payload.issueCodeCatalog.generic_hook_template, /interchangeable/);
   assert.match(payload.issueCodeCatalog.proof_strategy_dilution, /adds or repeats demonstrations/);
   assert.match(payload.issueCodeCatalog.cta_unmotivated_offer, /not required by the locked CTA Direction/);
   assert.match(payload.editorialPolicy.factSelection, /permission, not a checklist/);
+  assert.match(messages[0].content,/Use pass for minor-only suggestions/);
+  assert.match(payload.issueCodeCatalog.scene_redundancy,/setup, procedure and final result are distinct/);
+  assert.match(payload.issueCodeCatalog.ugc_unnatural_dialogue,/Optional rewording is minor/);
+  assert.match(payload.editorialPolicy.fieldOverlap, /Shared subjects\/events are normal/);
+  assert.match(payload.editorialPolicy.fieldOverlap, /internal narrative metadata/);
+  assert.match(payload.editorialPolicy.redundancySeverity, /harmless overlap is minor or no issue/);
   assert.match(payload.editorialPolicy.editorAcceptance, /an editor can hand the script/);
   assert.equal(payload.qualityRubric.length, 9);
   assert.match(messages[0].content, /do not rewrite/i);

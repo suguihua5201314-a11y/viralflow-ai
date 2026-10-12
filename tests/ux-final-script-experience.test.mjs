@@ -36,6 +36,28 @@ test("bounded flow calls Writer and Critic once, and skips rewrite when Critic a
   assert.equal(result.script.revisionId, "script-revision-a"); assert.equal(result.rewritten, false);
 });
 
+test("pass with minor suggestions is accepted without an unnecessary rewrite", async () => {
+  const input=setup();
+  const result=await orchestration.orchestrateFinalScript(input,{
+    write:async()=>({script:input.script,draft:input.value,metadata}),
+    critique:async()=>({critique:{...pass,issues:[issue({severity:"minor"})]},metadata}),
+    rewrite:async()=>{throw new Error("minor suggestions must not force rewrite");},
+  });
+  assert.equal(result.status,"success");
+  assert.equal(result.calls.rewrite,0);
+});
+
+test("Critic timeout reports the audit failure without calling Writer again", async () => {
+  const input=setup();let writes=0;
+  const result=await orchestration.orchestrateFinalScript(input,{
+    write:async()=>{writes++;return {script:input.script,draft:input.value,metadata};},
+    critique:async()=>{throw new Error("脚本已生成，但内容审核等待模型返回结果超时。");},
+    rewrite:async()=>{throw new Error("must not rewrite");},
+  });
+  assert.equal(result.status,"failure");assert.equal(result.stage,"critic");
+  assert.match(result.message,/内容审核.*超时/);assert.equal(writes,1);assert.equal(result.calls.rewrite,0);
+});
+
 test("authorized Critic issues cause one atomic rewrite and preserve Revision A", async () => {
   const input = setup(); const source = structuredClone(input.script); let rewriteInput; let criticCalls = 0;
   const nextDraft = draft({ hook: { ...draft().hook, line: "先看这个安装步骤。" } });
@@ -48,6 +70,16 @@ test("authorized Critic issues cause one atomic rewrite and preserve Revision A"
   assert.equal(result.status, "success"); assert.equal(result.rewritten, true); assert.deepEqual(result.calls, { writer: 1, critic: 2, rewrite: 1 });
   assert.equal(result.script.revisionId, "script-revision-b"); assert.deepEqual(input.script, source);
   assert.equal(rewriteInput.issues[0].targetRef, "HOOK_LINE"); assert.equal(rewriteInput.issues[0].expectedCurrentValue, input.value.hook.line);
+});
+
+test("post-rewrite pass may retain minor suggestions without rejecting the final script", async () => {
+  const input=setup();let reviews=0;
+  const result=await orchestration.orchestrateFinalScript(input,{
+    write:async()=>({script:input.script,draft:input.value,metadata}),
+    critique:async()=>({critique:++reviews===1?{verdict:"needs_rewrite",issues:[issue({})]}:{...pass,issues:[issue({severity:"minor"})]},metadata}),
+    rewrite:async()=>({script:input.script,draft:input.value,metadata:{...metadata,providerCalls:1}}),
+  });
+  assert.equal(result.status,"success");assert.equal(result.rewritten,true);
 });
 
 test("multiple Critic issues for one canonical field become one atomic rewrite patch", async () => {
@@ -83,6 +115,7 @@ test("post-rewrite Critic rejects a structurally valid script when major quality
   assert.equal(result.code, "final_critic_rejected");
   assert.deepEqual(result.calls, { writer: 1, critic: 2, rewrite: 1 });
   assert.equal("script" in result, false);
+  assert.match(result.message,/完整口播仍重复卖点/);
 });
 
 test("invalid Critic address fails safely before rewrite and cannot create a fake Final", async () => {

@@ -300,6 +300,27 @@ test("malformed repair context is bounded and never exposed as a valid expansion
   assert.equal(parsed.structuralCandidate.candidate.list.length, 20);
 });
 
+test("Brief prompt declares safety array limits and gives an exact repair constraint", async () => {
+  const oversizedExpansion = {
+    ...expansion,
+    riskBoundaries: {
+      ...expansion.riskBoundaries,
+      prohibitedClaims: Array.from({ length: 13 }, (_, index) => `禁止声明 ${index + 1}`),
+    },
+  };
+  const prompts = [];
+  const result = await api.generateCreativeBrief(input, async request => {
+    prompts.push(JSON.parse(request.messages[1].content));
+    return { content: JSON.stringify({ expansion: oversizedExpansion }) };
+  });
+  assert.equal(result.status, "failure");
+  assert.equal(prompts.length, 2);
+  assert.equal(prompts[0].expansionContract.arrayLimits["riskBoundaries.prohibitedClaims"], 12);
+  assert.match(prompts[0].outputRules.join(" "), /at most 12 distinct items/);
+  assert.match(prompts[1].repairInstruction, /riskBoundaries\.prohibitedClaims must contain at most 12 items/);
+  assert.equal(prompts[1].repairIssues[0].code, "too_many_items");
+});
+
 test("validation issues are exposed only to Preview clients", () => {
   const issues = [{ code: "invalid_enum", path: "evidenceStrategy.type", stage: "expansion_schema", validator: "parseCreativeBriefExpansion" }];
   assert.deepEqual(api.validationIssuesForEnvironment(issues, "preview"), issues);

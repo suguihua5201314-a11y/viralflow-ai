@@ -38,6 +38,15 @@ test("every existing high-risk family exposes its stable rule code without chang
   }
 });
 
+test("ordinary production language is not mistaken for an absolute product promise", () => {
+  for (const text of ["第一视角记录贴膜过程", "第一次自己贴膜", "在一定角度下观察屏幕", "保持唯一变量进行画面对比"]) {
+    assert.equal(compliance.checkCompliance(text).some((hit) => hit.ruleFamily === "absolute_claim"), false, text);
+  }
+  for (const text of ["一定有效", "这是第一品牌", "唯一选择", "任何角度都能防窥"]) {
+    assert.equal(compliance.checkCompliance(text).some((hit) => hit.ruleFamily === "absolute_claim"), true, text);
+  }
+});
+
 test("truth diagnostics expose stable fact and measured identities with exact paths", () => {
   const fact = directions.validateCreativeDirection({ ...base, hookLine: "现在只要€9" }, input);
   assert.ok(fact.some((issue) => issue.type === "truth" && issue.ruleFamily === "commercial_claim" && issue.ruleCode === "unsupported_price" && issue.diagnosticPath === "hookLine"));

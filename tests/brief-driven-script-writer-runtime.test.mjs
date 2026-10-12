@@ -88,6 +88,24 @@ test("valid input reaches the mock Provider and returns a bound StructuredScript
   assert.equal(result.metadata.fallbackUsed, false);
 });
 
+test("Writer receives explicit duration coverage instead of a soft duration preference", () => {
+  const requirements = runtime.scriptDurationRequirements(input());
+  assert.equal(requirements.targetSeconds, 20);
+  assert.deepEqual(requirements.acceptableSeconds, { minimum: 16, maximum: 24 });
+  assert.equal(requirements.minimumScenes, 3);
+  assert.ok(requirements.minimumSpokenUnits >= 40);
+  const payload = JSON.parse(runtime.buildBriefDrivenWriterMessages(input())[1].content);
+  assert.deepEqual(payload.durationRequirements, requirements);
+});
+
+test("Writer contract makes duration planning mandatory and forbids unsupported promotions", () => {
+  const payload = JSON.parse(runtime.buildBriefDrivenWriterMessages(input())[1].content);
+  assert.match(payload.outputContract.scenes[0].durationHint, /required positive number/);
+  assert.match(payload.outputContract.totalDurationHint, /required positive number/);
+  assert.match(payload.durationRequirements.instruction, /scene-duration sum and totalDurationHint/);
+  assert.match(payload.offerRule, /No offer/);
+});
+
 test("Spanish, English and French targets all produce the same Chinese source contract", async () => {
   for (const targetLanguage of ["Spanish", "English", "French"]) {
     const languageContext = { workspaceLanguage: "zh-CN", targetLanguage, market: "Spain", platform: "TikTok" };
@@ -189,6 +207,57 @@ test("missing trace, invalid purpose and language mismatch share one constrained
     assert.equal(result.metadata.repairAttempted, true);
     assert.equal(calls, 2);
   }
+});
+
+test("a materially short draft receives one duration-specific repair", async () => {
+  const short = draft({
+    scenes: [
+      { ...draft().scenes[0], durationHint: 2 },
+      { ...draft().scenes[3], durationHint: 3 },
+      { ...draft().scenes[4], durationHint: 2 },
+    ],
+    fullNarration: "先看这个。完成操作。确认型号。",
+    totalDurationHint: 7,
+  });
+  const requests = [];
+  const result = await runtime.generateBriefDrivenScript(input(), async (request) => {
+    requests.push(request);
+    return response(requests.length === 1 ? short : draft());
+  });
+  assert.equal(result.status, "success");
+  assert.equal(result.metadata.repairAttempted, true);
+  assert.equal(requests.length, 2);
+  const repair = JSON.parse(requests[1].messages[1].content).repair;
+  assert.ok(repair.issues.some((item) => item.stage === "duration"));
+  assert.match(repair.instruction, /expand purposeful scene progression/i);
+  assert.match(repair.instruction, /Do not pad with repetition/i);
+});
+
+test("truth repair cannot shorten a valid timing plan with unchanged scene identities", async () => {
+  let calls=0;
+  const original=draft({cta:"现在半价。"});
+  const repaired=draft();repaired.totalDurationHint=5;repaired.scenes.forEach(scene=>{scene.durationHint=1;});
+  const result=await runtime.generateBriefDrivenScript(input(),async()=>response(++calls===1?original:repaired));
+  assert.equal(result.status,"success");
+  assert.equal(result.draft.totalDurationHint,original.totalDurationHint);
+  assert.deepEqual(result.draft.scenes.map(scene=>scene.durationHint),original.scenes.map(scene=>scene.durationHint));
+  assert.equal(calls,2);
+});
+
+test("every repair keeps the complete duration contract and uses lower randomness", async () => {
+  const requests = [];
+  let calls = 0;
+  const result = await runtime.generateBriefDrivenScript(input(), async request => {
+    requests.push(request);
+    calls += 1;
+    return response(calls === 1 ? draft({ cta: "现在半价，立即下单。" }) : draft({ cta: "确认适配型号后再决定。" }));
+  });
+  assert.equal(result.status, "success");
+  assert.equal(requests[0].temperature, runtime.BRIEF_DRIVEN_WRITER_BUDGET.temperature);
+  assert.equal(requests[1].temperature, 0.2);
+  const repair = JSON.parse(requests[1].messages[1].content).repair;
+  assert.match(repair.instruction, /complete outputContract, durationRequirements/);
+  assert.match(repair.instruction, /provide every scene durationHint/);
 });
 
 test("wrong source language receives one constrained repair and remains explicit when repair is still wrong", async () => {
@@ -461,14 +530,34 @@ test("generic repair issues retain the previous code, path and stage-only contra
   assert.doesNotMatch(repair.instruction, /do not relocate/i);
 });
 
-test("commercial validator characterization records current negation and production-instruction behavior", () => {
+test("commercial validator accepts explicit prohibitions without accepting actual offers", () => {
   const negated = draft({ cta: "不要承诺买一送一。" });
   const instruction = draft();
   instruction.scenes[4].visual = "画面中不要出现优惠券。";
   const negatedIssue = foundation.validateScriptDraftDeterministically(input(), negated).find((item) => item.path === "cta" && item.ruleCode === "unsupported_promotion");
   const instructionIssue = foundation.validateScriptDraftDeterministically(input(), instruction).find((item) => item.path === "scenes.4.visual" && item.ruleCode === "unsupported_promotion");
-  assert.ok(negatedIssue, "current regex treats a negated promotion phrase as a violation");
-  assert.ok(instructionIssue, "current regex treats a production instruction as a violation");
+  assert.equal(negatedIssue, undefined);
+  assert.equal(instructionIssue, undefined);
+  for (const cta of ["不要错过半价优惠。", "不要承诺优惠，但现在买一送一。", "没有优惠券，现在半价。", "立即领取免费赠品。"]){
+    assert.ok(foundation.validateScriptDraftDeterministically(input(), draft({cta})).some(item=>item.path==="cta"&&item.ruleFamily==="commercial_claim"),cta);
+  }
+});
+
+test("gift wording recognizes documented add-on offers but still rejects missing or prohibited offers", () => {
+  const giftDraft=draft();giftDraft.scenes[4].visual="展示产品包装，包含两片膜和赠品镜头保护膜。";
+  const giftIssues=value=>foundation.validateScriptDraftDeterministically(value,giftDraft).filter(item=>item.ruleCode==="unsupported_gift_or_delivery");
+  assert.equal(giftIssues(input()).length,1);
+  assert.equal(giftIssues(input({productContext:context("CrystalArmor",{offer:"现在下单加赠镜头保护膜"})})).length,0);
+  assert.equal(giftIssues(input({productContext:context("CrystalArmor",{offer:"不提供赠品"})})).length,1);
+});
+
+test("purchase advice is not a buy-get promotion while concrete commercial offers remain blocked", () => {
+  for(const cta of ["购买前确认型号，送给自己一份安心。", "确认型号后再决定是否购买。", "先看适配型号，再考虑购买。"]){
+    assert.equal(foundation.validateScriptDraftDeterministically(input(),draft({cta})).some(item=>item.path==="cta"&&item.ruleFamily==="commercial_claim"),false,cta);
+  }
+  for(const cta of ["现在买一送一。", "买两件送一件。", "购买即送礼品。", "下单加赠礼品。", "买手机送两片膜。", "现在半价。", "立即领取优惠券。"]){
+    assert.ok(foundation.validateScriptDraftDeterministically(input(),draft({cta})).some(item=>item.path==="cta"&&item.ruleFamily==="commercial_claim"),cta);
+  }
 });
 
 test("API route rejects incomplete input before any provider fetch", async () => {

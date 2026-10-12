@@ -68,6 +68,7 @@ test("supported qualitative truths pass without verbatim truth matching", () => 
 
 test("scope, numeric, and compliance validators remain separate", () => {
   assert.ok(grounding.validateCreativeDirectionProductGrounding(direction("A", { hookLine: "任何侧面角度都能防窥" }), context).some(item => item.code === "claim_exceeds_supported_scope"));
+  assert.equal(grounding.validateCreativeDirectionProductGrounding(direction("P", { hookLine: "在一定角度下观察防窥效果", contentMechanism: "第一视角展示防窥效果" }), context).some(item => item.code === "claim_exceeds_supported_scope"), false);
   const input = { projectId: "p", productContext: context, productContextFingerprint: fixture.CREATIVE_BRAIN_ACCEPTANCE_FINGERPRINT, productBinding: { projectProductName: profile.name, projectProductProfileId: profile.id }, market: "Spain", language: "Spanish", platform: "TikTok" };
   assert.ok(runtime.validateCreativeDirection(direction("N", { hookLine: "保证17秒完成安装" }), input).some(item => item.type === "truth"));
   assert.ok(runtime.validateCreativeDirection(direction("C", { hookLine: "100%防爆" }), input).some(item => item.type === "compliance"));

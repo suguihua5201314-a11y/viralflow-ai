@@ -121,6 +121,26 @@ const MAX_REPAIR_ARRAY_ITEMS = 20;
 const MAX_REPAIR_OBJECT_KEYS = 40;
 const MAX_REPAIR_DEPTH = 6;
 
+function repairInstructionForIssues(issues: CreativeBriefValidationIssue[]) {
+  const constraints = issues.flatMap((item) => {
+    if (item.code === "too_many_items" && item.path) {
+      return [`${item.path} must contain at most ${MAX_SAFETY_ITEMS} items. Keep the most important distinct items and remove the rest.`];
+    }
+    if (item.code === "text_too_long" && item.path) {
+      return [`Every item in ${item.path} must contain at most ${MAX_SAFETY_TEXT_LENGTH} characters.`];
+    }
+    return [];
+  });
+  return [
+    "Repair only the invalid or missing canonical structure.",
+    "Preserve every already-valid canonical value.",
+    "Include every required canonical field.",
+    "Do not change selected Creative Direction identity.",
+    "Do not invent Product Truth.",
+    ...constraints,
+  ].join(" ");
+}
+
 export function resolveCreativeBriefInputLanguageContext(input: CreativeBriefExpansionInput) {
   return input.languageContext || resolveCreationLanguageContext(input);
 }
@@ -315,7 +335,7 @@ function renderPrompt(
   const providerRepairIssues = repairIssues.map(({ code, path, stage, validator }) => ({ code, ...(path ? { path } : {}), stage, validator }));
   return [
     { role: "system" as const, content: "Create an internal creative strategy document for a Chinese-speaking production team. Return all human-readable strategy content in Simplified Chinese. The target market and targetLanguage are downstream audience and localization constraints; do not localize the Brief into targetLanguage. Expand the selected direction without replacing or rewriting its audience, use moment, motivation, tension, angle, content mechanism, hook line, or opening visual. Return JSON only. Never invent product facts, prices, offers, certifications, measurements, or effects. On language repair, only re-express the previous expansion in Simplified Chinese and preserve every strategy decision." },
-    { role: "user" as const, content: JSON.stringify({ task: "Return exactly one Creative Brief Expansion object", selectedDirection: input.selectedDirection, productTruth: input.productContext, languageContext, preferences: input.preferences, sourceContext: input.sourceContext, recentCreativeHistory: input.recentCreativeHistory, allowedEvidenceTypes: [...evidenceTypes], expansionContract: { requiredFields: CREATIVE_BRIEF_EXPANSION_CONTRACT.requiredFields, optionalFields: CREATIVE_BRIEF_EXPANSION_CONTRACT.optionalFields, requiredShape: CREATIVE_BRIEF_EXPANSION_CONTRACT.requiredShape, allowedEnvelope: { expansion: CREATIVE_BRIEF_EXPANSION_CONTRACT.requiredShape } }, outputRules: ["Return the direct expansion object or the single allowed expansion wrapper only.", "Do not return a full CreativeBriefV2, Creative Direction, explanation, Markdown, aliases, or alternate nesting."], compliance: { highRiskExpressions: compliance.highRiskExpressions, productForbiddenClaims: split(input.productContext.productKnowledge?.bannedWords) }, repairIssues: providerRepairIssues, ...(malformedCandidate ? { malformedStructuralCandidate: malformedCandidate, repairInstruction: "Repair only the invalid or missing canonical structure. Preserve every already-valid canonical value. Include every required canonical field. Do not change selected Creative Direction identity. Do not invent Product Truth." } : repairExpansion ? { repairExpansion, repairInstruction: "Re-express only in Simplified Chinese; preserve meaning and structure." } : {}) }) },
+    { role: "user" as const, content: JSON.stringify({ task: "Return exactly one Creative Brief Expansion object", selectedDirection: input.selectedDirection, productTruth: input.productContext, languageContext, preferences: input.preferences, sourceContext: input.sourceContext, recentCreativeHistory: input.recentCreativeHistory, allowedEvidenceTypes: [...evidenceTypes], expansionContract: { requiredFields: CREATIVE_BRIEF_EXPANSION_CONTRACT.requiredFields, optionalFields: CREATIVE_BRIEF_EXPANSION_CONTRACT.optionalFields, requiredShape: CREATIVE_BRIEF_EXPANSION_CONTRACT.requiredShape, arrayLimits: { "evidenceStrategy.limitations": MAX_SAFETY_ITEMS, "riskBoundaries.prohibitedClaims": MAX_SAFETY_ITEMS, "riskBoundaries.requiredQualifiers": MAX_SAFETY_ITEMS, "riskBoundaries.safetyConstraints": MAX_SAFETY_ITEMS }, allowedEnvelope: { expansion: CREATIVE_BRIEF_EXPANSION_CONTRACT.requiredShape } }, outputRules: ["Return the direct expansion object or the single allowed expansion wrapper only.", `Every safety array must contain at most ${MAX_SAFETY_ITEMS} distinct items.`, "Do not return a full CreativeBriefV2, Creative Direction, explanation, Markdown, aliases, or alternate nesting."], compliance: { highRiskExpressions: compliance.highRiskExpressions, productForbiddenClaims: split(input.productContext.productKnowledge?.bannedWords) }, repairIssues: providerRepairIssues, ...(malformedCandidate ? { malformedStructuralCandidate: malformedCandidate, repairInstruction: repairInstructionForIssues(repairIssues) } : repairExpansion ? { repairExpansion, repairInstruction: "Re-express only in Simplified Chinese; preserve meaning and structure." } : {}) }) },
   ];
 }
 

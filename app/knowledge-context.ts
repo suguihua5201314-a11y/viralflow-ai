@@ -154,6 +154,20 @@ export function renderKnowledgeContext(context:KnowledgeContext) {
   return `KNOWLEDGE CONTEXT\n\n[FACT LAYER / KNOWN FACTS]\n${facts}\n- Allowed selling points: ${context.sellingPoints.join("；")||"仅使用Brief"}\n- 事实层是唯一产品事实来源；没有写出的参数、认证、材质、测试、价格、折扣、赠品或能力一律不得补充。\n\n[SELLING POINT PRIORITY]\n- Primary: ${priority.primary||"按Brief主卖点"}\n- Secondary: ${priority.secondary.join("；")||"无"}\n- Optional (只有剧情需要才使用): ${priority.optional.join("；")||"无"}\n- 本条只围绕1个主卖点和最多2个辅助卖点，不得把全部卖点逐项念完。\n\n[COMPLIANCE CONSTRAINTS]\n- 禁用表达: ${context.compliance.bannedExpressions.join("；")||"无产品专属禁用词"}\n- 平台约束: ${context.compliance.platformConstraints.join("；")}\n\n[MARKET CONTEXT]\n- ${context.market.country} / ${context.market.language} / ${context.market.platform}\n\n[REFERENCE LAYER]\n${reference}\n- 只学习机制、节奏和信息顺序，禁止复制原句；参考中的产品事实不得迁移。\n\n[HISTORY MEMORY / AVOID REPETITION]\n${memory}\n- 历史只用于避开Hook、开头句式、Creative Angle、Scenario、Proof Mechanism和CTA，不得强制模仿。`;
 }
 
+function hasAffirmativeCommercialClaim(text:string,pattern:RegExp) {
+  const matches=text.matchAll(new RegExp(pattern.source,`${pattern.flags.replace(/g/g,"")}g`));
+  for(const match of matches){
+    const before=text.slice(0,match.index).split(/[。！？!?；;\n]|但是|但|然而|不过/).at(-1)||"";
+    // Only explicit prohibitions negate a claim. Sales phrases such as
+    // “不要错过优惠” remain affirmative, and a later clause is checked anew.
+    const prohibited=/(?:不要|不得|不能|禁止|避免|不应|不允许|不)(?:在[^，,]{0,12})?(?:出现|展示|显示|添加|加入|使用|提及|提到|写出|写|承诺|声称|宣传|标注|提供|包含)[^，,]{0,20}$/.test(before)
+      || /(?:没有|无)(?:任何)?\s*$/.test(before)
+      || /\b(?:do not|don't|never)\s+(?:show|display|add|mention|promise|claim|offer|include)\s+(?:any\s+)?$/i.test(before);
+    if(!prohibited)return true;
+  }
+  return false;
+}
+
 export function findFactViolationDiagnostics(text:string,context:KnowledgeContext,additionalGrounding=""):FactViolationDiagnostic[] {
   const normalized=text.toLowerCase();
   const violations:FactViolationDiagnostic[]=[];
@@ -162,12 +176,12 @@ export function findFactViolationDiagnostics(text:string,context:KnowledgeContex
   const factText=Object.values(context.facts).join(" ")+" "+context.sellingPoints.join(" ")+" "+additionalGrounding;
   const commercialClaims:Array<[FactViolationRule,boolean,RegExp]>=[
     [FACT_VIOLATION_RULES.commercialPrice,true,/(?:[$€£]\s*\d|\d+(?:[.,]\d+)?\s*[$€£]|por\s+solo\s+\d|only\s+[$€£]?\d|仅需\s*\d|只要\s*\d)/iu],
-    [FACT_VIOLATION_RULES.commercialPromotion,false,/(?:\d+\s*[x×]\s*\d+|buy\s+\w+\s+get|compra\s+\w+\s+(?:y|lleva)|coupon|cup[oó]n|descuento|rebaja|discount|\d+%\s*off|half\s*price|折扣|优惠券?|半价|买\S*送)/iu],
+    [FACT_VIOLATION_RULES.commercialPromotion,false,/(?:\d+\s*[x×]\s*\d+|buy\s+\w+\s+get|compra\s+\w+\s+(?:y|lleva)|coupon|cup[oó]n|descuento|rebaja|discount|\d+%\s*off|half\s*price|折扣|优惠券?|半价|买[一二两三四五六七八九十\d]+(?:件|份|盒|套|片|个)?(?:即|就|再)?送|买赠|(?:购买|下单|买)[^，,。！？!?；;\n]{0,20}(?:即送|赠送|加赠)|(?:购买|下单|买)[^，,。！？!?；;\n]{0,20}送[一二两三四五六七八九十\d]+(?:件|份|盒|套|片|个))/iu],
     [FACT_VIOLATION_RULES.commercialInventory,false,/(?:quedan\s+poc[oa]s|[uú]ltimas?\s+unidades?|stock\s+limitado|limited\s+stock|only\s+\d+\s+left|last\s+day|limited\s+time|best\s*seller|top\s*\d+|\d+\s*(?:users?|customers?|ventas)|库存有限|仅剩|最后\d*件|限时|最后一天|销量\s*\d+|\d+\s*(?:位用户|人购买)|排名|全网第一)/iu],
-    [FACT_VIOLATION_RULES.commercialGift,false,/(?:regalo|gratis|free\s*(?:gift|shipping|delivery)?|env[ií]o\s+gratis|赠送|赠品|免费|包邮|次日达|当日达)/iu],
+    [FACT_VIOLATION_RULES.commercialGift,false,/(?:regalo|gratis|free\s*(?:gift|shipping|delivery)?|env[ií]o\s+gratis|赠送|赠品|加赠|附赠|免费|包邮|次日达|当日达)/iu],
     [FACT_VIOLATION_RULES.commercialWarranty,false,/(?:warranty|guarantee|garant[ií]a|money\s+back|保修|质保|无理由退款|退款保证)/iu]
   ];
-  for(const [rule,isPrice,pattern] of commercialClaims)if(pattern.test(text)&&!pattern.test(factText))add(rule,isPrice?"使用了未提供的价格信息":"使用了未提供的促销、赠品或库存信息");
+  for(const [rule,isPrice,pattern] of commercialClaims)if(hasAffirmativeCommercialClaim(text,pattern)&&!hasAffirmativeCommercialClaim(factText,pattern))add(rule,isPrice?"使用了未提供的价格信息":"使用了未提供的促销、赠品或库存信息");
   if(/platform certified|officially approved|doctor recommended|国家认证|平台认证|官方指定|aprobado oficialmente|recomendado por médicos/i.test(text)&&!/认证|certif|aprobado|recommended/i.test(factText))add(FACT_VIOLATION_RULES.certificationEndorsement,"使用了未提供的认证或背书");
   const claims=[...text.matchAll(/(\d+(?:[.,]\d+)?)\s*(%|°|mm|cm|mah|w)/gi)].map(match=>`${match[1]}${match[2].toLowerCase()}`);
   const normalizedFacts=normalize(factText);

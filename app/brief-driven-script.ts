@@ -89,6 +89,7 @@ export type ScriptWriterValidationStage =
   | "truth"
   | "compliance"
   | "numeric"
+  | "duration"
   | "targeted_rewrite";
 
 export type ScriptWriterValidationIssue = {
@@ -318,6 +319,27 @@ export function validateScriptDraftDeterministically(input: ScriptWriterInput, d
   if (!draft.scenes[0]?.briefTrace?.executesOpeningVisual) issues.push(issue("opening_visual_trace_missing", "structural_fidelity", validator, "scenes.0.briefTrace.executesOpeningVisual"));
   if (input.creativeBrief.evidence.type !== "none-required" && !draft.scenes.some((scene) => scene.purpose === "evidence" && scene.briefTrace?.executesEvidence === true)) issues.push(issue("evidence_trace_missing", "structural_fidelity", validator, "scenes"));
   if (!draft.scenes.some((scene) => scene.purpose === "cta" && scene.briefTrace?.executesCTA === true)) issues.push(issue("cta_trace_missing", "structural_fidelity", validator, "scenes"));
+  const requestedDuration = input.preferences?.durationSeconds;
+  if (requestedDuration) {
+    const minimumDuration = Math.max(5, Math.floor(requestedDuration * 0.8));
+    const maximumDuration = Math.ceil(requestedDuration * 1.2);
+    if (draft.totalDurationHint === undefined) issues.push(issue("missing_total_duration", "duration", validator, "totalDurationHint"));
+    else if (draft.totalDurationHint < minimumDuration || draft.totalDurationHint > maximumDuration) issues.push(issue("duration_mismatch", "duration", validator, "totalDurationHint"));
+    if (draft.scenes.some((scene) => scene.durationHint === undefined)) issues.push(issue("missing_scene_duration", "duration", validator, "scenes"));
+    else {
+      const plannedDuration = draft.scenes.reduce((sum, scene) => sum + (scene.durationHint || 0), 0);
+      if (plannedDuration < minimumDuration || plannedDuration > maximumDuration) issues.push(issue("scene_duration_mismatch", "duration", validator, "scenes"));
+    }
+    const minimumScenes = Math.max(3, Math.ceil(requestedDuration / 8));
+    if (draft.scenes.length < minimumScenes) issues.push(issue("insufficient_scene_coverage", "duration", validator, "scenes"));
+    const countSpokenUnits = (text: string) => (text.match(/[\p{Script=Han}]/gu) || []).length + (text.match(/[A-Za-z0-9]+/g) || []).length;
+    const spokenUnits = Math.max(
+      countSpokenUnits(draft.fullNarration),
+      countSpokenUnits(draft.scenes.map((scene) => scene.dialogue).join(" ")),
+    );
+    const densityRate = input.preferences?.spokenDensity === "dense" ? 3 : input.preferences?.spokenDensity === "light" ? 1.7 : 2.2;
+    if (spokenUnits < Math.floor(requestedDuration * densityRate)) issues.push(issue("insufficient_spoken_content", "duration", validator, "fullNarration"));
+  }
   const languageContext = resolveScriptWriterLanguageContext(input);
   const draftWorkspaceLanguage = draft.workspaceLanguage || (normalizeLanguageIdentity(draft.language || "") === normalizeLanguageIdentity("zh-CN") ? "zh-CN" : undefined);
   if (draftWorkspaceLanguage !== languageContext.workspaceLanguage) issues.push(issue("language_mismatch", "structural_fidelity", validator, draft.workspaceLanguage ? "workspaceLanguage" : "language"));

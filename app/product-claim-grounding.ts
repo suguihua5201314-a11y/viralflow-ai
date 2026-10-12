@@ -37,7 +37,7 @@ const CAPABILITY_FAMILIES: CapabilityFamily[] = [
 
 const PRODUCT_CAUSALITY = /(?:产品|这款|这层|使用|贴(?:上|后)|涂(?:上|后)|刷(?:完|后)|用了|能|可以|能够|让|使|带来|证明|展示结果)/iu;
 const RESULT_LANGUAGE = /(?:结果|效果|变得|保持|减少|消失|完好|无损|不碎|保护|防止|避免|改善|提升|增强|修复|治愈|有效)/iu;
-const EXCESS_SCOPE = /(?:任何|所有|完全|永久|永远|保证|绝对|无论|百分之百|100%|all|any|always|guarantee)/iu;
+const EXCESS_SCOPE = /(?:任何|所有).{0,12}(?:都|均)?(?:能|会|可以|不会|不再|有效|成功|防止|避免|看不)|完全(?:不会|不再|避免|防止|消失|看不见|有效|成功)|一定(?:能|会|可以|不会|不再|有效|成功)|永久|永远|保证|绝对|无论.{0,12}(?:都|均)?(?:能|会|可以|不会)|百分之百|100%|\b(?:all|any|always|guarantee(?:d)?)\b/iu;
 const DURATION_SCOPE = /(?:整(?:整)?(?:天|晚|周|月|年)|全天|长期|持续(?:一段时间|数小时|数天|数周|数月|数年)|一整(?:天|晚|周|月|年)|all\s+day|all\s+night|for\s+(?:hours|days|weeks|months|years)|long[- ]lasting)/iu;
 const DURABLE_OUTCOME = /(?:效果|结果|状态|表面|外观|屏幕|皮肤|睫毛|牙齿|口腔).{0,18}(?:保持|维持|依然|仍然|持续)|(?:保持|维持|依然|仍然|持续).{0,18}(?:干净|清洁|顺滑|滋润|浓密|卷翘|清新|可见|有效|无痕|无残留)/iu;
 const COMPARISON_SUBJECT = /(?:普通|一般|其他|同类|传统|竞品|对照组|常规|generic|ordinary|other|competing|competitor|conventional)/iu;

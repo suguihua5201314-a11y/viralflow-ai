@@ -1,6 +1,6 @@
 import type {ProviderErrorType,ProviderId,ProviderStatus} from "./provider-types";
 
-export const DEFAULT_PROVIDER:ProviderId="doubao";
+export const DEFAULT_PROVIDER:ProviderId="deepseek";
 
 export class ProviderCallError extends Error{
  category:ProviderErrorType;status?:number;
@@ -31,6 +31,16 @@ function timingLog(event:Record<string,unknown>){console.log(JSON.stringify({sco
 function isAbort(error:unknown){return error instanceof Error&&(error.name==="AbortError"||/timeout|aborted/i.test(error.message));}
 function safePurpose(value?:string){return value?.trim().slice(0,80)||"provider-call";}
 
+function safeNetworkCode(error:unknown):string|null{
+ const allowed=new Set(["ECONNRESET","ECONNREFUSED","ETIMEDOUT","ENOTFOUND","EAI_AGAIN","ENETUNREACH","EHOSTUNREACH","EACCES","UND_ERR_CONNECT_TIMEOUT","UND_ERR_HEADERS_TIMEOUT","UND_ERR_BODY_TIMEOUT","UND_ERR_SOCKET","CERT_HAS_EXPIRED","UNABLE_TO_VERIFY_LEAF_SIGNATURE"]);
+ if(!error||typeof error!=="object")return null;
+ const item=error as {code?:unknown;cause?:unknown;errors?:unknown[]};
+ if(typeof item.code==="string"&&allowed.has(item.code))return item.code;
+ if(item.cause&&item.cause!==error){const code=safeNetworkCode(item.cause);if(code)return code;}
+ for(const child of Array.isArray(item.errors)?item.errors:[]){const code=safeNetworkCode(child);if(code)return code;}
+ return null;
+}
+
 export async function callProvider(request:ProviderRequest):Promise<ProviderResponse>{
  const correlationId=globalThis.crypto.randomUUID();
  const requestStarted=Date.now();
@@ -52,7 +62,7 @@ export async function callProvider(request:ProviderRequest):Promise<ProviderResp
   response=await fetch(url,{method:"POST",headers:{"content-type":"application/json",authorization:`Bearer ${apiKey}`},signal:AbortSignal.timeout(timeoutMs),body:JSON.stringify({model,messages:request.messages,response_format:{type:"json_object"},temperature:request.temperature,...(request.topP!==undefined?{top_p:request.topP}:{}),...(request.provider==="openai"?{max_completion_tokens:request.maxTokens}:{max_tokens:request.maxTokens}),...(request.thinking?{thinking:{type:request.thinking}}:request.provider==="deepseek"?{thinking:{type:"disabled"}}:{})})});
  }catch(error){
   const errorType:ProviderErrorType=isAbort(error)?"timeout":"provider_http_error";
-  timingLog({...common,event:"provider_failure",stage:"waiting_for_headers" satisfies ProviderTimingStage,errorType,elapsedMs:Date.now()-fetchStarted,headersReceived:false,httpStatus:null});
+  timingLog({...common,event:"provider_failure",stage:"waiting_for_headers" satisfies ProviderTimingStage,errorType,networkCode:safeNetworkCode(error),elapsedMs:Date.now()-fetchStarted,headersReceived:false,httpStatus:null});
   throw new ProviderCallError(errorType,errorType==="timeout"?`${status.label}请求超时`:`${status.label}网络请求失败`);
  }
  const headersReceived=Date.now();
@@ -62,7 +72,7 @@ export async function callProvider(request:ProviderRequest):Promise<ProviderResp
  try{text=await response.text();}
  catch(error){
   const errorType:ProviderErrorType=isAbort(error)?"timeout":"provider_http_error";
-  timingLog({...common,event:"provider_failure",stage:"waiting_for_body" satisfies ProviderTimingStage,errorType,elapsedToHeadersMs:headersReceived-fetchStarted,elapsedMs:Date.now()-fetchStarted,headersReceived:true,httpStatus:response.status,contentType});
+  timingLog({...common,event:"provider_failure",stage:"waiting_for_body" satisfies ProviderTimingStage,errorType,networkCode:safeNetworkCode(error),elapsedToHeadersMs:headersReceived-fetchStarted,elapsedMs:Date.now()-fetchStarted,headersReceived:true,httpStatus:response.status,contentType});
   throw new ProviderCallError(errorType,errorType==="timeout"?`${status.label}请求超时`:`${status.label}网络请求失败`,response.status);
  }
  const bodyCompleted=Date.now();

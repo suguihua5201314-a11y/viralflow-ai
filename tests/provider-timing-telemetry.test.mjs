@@ -51,6 +51,15 @@ test("HTTP errors retain classification and emit response_http telemetry",async(
  assert.ok(entries.some(entry=>entry.event==="body_completed"));
 });
 
+test("connection reset logs only its safe code and never repeats a paid request",async()=>{
+ const entries=capture();let calls=0;
+ globalThis.fetch=async()=>{calls++;throw new TypeError("private failure text",{cause:Object.assign(new Error("secret connection detail"),{code:"ECONNRESET"})});};
+ await assert.rejects(router.callProvider(request()),error=>error.category==="provider_http_error");
+ assert.equal(calls,1);
+ assert.equal(entries.find(entry=>entry.event==="provider_failure").networkCode,"ECONNRESET");
+ assert.doesNotMatch(JSON.stringify(entries),/private failure text|secret connection detail|telemetry-test-key/);
+});
+
 test("telemetry never exposes credentials, authorization, prompts or response bodies",async()=>{
  const entries=capture();globalThis.fetch=async()=>response(JSON.stringify({choices:[{message:{content:"sensitive-response-body"}}]}));
  await router.callProvider({...request(),messages:[{role:"system",content:"secret-prompt-value"},{role:"user",content:"private-product-context"}]});

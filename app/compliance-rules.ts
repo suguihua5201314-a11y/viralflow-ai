@@ -6,8 +6,18 @@ export const HIGH_RISK_COMPLIANCE_RULE_CODES = ["absolute_claim_expression", "fa
 export type HighRiskComplianceRuleCode = typeof HIGH_RISK_COMPLIANCE_RULE_CODES[number];
 export type ComplianceHit = { category:string; riskType:RiskType; level:RiskLevel; term:string; suggestion:string; replacement:string; ruleFamily?:HighRiskComplianceRuleFamily; ruleCode?:HighRiskComplianceRuleCode };
 
+function matchesComplianceTerm(text:string,term:string){
+  const normalized=text.toLowerCase(),needle=term.toLowerCase();
+  if(/[a-z]/i.test(needle))return new RegExp(`(^|[^a-z])${needle.replace(/[.*+?^${}()|[\]\\]/g,"\\$&")}([^a-z]|$)`,"i").test(normalized);
+  if(needle==="第一")return /第一(?:品牌|产品|名|选择|效果|品质|性能|保护|防护)/u.test(normalized);
+  if(needle==="一定")return /一定(?:能|会|可以|有效|成功|不会|不再|保证)/u.test(normalized);
+  if(needle==="唯一")return /唯一(?:的)?(?:选择|产品|品牌|方案|能够|能|可以|有效)/u.test(normalized);
+  if(needle==="任何"||needle==="所有")return new RegExp(`${needle}.{0,12}(?:都|均)?(?:能|会|可以|不会|不再|有效|成功|防止|避免|看不)`,"u").test(normalized);
+  return normalized.includes(needle);
+}
+
 const rules: Array<{ category:string; riskType:RiskType; level:RiskLevel; terms:string[]; suggestion:string; replacement:string; ruleFamily?:HighRiskComplianceRuleFamily; ruleCode?:HighRiskComplianceRuleCode }> = [
-  { category:"绝对化承诺", riskType:"广告夸大", level:"高", ruleFamily:"absolute_claim", ruleCode:"absolute_claim_expression", terms:["百分之百","100%","绝对","永远","从不","零风险","完全不会","一定","必然","最佳","最好","第一","唯一","顶级","完美无瑕","garantizado","garantizada","100 %","nunca","siempre","el mejor","la mejor","número uno","único","única","perfecto","perfecta","guaranteed","never","always","the best","number one","perfect"], suggestion:"无条件保证通常无法证明，容易被判定为夸大或误导。", replacement:"改成“在本次测试条件下”“有助于”“日常使用中表现更稳定”。" },
+  { category:"绝对化承诺", riskType:"广告夸大", level:"高", ruleFamily:"absolute_claim", ruleCode:"absolute_claim_expression", terms:["百分之百","100%","绝对","永远","从不","零风险","完全不会","任何","所有","一定","必然","最佳","最好","第一","唯一","顶级","完美无瑕","garantizado","garantizada","100 %","nunca","siempre","el mejor","la mejor","número uno","único","única","perfecto","perfecta","guaranteed","never","always","the best","number one","perfect"], suggestion:"无条件保证通常无法证明，容易被判定为夸大或误导。", replacement:"改成“在本次测试条件下”“有助于”“日常使用中表现更稳定”。" },
   { category:"虚假身份或背书", riskType:"平台违规", level:"高", ruleFamily:"false_endorsement", ruleCode:"false_endorsement_expression", terms:["官方指定","平台认证","国家认证","专家保证","医生推荐","权威推荐","officially approved","platform certified","doctor recommended","aprobado oficialmente","recomendado por médicos"], suggestion:"没有真实、可展示的授权或认证材料时，不应使用身份背书。", replacement:"删除背书，改成具体展示产品设计、参数或真实使用体验。" },
   { category:"夸大防护", riskType:"广告夸大", level:"高", ruleFamily:"exaggerated_protection", ruleCode:"exaggerated_protection_expression", terms:["摔不坏","砸不坏","永不碎","绝对防摔","防爆","无敌","坚不可摧","不会刮花","屏幕毫发无损","indestructible","irrompible","nunca se rompe","a prueba de todo","no se raya","unbreakable","scratch proof"], suggestion:"无条件防护承诺无法覆盖所有跌落高度、角度和使用环境。", replacement:"改成“提升日常抗刮、抗冲击能力”，并注明演示条件。" },
   { category:"疾病治疗宣称", riskType:"医疗功效", level:"高", ruleFamily:"medical_claim", ruleCode:"medical_claim_expression", terms:["治疗","治愈","根治","消炎","杀菌","抗菌","修复疾病","医学证明","cura","curar","tratamiento","elimina bacterias","antibacteriano","médicamente probado","cure","treat","kills bacteria","medical proof"], suggestion:"普通消费品不应宣称治疗疾病、杀菌或替代医疗行为。", replacement:"删除治疗表达，只描述经证实的清洁、护理或使用体验。" },
@@ -21,9 +31,8 @@ const rules: Array<{ category:string; riskType:RiskType; level:RiskLevel; terms:
 ];
 
 export function checkCompliance(text:string):ComplianceHit[] {
-  const normalized = text.toLowerCase();
   return rules.flatMap(rule => rule.terms
-    .filter(term => normalized.includes(term.toLowerCase()))
+    .filter(term => matchesComplianceTerm(text,term))
     .map(term => ({ category:rule.category, riskType:rule.riskType, level:rule.level, term, suggestion:rule.suggestion, replacement:rule.replacement, ...(rule.ruleFamily ? { ruleFamily:rule.ruleFamily } : {}), ...(rule.ruleCode ? { ruleCode:rule.ruleCode } : {}) })));
 }
 

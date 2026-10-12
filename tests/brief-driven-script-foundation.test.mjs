@@ -128,6 +128,29 @@ test("input identity rejects foreign Project, Brief ID, revision and Product fin
   assert.ok(issueCodes(api.validateScriptWriterInput(input({ creativeBrief: wrongBrief, creativeBriefReference: { id: wrongBrief.id, revisionId: wrongBrief.revisionId } }))).includes("brief_product_fingerprint_mismatch"));
 });
 
+test("requested runtime rejects a structurally valid but materially short script", () => {
+  const short = draft({
+    scenes: [
+      { id: "hook", purpose: "hook", visual: "产品出现。", action: "拿起产品。", dialogue: "先看这个。", evidenceRole: "开场", durationHint: 2, briefTrace: { executesOpeningVisual: true } },
+      { id: "evidence", purpose: "evidence", visual: "展示产品。", action: "完成操作。", dialogue: "操作很直观。", evidenceRole: "证明", durationHint: 3, briefTrace: { executesEvidence: true } },
+      { id: "cta", purpose: "cta", visual: "包装出现。", action: "指向包装。", dialogue: "确认适配型号。", evidenceRole: "行动", durationHint: 2, briefTrace: { executesCTA: true } },
+    ],
+    fullNarration: "先看这个。操作很直观。确认适配型号。",
+    totalDurationHint: 7,
+  });
+  const codes = issueCodes(api.validateScriptDraftDeterministically(input(), short));
+  assert.ok(codes.includes("duration_mismatch"));
+  assert.ok(codes.includes("scene_duration_mismatch"));
+  assert.ok(codes.includes("insufficient_spoken_content"));
+});
+
+test("requested runtime requires an explicit complete duration plan", () => {
+  const missing = draft({ totalDurationHint: undefined, scenes: draft().scenes.map((scene, index) => index === 2 ? { ...scene, durationHint: undefined } : scene) });
+  const codes = issueCodes(api.validateScriptDraftDeterministically(input(), missing));
+  assert.ok(codes.includes("missing_total_duration"));
+  assert.ok(codes.includes("missing_scene_duration"));
+});
+
 test("strict parser accepts a valid ScriptDraftV2", () => {
   const result = parse(draft());
   assert.deepEqual(result.issues, []);

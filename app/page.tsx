@@ -137,7 +137,7 @@ export default function Home() {
   const [loading, setLoading] = useState(false);
   const [aiConnected, setAiConnected] = useState(false);
   const [providerStatuses,setProviderStatuses]=useState(initialProviderStatuses);
-  const [selectedProvider,setSelectedProvider]=useState<ProviderId>("doubao");
+  const [selectedProvider,setSelectedProvider]=useState<ProviderId>("deepseek");
   const [lastProviderRun,setLastProviderRun]=useState<ProviderRunMetadata|null>(null);
   const [error, setError] = useState("");
   const [history, setHistory] = useState<Script[]>([]);
@@ -651,6 +651,7 @@ export default function Home() {
       }
       if(result.status==="failure"){
         activeFinalScriptRequestId.current="";
+        setFinalScriptSummary(result.message||"");
         setFinalScriptStatus("error");
         const first=result.issues[0];setFinalScriptDiagnostic([result.stage,first?.code||result.code,first?.path].filter(Boolean).join(" · "));
         return;
@@ -821,7 +822,7 @@ export default function Home() {
         brief={currentCreativeBrief}
         script={acceptedCurrentScript}
         status={finalScriptStatus}
-        error={finalScriptStatus==="error"?(finalScriptDiagnostic.includes("client_preflight")?(finalScriptPreflightUserMessage(finalScriptDiagnostic.split(" · ")[1]||"")||"脚本生成准备失败，请重试。"):finalScriptDiagnostic.includes("market_mismatch")?"当前商品市场信息不一致，请返回商品信息检查后重试。":finalScriptDiagnostic.includes("critic_issues_not_safely_targetable")?"AI 检查发现脚本仍有无法安全自动修改的问题。":"脚本没有成功生成，请重试。"):undefined}
+        error={finalScriptStatus==="error"?(finalScriptSummary|| (finalScriptDiagnostic.includes("client_preflight")?(finalScriptPreflightUserMessage(finalScriptDiagnostic.split(" · ")[1]||"")||"脚本生成准备失败，请重试。"):finalScriptDiagnostic.includes("market_mismatch")?"当前商品市场信息不一致，请返回商品信息检查后重试。":finalScriptDiagnostic.includes("critic_issues_not_safely_targetable")?"AI 检查发现脚本仍有无法安全自动修改的问题。":"脚本没有成功生成，请重试。")):undefined}
         diagnostic={finalScriptDiagnostic}
         aiSummary={finalScriptSummary}
         rewritten={finalScriptRewritten}

@@ -9,7 +9,7 @@ import type { ProviderId } from "../../provider-types";
 import { persistQualityTracePatch, validQualityTraceId } from "../../quality-trace";
 
 export const runtime = "nodejs";
-export const maxDuration = 120;
+export const maxDuration = 180;
 
 export async function GET() {
   return Response.json({ acceptanceHarnessEnabled: process.env.VERCEL_ENV === "preview" });
@@ -33,7 +33,8 @@ function requestShape(value: unknown): value is ScriptCriticInput & { provider?:
 }
 
 function safeMessage(type: string | null) {
-  if (type === "timeout") return "脚本评审超时，请重试。";
+  if (type === "provider_http_error") return "脚本已生成，但内容审核模型连接中断或服务请求失败。";
+  if (type === "timeout") return "脚本已生成，但内容审核等待模型返回结果超时。";
   if (type === "invalid_input") return "Brief-aware Script Critic input is invalid.";
   if (type === "repair_failed" || type === "invalid_output") return "脚本评审结果未通过结构校验。";
   return "脚本评审失败，请重试。";
